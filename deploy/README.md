@@ -25,6 +25,8 @@ This directory contains files for deploying Sub2API on Linux servers.
 | `DATAMANAGEMENTD_CN.md` | datamanagementd 部署与联动说明（中文） |
 | `config.example.yaml` | Example configuration file |
 
+For the current SSH MCP desktop server deployment record, see `../docs/PRODUCTION_DEPLOYMENT_CN.md`.
+
 ---
 
 ## Docker Deployment (Recommended)
