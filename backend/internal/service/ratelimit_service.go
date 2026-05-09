@@ -127,6 +127,18 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) (shouldDisable bool) {
 	customErrorCodesEnabled := account.IsCustomErrorCodesEnabled()
 
+	// Codex OAuth 固定 session 测试模式：限额/容量类错误（429 / 403 / 5xx）不标记本地账号状态，
+	// 让调度器仍然能选到该账号，验证"凭固定 session_id 在限额耗尽后能否继续调用"。
+	// 401（token 过期/失效）保留原有刷新逻辑；400/402（封号/欠费）保留永久禁用以避免死循环重试坏号。
+	if account != nil && account.Platform == PlatformOpenAI && account.Type == AccountTypeOAuth {
+		if statusCode == 429 || statusCode == 403 || (statusCode >= 500 && statusCode < 600) {
+			slog.Info("codex_fixed_session_bypass_account_disable",
+				"account_id", account.ID,
+				"status_code", statusCode)
+			return false
+		}
+	}
+
 	// 池模式默认不标记本地账号状态；仅当用户显式配置自定义错误码时按本地策略处理。
 	if account.IsPoolMode() && !customErrorCodesEnabled {
 		slog.Info("pool_mode_error_skipped", "account_id", account.ID, "status_code", statusCode)
