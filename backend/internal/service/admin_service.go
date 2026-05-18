@@ -90,9 +90,9 @@ type AdminService interface {
 
 	// Proxy management
 	ListProxies(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]Proxy, int64, error)
-	ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]ProxyWithAccountCount, int64, error)
+	ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string, trafficStart, trafficEnd time.Time) ([]ProxyWithAccountCount, int64, error)
 	GetAllProxies(ctx context.Context) ([]Proxy, error)
-	GetAllProxiesWithAccountCount(ctx context.Context) ([]ProxyWithAccountCount, error)
+	GetAllProxiesWithAccountCount(ctx context.Context, trafficStart, trafficEnd time.Time) ([]ProxyWithAccountCount, error)
 	GetProxy(ctx context.Context, id int64) (*Proxy, error)
 	GetProxiesByIDs(ctx context.Context, ids []int64) ([]Proxy, error)
 	CreateProxy(ctx context.Context, input *CreateProxyInput) (*Proxy, error)
@@ -2814,13 +2814,14 @@ func (s *adminServiceImpl) ListProxies(ctx context.Context, page, pageSize int, 
 	return proxies, result.Total, nil
 }
 
-func (s *adminServiceImpl) ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]ProxyWithAccountCount, int64, error) {
+func (s *adminServiceImpl) ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string, trafficStart, trafficEnd time.Time) ([]ProxyWithAccountCount, int64, error) {
 	params := pagination.PaginationParams{Page: page, PageSize: pageSize, SortBy: sortBy, SortOrder: sortOrder}
 	proxies, result, err := s.proxyRepo.ListWithFiltersAndAccountCount(ctx, params, protocol, status, search)
 	if err != nil {
 		return nil, 0, err
 	}
 	s.attachProxyLatency(ctx, proxies)
+	s.attachProxyTraffic(ctx, proxies, trafficStart, trafficEnd)
 	return proxies, result.Total, nil
 }
 
@@ -2828,12 +2829,13 @@ func (s *adminServiceImpl) GetAllProxies(ctx context.Context) ([]Proxy, error) {
 	return s.proxyRepo.ListActive(ctx)
 }
 
-func (s *adminServiceImpl) GetAllProxiesWithAccountCount(ctx context.Context) ([]ProxyWithAccountCount, error) {
+func (s *adminServiceImpl) GetAllProxiesWithAccountCount(ctx context.Context, trafficStart, trafficEnd time.Time) ([]ProxyWithAccountCount, error) {
 	proxies, err := s.proxyRepo.ListActiveWithAccountCount(ctx)
 	if err != nil {
 		return nil, err
 	}
 	s.attachProxyLatency(ctx, proxies)
+	s.attachProxyTraffic(ctx, proxies, trafficStart, trafficEnd)
 	return proxies, nil
 }
 
@@ -3492,6 +3494,60 @@ func (s *adminServiceImpl) attachProxyLatency(ctx context.Context, proxies []Pro
 		proxies[i].QualityGrade = info.QualityGrade
 		proxies[i].QualitySummary = info.QualitySummary
 		proxies[i].QualityChecked = info.QualityCheckedAt
+	}
+}
+
+func (s *adminServiceImpl) attachProxyTraffic(ctx context.Context, proxies []ProxyWithAccountCount, startTime, endTime time.Time) {
+	if len(proxies) == 0 || s.proxyRepo == nil {
+		return
+	}
+	if endTime.IsZero() {
+		endTime = time.Now()
+	}
+	if startTime.IsZero() {
+		startTime = time.Date(endTime.Year(), endTime.Month(), endTime.Day(), 0, 0, 0, 0, endTime.Location())
+	}
+	if !startTime.Before(endTime) {
+		for i := range proxies {
+			proxies[i].TrafficStartTime = startTime
+			proxies[i].TrafficEndTime = endTime
+		}
+		return
+	}
+
+	ids := make([]int64, 0, len(proxies))
+	seen := make(map[int64]struct{}, len(proxies))
+	for i := range proxies {
+		id := proxies[i].ID
+		proxies[i].TrafficStartTime = startTime
+		proxies[i].TrafficEndTime = endTime
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return
+	}
+
+	stats, err := s.proxyRepo.GetTrafficStatsForProxies(ctx, ids, startTime, endTime)
+	if err != nil {
+		logger.LegacyPrintf("service.admin", "Warning: load proxy traffic stats failed: %v", err)
+		return
+	}
+	for i := range proxies {
+		stat, ok := stats[proxies[i].ID]
+		if !ok {
+			continue
+		}
+		proxies[i].TrafficRequests = stat.Requests
+		proxies[i].RequestTrafficBytes = stat.RequestTrafficBytes
+		proxies[i].ResponseTrafficBytes = stat.ResponseTrafficBytes
+		proxies[i].TotalTrafficBytes = stat.TotalTrafficBytes
 	}
 }
 

@@ -1036,6 +1036,8 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 					ResponseHeaders: resp.Header.Clone(),
 					Duration:        time.Since(startTime),
 					FirstTokenMs:    firstTokenMs,
+					RequestBytes:    int64(len(responsesBody)),
+					ResponseBytes:   ResponseTrafficBytes(resp),
 					ImageCount:      imageCount,
 					ImageSize:       parsed.SizeTier,
 				}, err
@@ -1060,6 +1062,8 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		ResponseHeaders: resp.Header.Clone(),
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		RequestBytes:    int64(len(responsesBody)),
+		ResponseBytes:   ResponseTrafficBytes(resp),
 		ImageCount:      imageCount,
 		ImageSize:       parsed.SizeTier,
 	}, nil

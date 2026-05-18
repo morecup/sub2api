@@ -716,6 +716,8 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 					ResponseHeaders: resp.Header.Clone(),
 					Duration:        time.Since(startTime),
 					FirstTokenMs:    ttft,
+					RequestBytes:    int64(len(forwardBody)),
+					ResponseBytes:   ResponseTrafficBytes(resp),
 					ImageCount:      streamCount,
 					ImageSize:       parsed.SizeTier,
 				}, err
@@ -744,6 +746,8 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		ResponseHeaders: resp.Header.Clone(),
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		RequestBytes:    int64(len(forwardBody)),
+		ResponseBytes:   ResponseTrafficBytes(resp),
 		ImageCount:      imageCount,
 		ImageSize:       parsed.SizeTier,
 	}, nil

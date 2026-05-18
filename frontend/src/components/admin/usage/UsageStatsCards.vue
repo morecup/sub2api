@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-6">
     <div class="card p-4 flex items-center gap-3">
       <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 text-blue-600">
         <Icon name="document" size="md" />
@@ -38,6 +38,19 @@
       </div>
     </div>
     <div class="card p-4 flex items-center gap-3">
+      <div class="rounded-lg bg-teal-100 p-2 text-teal-600 dark:bg-teal-900/30">
+        <Icon name="database" size="md" />
+      </div>
+      <div class="min-w-0 flex-1">
+        <p class="text-xs font-medium text-gray-500">{{ t('usage.totalTraffic') }}</p>
+        <p class="text-xl font-bold">{{ formatBytes(stats?.total_traffic_bytes || 0, 1) }}</p>
+        <p class="truncate text-xs text-gray-500">
+          {{ t('usage.requestTraffic') }} {{ formatBytes(stats?.total_request_traffic_bytes || 0, 1) }} /
+          {{ t('usage.responseTraffic') }} {{ formatBytes(stats?.total_response_traffic_bytes || 0, 1) }}
+        </p>
+      </div>
+    </div>
+    <div class="card p-4 flex items-center gap-3">
       <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30 text-purple-600">
         <Icon name="clock" size="md" />
       </div>
@@ -50,6 +63,7 @@
 import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import Icon from '@/components/icons/Icon.vue'
+import { formatBytes } from '@/utils/format'
 
 defineProps<{ stats: AdminUsageStatsResponse | null }>()
 

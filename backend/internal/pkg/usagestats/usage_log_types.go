@@ -251,18 +251,21 @@ type UsageLogFilters struct {
 
 // UsageStats represents usage statistics
 type UsageStats struct {
-	TotalRequests     int64          `json:"total_requests"`
-	TotalInputTokens  int64          `json:"total_input_tokens"`
-	TotalOutputTokens int64          `json:"total_output_tokens"`
-	TotalCacheTokens  int64          `json:"total_cache_tokens"`
-	TotalTokens       int64          `json:"total_tokens"`
-	TotalCost         float64        `json:"total_cost"`
-	TotalActualCost   float64        `json:"total_actual_cost"`
-	TotalAccountCost  *float64       `json:"total_account_cost,omitempty"`
-	AverageDurationMs float64        `json:"average_duration_ms"`
-	Endpoints         []EndpointStat `json:"endpoints,omitempty"`
-	UpstreamEndpoints []EndpointStat `json:"upstream_endpoints,omitempty"`
-	EndpointPaths     []EndpointStat `json:"endpoint_paths,omitempty"`
+	TotalRequests        int64          `json:"total_requests"`
+	TotalInputTokens     int64          `json:"total_input_tokens"`
+	TotalOutputTokens    int64          `json:"total_output_tokens"`
+	TotalCacheTokens     int64          `json:"total_cache_tokens"`
+	TotalTokens          int64          `json:"total_tokens"`
+	TotalCost            float64        `json:"total_cost"`
+	TotalActualCost      float64        `json:"total_actual_cost"`
+	TotalAccountCost     *float64       `json:"total_account_cost,omitempty"`
+	TotalRequestTraffic  int64          `json:"total_request_traffic_bytes"`
+	TotalResponseTraffic int64          `json:"total_response_traffic_bytes"`
+	TotalTraffic         int64          `json:"total_traffic_bytes"`
+	AverageDurationMs    float64        `json:"average_duration_ms"`
+	Endpoints            []EndpointStat `json:"endpoints,omitempty"`
+	UpstreamEndpoints    []EndpointStat `json:"upstream_endpoints,omitempty"`
+	EndpointPaths        []EndpointStat `json:"endpoint_paths,omitempty"`
 }
 
 // BatchUserUsageStats represents usage stats for a single user

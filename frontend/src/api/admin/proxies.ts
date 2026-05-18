@@ -15,6 +15,19 @@ import type {
   AdminDataImportResult
 } from '@/types'
 
+export interface ProxyTrafficTimeRange {
+  start_time?: string
+  end_time?: string
+}
+
+export interface ProxyListFilters extends ProxyTrafficTimeRange {
+  protocol?: string
+  status?: 'active' | 'inactive'
+  search?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}
+
 /**
  * List all proxies with pagination
  * @param page - Page number (default: 1)
@@ -25,13 +38,7 @@ import type {
 export async function list(
   page: number = 1,
   pageSize: number = 20,
-  filters?: {
-    protocol?: string
-    status?: 'active' | 'inactive'
-    search?: string
-    sort_by?: string
-    sort_order?: 'asc' | 'desc'
-  },
+  filters?: ProxyListFilters,
   options?: {
     signal?: AbortSignal
   }
@@ -60,9 +67,9 @@ export async function getAll(): Promise<Proxy[]> {
  * Get all active proxies with account count (sorted by creation time desc)
  * @returns List of all active proxies with account count
  */
-export async function getAllWithCount(): Promise<Proxy[]> {
+export async function getAllWithCount(timeRange?: ProxyTrafficTimeRange): Promise<Proxy[]> {
   const { data } = await apiClient.get<Proxy[]>('/admin/proxies/all', {
-    params: { with_count: 'true' }
+    params: { with_count: 'true', ...timeRange }
   })
   return data
 }
@@ -225,13 +232,7 @@ export async function batchDelete(ids: number[]): Promise<{
 
 export async function exportData(options?: {
   ids?: number[]
-  filters?: {
-    protocol?: string
-    status?: 'active' | 'inactive'
-    search?: string
-    sort_by?: string
-    sort_order?: 'asc' | 'desc'
-  }
+  filters?: ProxyListFilters
 }): Promise<AdminDataPayload> {
   const params: Record<string, string> = {}
   if (options?.ids && options.ids.length > 0) {

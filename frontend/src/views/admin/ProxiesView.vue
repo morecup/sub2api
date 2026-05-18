@@ -35,6 +35,30 @@
               @change="loadProxies"
             />
           </div>
+          <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div class="w-[11.25rem]">
+              <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                {{ t('admin.proxies.trafficStartTime') }}
+              </label>
+              <input
+                v-model="filters.traffic_start_time"
+                type="datetime-local"
+                class="input text-sm"
+                @change="handleTrafficRangeChange('start')"
+              />
+            </div>
+            <div class="w-[11.25rem]">
+              <label class="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                {{ t('admin.proxies.trafficEndTime') }}
+              </label>
+              <input
+                v-model="filters.traffic_end_time"
+                type="datetime-local"
+                class="input text-sm"
+                @change="handleTrafficRangeChange('end')"
+              />
+            </div>
+          </div>
 
           <!-- Right: All action buttons -->
           <div class="flex flex-1 flex-wrap items-center justify-end gap-2">
@@ -213,6 +237,21 @@
             >
               {{ t('admin.groups.accountsCount', { count: 0 }) }}
             </span>
+          </template>
+
+          <template #cell-traffic="{ row }">
+            <div class="min-w-[9rem] text-sm">
+              <div class="font-medium text-gray-900 dark:text-white">
+                {{ formatTrafficBytes(row.total_traffic_bytes) }}
+              </div>
+              <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+                <span>{{ t('usage.requestTraffic') }} {{ formatTrafficBytes(row.request_traffic_bytes) }}</span>
+                <span>{{ t('usage.responseTraffic') }} {{ formatTrafficBytes(row.response_traffic_bytes) }}</span>
+              </div>
+              <div class="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+                {{ t('admin.proxies.trafficRequests', { count: row.traffic_requests || 0 }) }}
+              </div>
+            </div>
           </template>
 
           <template #cell-latency="{ row }">
@@ -893,6 +932,7 @@ import { useClipboard } from '@/composables/useClipboard'
 import { useSwipeSelect } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
 import { getPersistedPageSize } from '@/composables/usePersistedPageSize'
+import { formatBytes } from '@/utils/format'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -906,6 +946,7 @@ const columns = computed<Column[]>(() => [
   { key: 'auth', label: t('admin.proxies.columns.auth'), sortable: false },
   { key: 'location', label: t('admin.proxies.columns.location'), sortable: false },
   { key: 'account_count', label: t('admin.proxies.columns.accounts'), sortable: true },
+  { key: 'traffic', label: t('admin.proxies.columns.traffic'), sortable: false },
   { key: 'latency', label: t('admin.proxies.columns.latency'), sortable: false },
   { key: 'status', label: t('admin.proxies.columns.status'), sortable: true },
   { key: 'actions', label: t('admin.proxies.columns.actions'), sortable: false }
@@ -944,10 +985,31 @@ const visiblePasswordIds = reactive(new Set<number>())
 const copyMenuProxyId = ref<number | null>(null)
 const loading = ref(false)
 const searchQuery = ref('')
+const formatDateTimeLocalValue = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+const defaultTrafficRange = () => {
+  const end = new Date()
+  const start = new Date(end)
+  start.setHours(0, 0, 0, 0)
+  return {
+    start: formatDateTimeLocalValue(start),
+    end: formatDateTimeLocalValue(end)
+  }
+}
+const initialTrafficRange = defaultTrafficRange()
 const filters = reactive({
   protocol: '',
-  status: ''
+  status: '',
+  traffic_start_time: initialTrafficRange.start,
+  traffic_end_time: initialTrafficRange.end
 })
+const trafficEndFollowsNow = ref(true)
 const pagination = reactive({
   page: 1,
   page_size: getPersistedPageSize(),
@@ -1064,12 +1126,25 @@ const toggleSelectAllVisible = (event: Event) => {
   toggleVisible(target.checked)
 }
 
+const localDateTimeToRFC3339 = (value: string) => {
+  if (!value) return undefined
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString()
+}
+
+const refreshTrafficEndIfNeeded = () => {
+  if (!trafficEndFollowsNow.value) return
+  filters.traffic_end_time = formatDateTimeLocalValue(new Date())
+}
+
 const buildProxyQueryFilters = () => ({
   protocol: filters.protocol || undefined,
   status: (filters.status || undefined) as 'active' | 'inactive' | undefined,
   search: searchQuery.value || undefined,
   sort_by: sortState.sort_by,
-  sort_order: sortState.sort_order
+  sort_order: sortState.sort_order,
+  start_time: localDateTimeToRFC3339(filters.traffic_start_time),
+  end_time: localDateTimeToRFC3339(filters.traffic_end_time)
 })
 
 const loadProxies = async () => {
@@ -1080,6 +1155,7 @@ const loadProxies = async () => {
   abortController = currentAbortController
   loading.value = true
   try {
+    refreshTrafficEndIfNeeded()
     const response = await adminAPI.proxies.list(
       pagination.page,
       pagination.page_size,
@@ -1113,6 +1189,14 @@ const handleSearch = () => {
     pagination.page = 1
     loadProxies()
   }, 300)
+}
+
+const handleTrafficRangeChange = (field: 'start' | 'end') => {
+  if (field === 'end') {
+    trafficEndFollowsNow.value = false
+  }
+  pagination.page = 1
+  loadProxies()
 }
 
 const handlePageChange = (page: number) => {
@@ -1400,6 +1484,8 @@ const formatLocation = (proxy: Proxy) => {
   return parts.join(' · ')
 }
 
+const formatTrafficBytes = (bytes?: number | null) => formatBytes(Math.max(0, bytes || 0), 1)
+
 const flagUrl = (code: string) =>
   `https://unpkg.com/flag-icons/flags/4x3/${code.toLowerCase()}.svg`
 
@@ -1608,13 +1694,7 @@ const fetchAllProxiesForBatch = async (): Promise<Proxy[]> => {
     const response = await adminAPI.proxies.list(
       page,
       pageSize,
-      {
-        protocol: filters.protocol || undefined,
-        status: filters.status as any,
-        search: searchQuery.value || undefined,
-        sort_by: sortState.sort_by,
-        sort_order: sortState.sort_order
-      }
+      buildProxyQueryFilters()
     )
     result.push(...response.items)
     totalPages = response.pages || 1

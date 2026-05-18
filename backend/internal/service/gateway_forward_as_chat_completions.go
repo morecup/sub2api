@@ -190,6 +190,10 @@ func (s *GatewayService) ForwardAsChatCompletions(
 	} else {
 		result, handleErr = s.handleCCBufferedFromAnthropic(resp, c, originalModel, mappedModel, reasoningEffort, startTime)
 	}
+	if result != nil {
+		result.RequestBytes = int64(len(anthropicBody))
+		result.ResponseBytes = ResponseTrafficBytes(resp)
+	}
 
 	return result, handleErr
 }

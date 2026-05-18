@@ -1988,6 +1988,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		)
 		return nil, wrapOpenAIWSFallback("write_request", err)
 	}
+	requestTrafficBytes := int64(resolvePayloadBytes())
 	if debugEnabled {
 		logOpenAIWSModeDebug(
 			"write_request_sent account_id=%d conn_id=%s stream=%v payload_bytes=%d previous_response_id=%s",
@@ -2018,6 +2019,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	flushedBufferedEventCount := 0
 	firstEventType := ""
 	lastEventType := ""
+	responseTrafficBytes := int64(0)
 
 	var flusher http.Flusher
 	if reqStream {
@@ -2128,6 +2130,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			setOpsUpstreamError(c, 0, sanitizeUpstreamErrorMessage(readErr.Error()), "")
 			return nil, fmt.Errorf("openai ws read event: %w", readErr)
 		}
+		responseTrafficBytes += int64(len(message))
 
 		eventType, eventResponseID, responseField := parseOpenAIWSEventEnvelope(message)
 		if eventType == "" {
@@ -2363,6 +2366,8 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		ResponseHeaders: lease.HandshakeHeaders(),
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		RequestBytes:    requestTrafficBytes,
+		ResponseBytes:   responseTrafficBytes,
 	}, nil
 }
 
@@ -2828,6 +2833,10 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
+		requestTrafficBytes := int64(payloadBytes)
+		if requestTrafficBytes < 0 {
+			requestTrafficBytes = int64(len(payload))
+		}
 		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",
@@ -2860,6 +2869,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		terminalEventCount := 0
 		firstEventType := ""
 		lastEventType := ""
+		responseTrafficBytes := int64(0)
 		needModelReplace := false
 		clientDisconnected := false
 		mappedModel := ""
@@ -2881,6 +2891,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					wroteDownstream,
 				)
 			}
+			responseTrafficBytes += int64(len(upstreamMessage))
 
 			eventType, eventResponseID, _ := parseOpenAIWSEventEnvelope(upstreamMessage)
 			if responseID == "" && eventResponseID != "" {
@@ -3042,6 +3053,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 					ResponseHeaders: lease.HandshakeHeaders(),
 					Duration:        time.Since(turnStart),
 					FirstTokenMs:    firstTokenMs,
+					RequestBytes:    requestTrafficBytes,
+					ResponseBytes:   responseTrafficBytes,
 				}
 				if imageCount > 0 {
 					result.ImageCount = imageCount

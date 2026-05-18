@@ -36,16 +36,20 @@ type RelayResult struct {
 	Duration                time.Duration
 	ClientToUpstreamFrames  int64
 	UpstreamToClientFrames  int64
+	ClientToUpstreamBytes   int64
+	UpstreamToClientBytes   int64
 	DroppedDownstreamFrames int64
 }
 
 type RelayTurnResult struct {
-	RequestModel      string
-	Usage             Usage
-	RequestID         string
-	TerminalEventType string
-	Duration          time.Duration
-	FirstTokenMs      *int
+	RequestModel          string
+	Usage                 Usage
+	RequestID             string
+	TerminalEventType     string
+	Duration              time.Duration
+	FirstTokenMs          *int
+	ClientToUpstreamBytes int64
+	UpstreamToClientBytes int64
 }
 
 type RelayExit struct {
@@ -82,6 +86,8 @@ type relayState struct {
 	terminalEventType string
 	firstTokenMs      *int
 	turnTimingByID    map[string]*relayTurnTiming
+	responseBytesByID map[string]int64
+	turnRequestBytes  atomic.Int64
 }
 
 type relayExitSignal struct {
@@ -98,6 +104,7 @@ type observedUpstreamEvent struct {
 	usage      Usage
 	duration   time.Duration
 	firstToken *int
+	bytes      int64
 }
 
 type relayTurnTiming struct {
@@ -162,6 +169,8 @@ func Relay(
 
 	clientToUpstreamFrames := &atomic.Int64{}
 	upstreamToClientFrames := &atomic.Int64{}
+	clientToUpstreamBytes := &atomic.Int64{}
+	upstreamToClientBytes := &atomic.Int64{}
 	droppedDownstreamFrames := &atomic.Int64{}
 	emitRelayTrace(onTrace, RelayTraceEvent{
 		Stage:        "relay_start",
@@ -181,6 +190,8 @@ func Relay(
 		return result, &RelayExit{Stage: "write_upstream", Err: err}
 	}
 	clientToUpstreamFrames.Add(1)
+	clientToUpstreamBytes.Add(int64(len(firstClientMessage)))
+	state.turnRequestBytes.Add(int64(len(firstClientMessage)))
 	emitRelayTrace(onTrace, RelayTraceEvent{
 		Stage:        "write_first_message_ok",
 		Direction:    "client_to_upstream",
@@ -191,7 +202,7 @@ func Relay(
 
 	exitCh := make(chan relayExitSignal, 3)
 	dropDownstreamWrites := atomic.Bool{}
-	go runClientToUpstream(relayCtx, clientConn, writeUpstream, markActivity, clientToUpstreamFrames, onTrace, exitCh)
+	go runClientToUpstream(relayCtx, clientConn, writeUpstream, markActivity, clientToUpstreamFrames, clientToUpstreamBytes, &state.turnRequestBytes, onTrace, exitCh)
 	go runUpstreamToClient(
 		relayCtx,
 		upstreamConn,
@@ -203,6 +214,7 @@ func Relay(
 		options.OnTurnComplete,
 		&dropDownstreamWrites,
 		upstreamToClientFrames,
+		upstreamToClientBytes,
 		droppedDownstreamFrames,
 		markActivity,
 		onTrace,
@@ -248,6 +260,8 @@ func Relay(
 	enrichResult(&result, state, nowFn().Sub(startAt))
 	result.ClientToUpstreamFrames = clientToUpstreamFrames.Load()
 	result.UpstreamToClientFrames = upstreamToClientFrames.Load()
+	result.ClientToUpstreamBytes = clientToUpstreamBytes.Load()
+	result.UpstreamToClientBytes = upstreamToClientBytes.Load()
 	result.DroppedDownstreamFrames = droppedDownstreamFrames.Load()
 	if firstExit.stage == "read_client" && firstExit.graceful {
 		stage := "client_disconnected"
@@ -324,6 +338,8 @@ func runClientToUpstream(
 	writeUpstream func(msgType coderws.MessageType, payload []byte) error,
 	markActivity func(),
 	forwardedFrames *atomic.Int64,
+	forwardedBytes *atomic.Int64,
+	turnRequestBytes *atomic.Int64,
 	onTrace func(event RelayTraceEvent),
 	exitCh chan<- relayExitSignal,
 ) {
@@ -354,6 +370,12 @@ func runClientToUpstream(
 		if forwardedFrames != nil {
 			forwardedFrames.Add(1)
 		}
+		if forwardedBytes != nil {
+			forwardedBytes.Add(int64(len(payload)))
+		}
+		if turnRequestBytes != nil {
+			turnRequestBytes.Add(int64(len(payload)))
+		}
 		markActivity()
 	}
 }
@@ -369,6 +391,7 @@ func runUpstreamToClient(
 	onTurnComplete func(turn RelayTurnResult),
 	dropDownstreamWrites *atomic.Bool,
 	forwardedFrames *atomic.Int64,
+	forwardedBytes *atomic.Int64,
 	droppedFrames *atomic.Int64,
 	markActivity func(),
 	onTrace func(event RelayTraceEvent),
@@ -394,6 +417,9 @@ func runUpstreamToClient(
 			return
 		}
 		markActivity()
+		if forwardedBytes != nil {
+			forwardedBytes.Add(int64(len(payload)))
+		}
 		observedEvent := observedUpstreamEvent{}
 		switch msgType {
 		case coderws.MessageText:
@@ -556,8 +582,13 @@ func observeUpstreamMessage(
 		eventType:  eventType,
 		responseID: responseID,
 		usage:      parsedUsage,
+		bytes:      int64(len(message)),
 	}
 	if responseID != "" {
+		if state.responseBytesByID == nil {
+			state.responseBytesByID = make(map[string]int64, 8)
+		}
+		state.responseBytesByID[responseID] += int64(len(message))
 		turnTiming := openAIWSRelayGetOrInitTurnTiming(state, responseID, now)
 		if turnTiming != nil && turnTiming.firstTokenMs == nil && isTokenEvent(eventType) {
 			ms := int(now.Sub(turnTiming.startAt).Milliseconds())
@@ -573,6 +604,8 @@ func observeUpstreamMessage(
 	state.terminalEventType = eventType
 	if responseID != "" {
 		state.lastResponseID = responseID
+		observed.bytes = state.responseBytesByID[responseID]
+		delete(state.responseBytesByID, responseID)
 		if turnTiming, ok := openAIWSRelayDeleteTurnTiming(state, responseID); ok {
 			duration := now.Sub(turnTiming.startAt)
 			if duration < 0 {
@@ -598,16 +631,20 @@ func emitTurnComplete(
 		return
 	}
 	requestModel := ""
+	requestBytes := int64(0)
 	if state != nil {
 		requestModel = state.requestModel
+		requestBytes = state.turnRequestBytes.Swap(0)
 	}
 	onTurnComplete(RelayTurnResult{
-		RequestModel:      requestModel,
-		Usage:             observed.usage,
-		RequestID:         responseID,
-		TerminalEventType: observed.eventType,
-		Duration:          observed.duration,
-		FirstTokenMs:      openAIWSRelayCloneIntPtr(observed.firstToken),
+		RequestModel:          requestModel,
+		Usage:                 observed.usage,
+		RequestID:             responseID,
+		TerminalEventType:     observed.eventType,
+		Duration:              observed.duration,
+		FirstTokenMs:          openAIWSRelayCloneIntPtr(observed.firstToken),
+		ClientToUpstreamBytes: requestBytes,
+		UpstreamToClientBytes: observed.bytes,
 	})
 }
 

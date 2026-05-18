@@ -837,6 +837,19 @@ type trackedBody struct {
 	io.ReadCloser // 原始响应体
 	once          sync.Once
 	onClose       func() // 关闭时的回调函数
+	bytesRead     int64
+}
+
+func (b *trackedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 {
+		atomic.AddInt64(&b.bytesRead, int64(n))
+	}
+	return n, err
+}
+
+func (b *trackedBody) TrafficBytes() int64 {
+	return atomic.LoadInt64(&b.bytesRead)
 }
 
 // Close 关闭响应体并执行回调

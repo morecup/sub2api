@@ -298,6 +298,10 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			result.ReasoningEffort = &re
 		}
 	}
+	if result != nil {
+		result.RequestBytes = int64(len(responsesBody))
+		result.ResponseBytes = ResponseTrafficBytes(resp)
+	}
 
 	// Extract and save Codex usage snapshot from response headers (for OAuth accounts)
 	if handleErr == nil && account.Type == AccountTypeOAuth {

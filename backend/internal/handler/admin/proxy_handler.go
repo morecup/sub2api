@@ -4,9 +4,11 @@ import (
 	"context"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -45,6 +47,42 @@ type UpdateProxyRequest struct {
 	Status   string `json:"status" binding:"omitempty,oneof=active inactive"`
 }
 
+func parseProxyTrafficTimeRange(c *gin.Context) (time.Time, time.Time, bool) {
+	startTime := timezone.Today()
+	endTime := timezone.Now()
+
+	parseTime := func(key string) (time.Time, bool) {
+		raw := strings.TrimSpace(c.Query(key))
+		if raw == "" {
+			return time.Time{}, true
+		}
+		if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+			return t, true
+		}
+		if t, err := time.Parse(time.RFC3339, raw); err == nil {
+			return t, true
+		}
+		response.BadRequest(c, "Invalid "+key+", use RFC3339 format")
+		return time.Time{}, false
+	}
+
+	if parsed, ok := parseTime("start_time"); !ok {
+		return time.Time{}, time.Time{}, false
+	} else if !parsed.IsZero() {
+		startTime = parsed
+	}
+	if parsed, ok := parseTime("end_time"); !ok {
+		return time.Time{}, time.Time{}, false
+	} else if !parsed.IsZero() {
+		endTime = parsed
+	}
+	if startTime.After(endTime) {
+		response.BadRequest(c, "Invalid time range: start_time must be before or equal to end_time")
+		return time.Time{}, time.Time{}, false
+	}
+	return startTime, endTime, true
+}
+
 // List handles listing all proxies with pagination
 // GET /api/v1/admin/proxies
 func (h *ProxyHandler) List(c *gin.Context) {
@@ -59,8 +97,12 @@ func (h *ProxyHandler) List(c *gin.Context) {
 	if len(search) > 100 {
 		search = search[:100]
 	}
+	trafficStart, trafficEnd, ok := parseProxyTrafficTimeRange(c)
+	if !ok {
+		return
+	}
 
-	proxies, total, err := h.adminService.ListProxiesWithAccountCount(c.Request.Context(), page, pageSize, protocol, status, search, sortBy, sortOrder)
+	proxies, total, err := h.adminService.ListProxiesWithAccountCount(c.Request.Context(), page, pageSize, protocol, status, search, sortBy, sortOrder, trafficStart, trafficEnd)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -80,7 +122,11 @@ func (h *ProxyHandler) GetAll(c *gin.Context) {
 	withCount := c.Query("with_count") == "true"
 
 	if withCount {
-		proxies, err := h.adminService.GetAllProxiesWithAccountCount(c.Request.Context())
+		trafficStart, trafficEnd, ok := parseProxyTrafficTimeRange(c)
+		if !ok {
+			return
+		}
+		proxies, err := h.adminService.GetAllProxiesWithAccountCount(c.Request.Context(), trafficStart, trafficEnd)
 		if err != nil {
 			response.ErrorFrom(c, err)
 			return

@@ -499,6 +499,8 @@ type ForwardResult struct {
 	FirstTokenMs     *int // 首字时间（流式请求）
 	ClientDisconnect bool // 客户端是否在流式传输过程中断开
 	ReasoningEffort  *string
+	RequestBytes     int64
+	ResponseBytes    int64
 
 	// 图片生成计费字段（图片生成模型使用）
 	ImageCount int    // 生成的图片数量
@@ -4956,6 +4958,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
 		ClientDisconnect: clientDisconnect,
+		RequestBytes:     int64(len(body)),
+		ResponseBytes:    ResponseTrafficBytes(resp),
 	}, nil
 }
 
@@ -5208,6 +5212,8 @@ func (s *GatewayService) forwardAnthropicAPIKeyPassthroughWithInput(
 		Duration:         time.Since(input.StartTime),
 		FirstTokenMs:     firstTokenMs,
 		ClientDisconnect: clientDisconnect,
+		RequestBytes:     int64(len(input.Body)),
+		ResponseBytes:    ResponseTrafficBytes(resp),
 	}, nil
 }
 
@@ -5713,6 +5719,8 @@ func (s *GatewayService) forwardBedrock(
 		Duration:         time.Since(startTime),
 		FirstTokenMs:     firstTokenMs,
 		ClientDisconnect: clientDisconnect,
+		RequestBytes:     int64(len(bedrockBody)),
+		ResponseBytes:    ResponseTrafficBytes(resp),
 	}, nil
 }
 
@@ -8653,6 +8661,10 @@ func (s *GatewayService) buildRecordUsageLog(
 		ModelMappingChain:     optionalTrimmedStringPtr(input.ModelMappingChain),
 		UserAgent:             optionalTrimmedStringPtr(input.UserAgent),
 		IPAddress:             optionalTrimmedStringPtr(input.IPAddress),
+		ProxyID:               account.ProxyID,
+		RequestTrafficBytes:   result.RequestBytes,
+		ResponseTrafficBytes:  result.ResponseBytes,
+		TotalTrafficBytes:     result.RequestBytes + result.ResponseBytes,
 		GroupID:               apiKey.GroupID,
 		SubscriptionID:        optionalSubscriptionID(subscription),
 		CreatedAt:             time.Now(),

@@ -702,6 +702,12 @@ export interface Proxy {
   quality_grade?: string
   quality_summary?: string
   quality_checked?: number
+  traffic_requests?: number
+  request_traffic_bytes?: number
+  response_traffic_bytes?: number
+  total_traffic_bytes?: number
+  traffic_start_time?: string
+  traffic_end_time?: string
   created_at: string
   updated_at: string
 }
@@ -1192,6 +1198,10 @@ export interface UsageLog {
   duration_ms: number
   first_token_ms: number | null
 
+  request_traffic_bytes?: number
+  response_traffic_bytes?: number
+  total_traffic_bytes?: number
+
   // 图片生成字段
   image_count: number
   image_size: string | null
@@ -1233,6 +1243,8 @@ export interface AdminUsageLog extends UsageLog {
 
   // 用户请求 IP（仅管理员可见）
   ip_address?: string | null
+  // 请求发生时账号绑定的代理 ID（仅管理员可见）
+  proxy_id?: number | null
 
   // 最小账号信息（仅管理员接口返回）
   account?: UsageLogAccountSummary
@@ -1356,6 +1368,9 @@ export interface UsageStatsResponse {
   total_tokens: number
   total_cost: number // 标准计费
   total_actual_cost: number // 实际扣除
+  total_request_traffic_bytes?: number
+  total_response_traffic_bytes?: number
+  total_traffic_bytes?: number
   average_duration_ms: number
   models?: Record<string, number>
 }

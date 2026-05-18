@@ -160,6 +160,18 @@
           </div>
         </template>
 
+        <template #cell-traffic="{ row }">
+          <div class="min-w-[8rem] text-sm">
+            <div class="font-medium text-gray-900 dark:text-white">
+              {{ formatTrafficBytes(row.total_traffic_bytes) }}
+            </div>
+            <div class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 dark:text-gray-400">
+              <span>{{ t('usage.requestTraffic') }} {{ formatTrafficBytes(row.request_traffic_bytes) }}</span>
+              <span>{{ t('usage.responseTraffic') }} {{ formatTrafficBytes(row.response_traffic_bytes) }}</span>
+            </div>
+          </div>
+        </template>
+
         <template #cell-first_token="{ row }">
           <span v-if="row.first_token_ms != null" class="text-sm text-gray-600 dark:text-gray-400">{{ formatDuration(row.first_token_ms) }}</span>
           <span v-else class="text-sm text-gray-400 dark:text-gray-500">-</span>
@@ -360,7 +372,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { formatDateTime, formatReasoningEffort } from '@/utils/format'
+import { formatBytes, formatDateTime, formatReasoningEffort } from '@/utils/format'
 import { formatCacheTokens, formatMultiplier } from '@/utils/formatters'
 import { formatTokenPricePerMillion } from '@/utils/usagePricing'
 import { getUsageServiceTierLabel } from '@/utils/usageServiceTier'
@@ -445,6 +457,8 @@ const formatDuration = (ms: number | null | undefined): string => {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(2)}s`
 }
+
+const formatTrafficBytes = (bytes?: number | null): string => formatBytes(Math.max(0, bytes || 0), 1)
 
 // Cost tooltip functions
 const showTooltip = (event: MouseEvent, row: AdminUsageLog) => {

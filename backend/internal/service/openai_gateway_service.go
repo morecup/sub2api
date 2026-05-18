@@ -234,6 +234,8 @@ type OpenAIForwardResult struct {
 	ResponseHeaders http.Header
 	Duration        time.Duration
 	FirstTokenMs    *int
+	RequestBytes    int64
+	ResponseBytes   int64
 	ImageCount      int
 	ImageSize       string
 }
@@ -2819,6 +2821,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			OpenAIWSMode:    false,
 			Duration:        time.Since(startTime),
 			FirstTokenMs:    firstTokenMs,
+			RequestBytes:    int64(len(body)),
+			ResponseBytes:   ResponseTrafficBytes(resp),
 		}
 		if imageCount > 0 {
 			forwardResult.ImageCount = imageCount
@@ -3062,6 +3066,8 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		OpenAIWSMode:    false,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
+		RequestBytes:    int64(len(body)),
+		ResponseBytes:   ResponseTrafficBytes(resp),
 	}
 	if imageCount > 0 {
 		forwardResult.ImageCount = imageCount
@@ -5385,24 +5391,28 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	}
 
 	usageLog := &UsageLog{
-		UserID:              user.ID,
-		APIKeyID:            apiKey.ID,
-		AccountID:           account.ID,
-		RequestID:           requestID,
-		Model:               result.Model,
-		RequestedModel:      requestedModel,
-		UpstreamModel:       optionalNonEqualStringPtr(result.UpstreamModel, result.Model),
-		ServiceTier:         result.ServiceTier,
-		ReasoningEffort:     result.ReasoningEffort,
-		InboundEndpoint:     optionalTrimmedStringPtr(input.InboundEndpoint),
-		UpstreamEndpoint:    optionalTrimmedStringPtr(input.UpstreamEndpoint),
-		InputTokens:         actualInputTokens,
-		OutputTokens:        result.Usage.OutputTokens,
-		CacheCreationTokens: result.Usage.CacheCreationInputTokens,
-		CacheReadTokens:     result.Usage.CacheReadInputTokens,
-		ImageOutputTokens:   result.Usage.ImageOutputTokens,
-		ImageCount:          result.ImageCount,
-		ImageSize:           optionalTrimmedStringPtr(result.ImageSize),
+		UserID:               user.ID,
+		APIKeyID:             apiKey.ID,
+		AccountID:            account.ID,
+		RequestID:            requestID,
+		Model:                result.Model,
+		RequestedModel:       requestedModel,
+		UpstreamModel:        optionalNonEqualStringPtr(result.UpstreamModel, result.Model),
+		ServiceTier:          result.ServiceTier,
+		ReasoningEffort:      result.ReasoningEffort,
+		InboundEndpoint:      optionalTrimmedStringPtr(input.InboundEndpoint),
+		UpstreamEndpoint:     optionalTrimmedStringPtr(input.UpstreamEndpoint),
+		ProxyID:              account.ProxyID,
+		RequestTrafficBytes:  result.RequestBytes,
+		ResponseTrafficBytes: result.ResponseBytes,
+		TotalTrafficBytes:    result.RequestBytes + result.ResponseBytes,
+		InputTokens:          actualInputTokens,
+		OutputTokens:         result.Usage.OutputTokens,
+		CacheCreationTokens:  result.Usage.CacheCreationInputTokens,
+		CacheReadTokens:      result.Usage.CacheReadInputTokens,
+		ImageOutputTokens:    result.Usage.ImageOutputTokens,
+		ImageCount:           result.ImageCount,
+		ImageSize:            optionalTrimmedStringPtr(result.ImageSize),
 	}
 	if cost != nil {
 		usageLog.InputCost = cost.InputCost

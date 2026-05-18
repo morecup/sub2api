@@ -219,10 +219,18 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	}
 
 	// 8. Forward response
+	var result *OpenAIForwardResult
+	var forwardErr error
 	if clientStream {
-		return s.streamRawChatCompletions(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+		result, forwardErr = s.streamRawChatCompletions(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	} else {
+		result, forwardErr = s.bufferRawChatCompletions(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
 	}
-	return s.bufferRawChatCompletions(c, resp, originalModel, billingModel, upstreamModel, reasoningEffort, serviceTier, startTime)
+	if result != nil {
+		result.RequestBytes = int64(len(upstreamBody))
+		result.ResponseBytes = ResponseTrafficBytes(resp)
+	}
+	return result, forwardErr
 }
 
 // streamRawChatCompletions 透传上游 CC SSE 流到客户端，并提取 usage（包括

@@ -49,6 +49,8 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 			func() {},
 			nil,
 			nil,
+			nil,
+			nil,
 			exitCh,
 		)
 		sig := <-exitCh
@@ -69,6 +71,8 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 			func() {},
 			nil,
 			nil,
+			nil,
+			nil,
 			exitCh,
 		)
 		sig := <-exitCh
@@ -81,6 +85,8 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 
 		exitCh := make(chan relayExitSignal, 1)
 		forwarded := &atomic.Int64{}
+		forwardedBytes := &atomic.Int64{}
+		turnRequestBytes := &atomic.Int64{}
 		traces := make([]RelayTraceEvent, 0, 2)
 		runClientToUpstream(
 			context.Background(),
@@ -90,6 +96,8 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 			func(_ coderws.MessageType, _ []byte) error { return nil },
 			func() {},
 			forwarded,
+			forwardedBytes,
+			turnRequestBytes,
 			func(event RelayTraceEvent) {
 				traces = append(traces, event)
 			},
@@ -98,6 +106,8 @@ func TestRunClientToUpstream_ErrorPaths(t *testing.T) {
 		sig := <-exitCh
 		require.Equal(t, "read_client", sig.stage)
 		require.Equal(t, int64(1), forwarded.Load())
+		require.Equal(t, int64(len(`{"x":1}`)), forwardedBytes.Load())
+		require.Equal(t, int64(len(`{"x":1}`)), turnRequestBytes.Load())
 		require.NotEmpty(t, traces)
 	})
 }
@@ -121,6 +131,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			nil,
 			nil,
 			drop,
+			nil,
 			nil,
 			nil,
 			func() {},
@@ -150,6 +161,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			nil,
 			nil,
 			drop,
+			nil,
 			nil,
 			nil,
 			func() {},
@@ -182,6 +194,7 @@ func TestRunUpstreamToClient_ErrorAndDropPaths(t *testing.T) {
 			nil,
 			nil,
 			drop,
+			nil,
 			nil,
 			dropped,
 			func() {},

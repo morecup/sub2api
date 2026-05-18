@@ -22,3 +22,24 @@ type HTTPUpstream interface {
 	// 支持按账号绑定的数据库 profile 或内置默认 profile。
 	DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile) (*http.Response, error)
 }
+
+// TrafficCountedBody is implemented by upstream response bodies that track how
+// many application-level bytes have been read by the gateway.
+type TrafficCountedBody interface {
+	TrafficBytes() int64
+}
+
+func ResponseTrafficBytes(resp *http.Response) int64 {
+	if resp == nil || resp.Body == nil {
+		return 0
+	}
+	body, ok := resp.Body.(TrafficCountedBody)
+	if !ok {
+		return 0
+	}
+	bytes := body.TrafficBytes()
+	if bytes < 0 {
+		return 0
+	}
+	return bytes
+}

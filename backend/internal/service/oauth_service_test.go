@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/oauth"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -86,6 +87,9 @@ func (m *mockProxyRepoForOAuth) ListActive(ctx context.Context) ([]Proxy, error)
 }
 func (m *mockProxyRepoForOAuth) ListActiveWithAccountCount(ctx context.Context) ([]ProxyWithAccountCount, error) {
 	panic("ListActiveWithAccountCount not implemented")
+}
+func (m *mockProxyRepoForOAuth) GetTrafficStatsForProxies(ctx context.Context, proxyIDs []int64, startTime, endTime time.Time) (map[int64]ProxyTrafficStats, error) {
+	return map[int64]ProxyTrafficStats{}, nil
 }
 func (m *mockProxyRepoForOAuth) ExistsByHostPortAuth(ctx context.Context, host string, port int, username, password string) (bool, error) {
 	panic("ExistsByHostPortAuth not implemented")

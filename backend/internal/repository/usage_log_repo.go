@@ -28,7 +28,7 @@ import (
 	gocache "github.com/patrickmn/go-cache"
 )
 
-const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, image_count, image_size, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
+const usageLogSelectColumns = "id, user_id, api_key_id, account_id, request_id, model, requested_model, upstream_model, group_id, subscription_id, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens, cache_creation_5m_tokens, cache_creation_1h_tokens, image_output_tokens, image_output_cost, input_cost, output_cost, cache_creation_cost, cache_read_cost, total_cost, actual_cost, rate_multiplier, account_rate_multiplier, billing_type, request_type, stream, openai_ws_mode, duration_ms, first_token_ms, user_agent, ip_address, proxy_id, request_traffic_bytes, response_traffic_bytes, total_traffic_bytes, image_count, image_size, service_tier, reasoning_effort, inbound_endpoint, upstream_endpoint, cache_ttl_overridden, channel_id, model_mapping_chain, billing_tier, billing_mode, account_stats_cost, created_at"
 
 // usageLogInsertArgTypes must stay in the same order as:
 //  1. prepareUsageLogInsert().args
@@ -71,6 +71,10 @@ var usageLogInsertArgTypes = [...]string{
 	"integer",     // first_token_ms
 	"text",        // user_agent
 	"text",        // ip_address
+	"bigint",      // proxy_id
+	"bigint",      // request_traffic_bytes
+	"bigint",      // response_traffic_bytes
+	"bigint",      // total_traffic_bytes
 	"integer",     // image_count
 	"text",        // image_size
 	"text",        // service_tier
@@ -350,6 +354,10 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -369,7 +377,7 @@ func (r *usageLogRepository) createSingle(ctx context.Context, sqlq sqlExecutor,
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 		RETURNING id, created_at
@@ -788,6 +796,10 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -803,7 +815,7 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(keys)*46)
+	args := make([]any, 0, len(keys)*len(usageLogInsertArgTypes))
 	argPos := 1
 	for idx, key := range keys {
 		if idx > 0 {
@@ -865,6 +877,10 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				first_token_ms,
 				user_agent,
 				ip_address,
+				proxy_id,
+				request_traffic_bytes,
+				response_traffic_bytes,
+				total_traffic_bytes,
 				image_count,
 				image_size,
 				service_tier,
@@ -913,6 +929,10 @@ func buildUsageLogBatchInsertQuery(keys []string, preparedByKey map[string]usage
 				first_token_ms,
 				user_agent,
 				ip_address,
+				proxy_id,
+				request_traffic_bytes,
+				response_traffic_bytes,
+				total_traffic_bytes,
 				image_count,
 				image_size,
 				service_tier,
@@ -1001,6 +1021,10 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -1016,7 +1040,7 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			created_at
 		) AS (VALUES `)
 
-	args := make([]any, 0, len(preparedList)*46)
+	args := make([]any, 0, len(preparedList)*len(usageLogInsertArgTypes))
 	argPos := 1
 	for idx, prepared := range preparedList {
 		if idx > 0 {
@@ -1075,6 +1099,10 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -1123,6 +1151,10 @@ func buildUsageLogBestEffortInsertQuery(preparedList []usageLogInsertPrepared) (
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -1179,6 +1211,10 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			first_token_ms,
 			user_agent,
 			ip_address,
+			proxy_id,
+			request_traffic_bytes,
+			response_traffic_bytes,
+			total_traffic_bytes,
 			image_count,
 			image_size,
 			service_tier,
@@ -1198,7 +1234,7 @@ func execUsageLogInsertNoResult(ctx context.Context, sqlq sqlExecutor, prepared 
 			$10, $11, $12, $13,
 			$14, $15, $16, $17,
 			$18, $19, $20, $21, $22, $23,
-			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46
+			$24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42, $43, $44, $45, $46, $47, $48, $49, $50
 		)
 		ON CONFLICT (request_id, api_key_id) DO NOTHING
 	`, prepared.args...)
@@ -1233,6 +1269,16 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 	modelMappingChain := nullString(log.ModelMappingChain)
 	billingTier := nullString(log.BillingTier)
 	billingMode := nullString(log.BillingMode)
+	proxyID := nullInt64(log.ProxyID)
+	requestTrafficBytes := normalizeNonNegativeInt64(log.RequestTrafficBytes)
+	responseTrafficBytes := normalizeNonNegativeInt64(log.ResponseTrafficBytes)
+	totalTrafficBytes := normalizeNonNegativeInt64(log.TotalTrafficBytes)
+	if totalTrafficBytes == 0 && (requestTrafficBytes > 0 || responseTrafficBytes > 0) {
+		totalTrafficBytes = requestTrafficBytes + responseTrafficBytes
+	}
+	log.RequestTrafficBytes = requestTrafficBytes
+	log.ResponseTrafficBytes = responseTrafficBytes
+	log.TotalTrafficBytes = totalTrafficBytes
 	requestedModel := strings.TrimSpace(log.RequestedModel)
 	if requestedModel == "" {
 		requestedModel = strings.TrimSpace(log.Model)
@@ -1283,6 +1329,10 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 			firstToken,
 			userAgent,
 			ipAddress,
+			proxyID,
+			requestTrafficBytes,
+			responseTrafficBytes,
+			totalTrafficBytes,
 			log.ImageCount,
 			imageSize,
 			serviceTier,
@@ -3385,6 +3435,9 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 			COALESCE(SUM(total_cost), 0) as total_cost,
 			COALESCE(SUM(actual_cost), 0) as total_actual_cost,
 			COALESCE(SUM(COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1)), 0) as total_account_cost,
+			COALESCE(SUM(request_traffic_bytes), 0) as total_request_traffic_bytes,
+			COALESCE(SUM(response_traffic_bytes), 0) as total_response_traffic_bytes,
+			COALESCE(SUM(total_traffic_bytes), 0) as total_traffic_bytes,
 			COALESCE(AVG(duration_ms), 0) as avg_duration_ms
 		FROM usage_logs
 		%s
@@ -3404,6 +3457,9 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		&stats.TotalCost,
 		&stats.TotalActualCost,
 		&totalAccountCost,
+		&stats.TotalRequestTraffic,
+		&stats.TotalResponseTraffic,
+		&stats.TotalTraffic,
 		&stats.AverageDurationMs,
 	); err != nil {
 		return nil, err
@@ -4082,6 +4138,10 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		firstTokenMs          sql.NullInt64
 		userAgent             sql.NullString
 		ipAddress             sql.NullString
+		proxyID               sql.NullInt64
+		requestTrafficBytes   int64
+		responseTrafficBytes  int64
+		totalTrafficBytes     int64
 		imageCount            int
 		imageSize             sql.NullString
 		serviceTier           sql.NullString
@@ -4132,6 +4192,10 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		&firstTokenMs,
 		&userAgent,
 		&ipAddress,
+		&proxyID,
+		&requestTrafficBytes,
+		&responseTrafficBytes,
+		&totalTrafficBytes,
 		&imageCount,
 		&imageSize,
 		&serviceTier,
@@ -4172,6 +4236,9 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 		ActualCost:            actualCost,
 		RateMultiplier:        rateMultiplier,
 		AccountRateMultiplier: nullFloat64Ptr(accountRateMultiplier),
+		RequestTrafficBytes:   requestTrafficBytes,
+		ResponseTrafficBytes:  responseTrafficBytes,
+		TotalTrafficBytes:     totalTrafficBytes,
 		BillingType:           int8(billingType),
 		RequestType:           service.RequestTypeFromInt16(requestTypeRaw),
 		ImageCount:            imageCount,
@@ -4208,6 +4275,10 @@ func scanUsageLog(scanner interface{ Scan(...any) error }) (*service.UsageLog, e
 	}
 	if ipAddress.Valid {
 		log.IPAddress = &ipAddress.String
+	}
+	if proxyID.Valid {
+		value := proxyID.Int64
+		log.ProxyID = &value
 	}
 	if imageSize.Valid {
 		log.ImageSize = &imageSize.String
@@ -4361,6 +4432,13 @@ func nullInt(v *int) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: int64(*v), Valid: true}
+}
+
+func normalizeNonNegativeInt64(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 func nullFloat64Ptr(v sql.NullFloat64) *float64 {

@@ -276,20 +276,26 @@ type Proxy struct {
 
 type ProxyWithAccountCount struct {
 	Proxy
-	AccountCount   int64  `json:"account_count"`
-	LatencyMs      *int64 `json:"latency_ms,omitempty"`
-	LatencyStatus  string `json:"latency_status,omitempty"`
-	LatencyMessage string `json:"latency_message,omitempty"`
-	IPAddress      string `json:"ip_address,omitempty"`
-	Country        string `json:"country,omitempty"`
-	CountryCode    string `json:"country_code,omitempty"`
-	Region         string `json:"region,omitempty"`
-	City           string `json:"city,omitempty"`
-	QualityStatus  string `json:"quality_status,omitempty"`
-	QualityScore   *int   `json:"quality_score,omitempty"`
-	QualityGrade   string `json:"quality_grade,omitempty"`
-	QualitySummary string `json:"quality_summary,omitempty"`
-	QualityChecked *int64 `json:"quality_checked,omitempty"`
+	AccountCount         int64     `json:"account_count"`
+	TrafficRequests      int64     `json:"traffic_requests"`
+	RequestTrafficBytes  int64     `json:"request_traffic_bytes"`
+	ResponseTrafficBytes int64     `json:"response_traffic_bytes"`
+	TotalTrafficBytes    int64     `json:"total_traffic_bytes"`
+	TrafficStartTime     time.Time `json:"traffic_start_time"`
+	TrafficEndTime       time.Time `json:"traffic_end_time"`
+	LatencyMs            *int64    `json:"latency_ms,omitempty"`
+	LatencyStatus        string    `json:"latency_status,omitempty"`
+	LatencyMessage       string    `json:"latency_message,omitempty"`
+	IPAddress            string    `json:"ip_address,omitempty"`
+	Country              string    `json:"country,omitempty"`
+	CountryCode          string    `json:"country_code,omitempty"`
+	Region               string    `json:"region,omitempty"`
+	City                 string    `json:"city,omitempty"`
+	QualityStatus        string    `json:"quality_status,omitempty"`
+	QualityScore         *int      `json:"quality_score,omitempty"`
+	QualityGrade         string    `json:"quality_grade,omitempty"`
+	QualitySummary       string    `json:"quality_summary,omitempty"`
+	QualityChecked       *int64    `json:"quality_checked,omitempty"`
 }
 
 // AdminProxy 是管理员接口使用的 proxy DTO（包含密码等敏感字段）。
@@ -302,20 +308,26 @@ type AdminProxy struct {
 // AdminProxyWithAccountCount 是管理员接口使用的带账号统计的 proxy DTO。
 type AdminProxyWithAccountCount struct {
 	AdminProxy
-	AccountCount   int64  `json:"account_count"`
-	LatencyMs      *int64 `json:"latency_ms,omitempty"`
-	LatencyStatus  string `json:"latency_status,omitempty"`
-	LatencyMessage string `json:"latency_message,omitempty"`
-	IPAddress      string `json:"ip_address,omitempty"`
-	Country        string `json:"country,omitempty"`
-	CountryCode    string `json:"country_code,omitempty"`
-	Region         string `json:"region,omitempty"`
-	City           string `json:"city,omitempty"`
-	QualityStatus  string `json:"quality_status,omitempty"`
-	QualityScore   *int   `json:"quality_score,omitempty"`
-	QualityGrade   string `json:"quality_grade,omitempty"`
-	QualitySummary string `json:"quality_summary,omitempty"`
-	QualityChecked *int64 `json:"quality_checked,omitempty"`
+	AccountCount         int64     `json:"account_count"`
+	TrafficRequests      int64     `json:"traffic_requests"`
+	RequestTrafficBytes  int64     `json:"request_traffic_bytes"`
+	ResponseTrafficBytes int64     `json:"response_traffic_bytes"`
+	TotalTrafficBytes    int64     `json:"total_traffic_bytes"`
+	TrafficStartTime     time.Time `json:"traffic_start_time"`
+	TrafficEndTime       time.Time `json:"traffic_end_time"`
+	LatencyMs            *int64    `json:"latency_ms,omitempty"`
+	LatencyStatus        string    `json:"latency_status,omitempty"`
+	LatencyMessage       string    `json:"latency_message,omitempty"`
+	IPAddress            string    `json:"ip_address,omitempty"`
+	Country              string    `json:"country,omitempty"`
+	CountryCode          string    `json:"country_code,omitempty"`
+	Region               string    `json:"region,omitempty"`
+	City                 string    `json:"city,omitempty"`
+	QualityStatus        string    `json:"quality_status,omitempty"`
+	QualityScore         *int      `json:"quality_score,omitempty"`
+	QualityGrade         string    `json:"quality_grade,omitempty"`
+	QualitySummary       string    `json:"quality_summary,omitempty"`
+	QualityChecked       *int64    `json:"quality_checked,omitempty"`
 }
 
 type ProxyAccountSummary struct {
@@ -407,6 +419,10 @@ type UsageLog struct {
 	// User-Agent
 	UserAgent *string `json:"user_agent"`
 
+	RequestTrafficBytes  int64 `json:"request_traffic_bytes"`
+	ResponseTrafficBytes int64 `json:"response_traffic_bytes"`
+	TotalTrafficBytes    int64 `json:"total_traffic_bytes"`
+
 	// Cache TTL Override 标记
 	CacheTTLOverridden bool `json:"cache_ttl_overridden"`
 
@@ -443,6 +459,8 @@ type AdminUsageLog struct {
 
 	// IPAddress 用户请求 IP（仅管理员可见）
 	IPAddress *string `json:"ip_address,omitempty"`
+	// ProxyID 请求发生时账号绑定的代理 ID（仅管理员可见）
+	ProxyID *int64 `json:"proxy_id,omitempty"`
 
 	// Account 最小账号信息（避免泄露敏感字段）
 	Account *AccountSummary `json:"account,omitempty"`

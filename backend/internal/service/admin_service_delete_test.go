@@ -292,6 +292,10 @@ func (s *proxyRepoStub) ListWithFiltersAndAccountCount(ctx context.Context, para
 	panic("unexpected ListWithFiltersAndAccountCount call")
 }
 
+func (s *proxyRepoStub) GetTrafficStatsForProxies(ctx context.Context, proxyIDs []int64, startTime, endTime time.Time) (map[int64]ProxyTrafficStats, error) {
+	return map[int64]ProxyTrafficStats{}, nil
+}
+
 func (s *proxyRepoStub) ExistsByHostPortAuth(ctx context.Context, host string, port int, username, password string) (bool, error) {
 	panic("unexpected ExistsByHostPortAuth call")
 }

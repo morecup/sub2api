@@ -410,7 +410,7 @@ func (s *stubAdminService) ListProxies(ctx context.Context, page, pageSize int, 
 	return filtered, int64(len(filtered)), nil
 }
 
-func (s *stubAdminService) ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string) ([]service.ProxyWithAccountCount, int64, error) {
+func (s *stubAdminService) ListProxiesWithAccountCount(ctx context.Context, page, pageSize int, protocol, status, search string, sortBy, sortOrder string, trafficStart, trafficEnd time.Time) ([]service.ProxyWithAccountCount, int64, error) {
 	return s.proxyCounts, int64(len(s.proxyCounts)), nil
 }
 
@@ -418,7 +418,7 @@ func (s *stubAdminService) GetAllProxies(ctx context.Context) ([]service.Proxy, 
 	return s.proxies, nil
 }
 
-func (s *stubAdminService) GetAllProxiesWithAccountCount(ctx context.Context) ([]service.ProxyWithAccountCount, error) {
+func (s *stubAdminService) GetAllProxiesWithAccountCount(ctx context.Context, trafficStart, trafficEnd time.Time) ([]service.ProxyWithAccountCount, error) {
 	return s.proxyCounts, nil
 }
 

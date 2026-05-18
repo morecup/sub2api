@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/lib/pq"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 
@@ -378,6 +380,54 @@ func (r *proxyRepository) GetAccountCountsForProxies(ctx context.Context) (count
 		return nil, err
 	}
 	return counts, nil
+}
+
+func (r *proxyRepository) GetTrafficStatsForProxies(ctx context.Context, proxyIDs []int64, startTime, endTime time.Time) (stats map[int64]service.ProxyTrafficStats, err error) {
+	stats = make(map[int64]service.ProxyTrafficStats)
+	if len(proxyIDs) == 0 {
+		return stats, nil
+	}
+
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT
+			proxy_id,
+			COUNT(*) AS requests,
+			COALESCE(SUM(request_traffic_bytes), 0)::bigint AS request_traffic_bytes,
+			COALESCE(SUM(response_traffic_bytes), 0)::bigint AS response_traffic_bytes,
+			COALESCE(SUM(total_traffic_bytes), 0)::bigint AS total_traffic_bytes
+		FROM usage_logs
+		WHERE proxy_id = ANY($1)
+		  AND created_at >= $2
+		  AND created_at < $3
+		GROUP BY proxy_id
+	`, pq.Array(proxyIDs), startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+			stats = nil
+		}
+	}()
+
+	for rows.Next() {
+		var row service.ProxyTrafficStats
+		if err = rows.Scan(
+			&row.ProxyID,
+			&row.Requests,
+			&row.RequestTrafficBytes,
+			&row.ResponseTrafficBytes,
+			&row.TotalTrafficBytes,
+		); err != nil {
+			return nil, err
+		}
+		stats[row.ProxyID] = row
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return stats, nil
 }
 
 // ListActiveWithAccountCount returns all active proxies with account count, sorted by creation time descending

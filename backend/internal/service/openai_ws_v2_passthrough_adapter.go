@@ -489,9 +489,11 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					ResponseHeaders: cloneHeader(handshakeHeaders),
 					Duration:        turn.Duration,
 					FirstTokenMs:    turn.FirstTokenMs,
+					RequestBytes:    turn.ClientToUpstreamBytes,
+					ResponseBytes:   turn.UpstreamToClientBytes,
 				}
 				logOpenAIWSV2Passthrough(
-					"relay_turn_completed account_id=%d turn=%d request_id=%s terminal_event=%s duration_ms=%d first_token_ms=%d input_tokens=%d output_tokens=%d cache_read_tokens=%d",
+					"relay_turn_completed account_id=%d turn=%d request_id=%s terminal_event=%s duration_ms=%d first_token_ms=%d input_tokens=%d output_tokens=%d cache_read_tokens=%d request_bytes=%d response_bytes=%d",
 					account.ID,
 					turnNo,
 					truncateOpenAIWSLogValue(turnResult.RequestID, openAIWSIDValueMaxLen),
@@ -501,6 +503,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					turnResult.Usage.InputTokens,
 					turnResult.Usage.OutputTokens,
 					turnResult.Usage.CacheReadInputTokens,
+					turnResult.RequestBytes,
+					turnResult.ResponseBytes,
 				)
 				if hooks != nil && hooks.AfterTurn != nil {
 					hooks.AfterTurn(turnNo, turnResult, nil)
@@ -538,18 +542,22 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		ResponseHeaders: cloneHeader(handshakeHeaders),
 		Duration:        relayResult.Duration,
 		FirstTokenMs:    relayResult.FirstTokenMs,
+		RequestBytes:    relayResult.ClientToUpstreamBytes,
+		ResponseBytes:   relayResult.UpstreamToClientBytes,
 	}
 
 	turnCount := int(completedTurns.Load())
 	if relayExit == nil {
 		logOpenAIWSV2Passthrough(
-			"relay_completed account_id=%d request_id=%s terminal_event=%s duration_ms=%d c2u_frames=%d u2c_frames=%d dropped_frames=%d turns=%d",
+			"relay_completed account_id=%d request_id=%s terminal_event=%s duration_ms=%d c2u_frames=%d u2c_frames=%d c2u_bytes=%d u2c_bytes=%d dropped_frames=%d turns=%d",
 			account.ID,
 			truncateOpenAIWSLogValue(result.RequestID, openAIWSIDValueMaxLen),
 			truncateOpenAIWSLogValue(relayResult.TerminalEventType, openAIWSLogValueMaxLen),
 			result.Duration.Milliseconds(),
 			relayResult.ClientToUpstreamFrames,
 			relayResult.UpstreamToClientFrames,
+			relayResult.ClientToUpstreamBytes,
+			relayResult.UpstreamToClientBytes,
 			relayResult.DroppedDownstreamFrames,
 			turnCount,
 		)
@@ -560,7 +568,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		return nil
 	}
 	logOpenAIWSV2Passthrough(
-		"relay_failed account_id=%d stage=%s wrote_downstream=%v err=%s duration_ms=%d c2u_frames=%d u2c_frames=%d dropped_frames=%d turns=%d",
+		"relay_failed account_id=%d stage=%s wrote_downstream=%v err=%s duration_ms=%d c2u_frames=%d u2c_frames=%d c2u_bytes=%d u2c_bytes=%d dropped_frames=%d turns=%d",
 		account.ID,
 		truncateOpenAIWSLogValue(relayExit.Stage, openAIWSLogValueMaxLen),
 		relayExit.WroteDownstream,
@@ -568,6 +576,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		result.Duration.Milliseconds(),
 		relayResult.ClientToUpstreamFrames,
 		relayResult.UpstreamToClientFrames,
+		relayResult.ClientToUpstreamBytes,
+		relayResult.UpstreamToClientBytes,
 		relayResult.DroppedDownstreamFrames,
 		turnCount,
 	)

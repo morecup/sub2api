@@ -74,6 +74,10 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // first_token_ms
 			sqlmock.AnyArg(), // user_agent
 			sqlmock.AnyArg(), // ip_address
+			sqlmock.AnyArg(), // proxy_id
+			log.RequestTrafficBytes,
+			log.ResponseTrafficBytes,
+			log.TotalTrafficBytes,
 			log.ImageCount,
 			sqlmock.AnyArg(), // image_size
 			sqlmock.AnyArg(), // service_tier
@@ -153,6 +157,10 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
 			sqlmock.AnyArg(),
+			sqlmock.AnyArg(), // proxy_id
+			log.RequestTrafficBytes,
+			log.ResponseTrafficBytes,
+			log.TotalTrafficBytes,
 			log.ImageCount,
 			sqlmock.AnyArg(),
 			serviceTier,
@@ -330,8 +338,11 @@ func TestUsageLogRepositoryGetStatsWithFiltersRequestTypePriority(t *testing.T) 
 			"total_cost",
 			"total_actual_cost",
 			"total_account_cost",
+			"total_request_traffic_bytes",
+			"total_response_traffic_bytes",
+			"total_traffic_bytes",
 			"avg_duration_ms",
-		}).AddRow(int64(1), int64(2), int64(3), int64(4), 1.2, 1.0, 1.2, 20.0))
+		}).AddRow(int64(1), int64(2), int64(3), int64(4), 1.2, 1.0, 1.2, int64(10), int64(20), int64(30), 20.0))
 	mock.ExpectQuery("SELECT COALESCE\\(NULLIF\\(TRIM\\(inbound_endpoint\\), ''\\), 'unknown'\\) AS endpoint").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), requestType).
 		WillReturnRows(sqlmock.NewRows([]string{"endpoint", "requests", "total_tokens", "cost", "actual_cost"}))
@@ -420,8 +431,9 @@ func TestUsageLogRepositoryGetStatsWithFiltersAlwaysReturnsAccountCost(t *testin
 		WillReturnRows(sqlmock.NewRows([]string{
 			"total_requests", "total_input_tokens", "total_output_tokens",
 			"total_cache_tokens", "total_cost", "total_actual_cost",
-			"total_account_cost", "avg_duration_ms",
-		}).AddRow(int64(50), int64(1000), int64(2000), int64(100), 15.0, 12.5, 11.0, 100.0))
+			"total_account_cost", "total_request_traffic_bytes", "total_response_traffic_bytes",
+			"total_traffic_bytes", "avg_duration_ms",
+		}).AddRow(int64(50), int64(1000), int64(2000), int64(100), 15.0, 12.5, 11.0, int64(100), int64(200), int64(300), 100.0))
 	mock.ExpectQuery("SELECT COALESCE\\(NULLIF\\(TRIM\\(inbound_endpoint\\)").
 		WillReturnRows(sqlmock.NewRows([]string{"endpoint", "requests", "total_tokens", "cost", "actual_cost"}))
 	mock.ExpectQuery("SELECT COALESCE\\(NULLIF\\(TRIM\\(upstream_endpoint\\)").
@@ -565,6 +577,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullInt64{}, // proxy_id
+			int64(0),        // request_traffic_bytes
+			int64(0),        // response_traffic_bytes
+			int64(0),        // total_traffic_bytes
 			0,
 			sql.NullString{},
 			sql.NullString{Valid: true, String: "priority"},
@@ -613,6 +629,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullInt64{}, // proxy_id
+			int64(0),        // request_traffic_bytes
+			int64(0),        // response_traffic_bytes
+			int64(0),        // total_traffic_bytes
 			0,
 			sql.NullString{},
 			sql.NullString{Valid: true, String: "flex"},
@@ -661,6 +681,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullInt64{},
 			sql.NullString{},
 			sql.NullString{},
+			sql.NullInt64{}, // proxy_id
+			int64(0),        // request_traffic_bytes
+			int64(0),        // response_traffic_bytes
+			int64(0),        // total_traffic_bytes
 			0,
 			sql.NullString{},
 			sql.NullString{Valid: true, String: "priority"},

@@ -157,6 +157,11 @@ type UsageLog struct {
 	FirstTokenMs *int
 	UserAgent    *string
 	IPAddress    *string
+	ProxyID      *int64
+
+	RequestTrafficBytes  int64
+	ResponseTrafficBytes int64
+	TotalTrafficBytes    int64
 
 	// Cache TTL Override 标记（管理员强制替换了缓存 TTL 计费）
 	CacheTTLOverridden bool

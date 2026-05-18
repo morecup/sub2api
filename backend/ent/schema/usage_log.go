@@ -126,6 +126,19 @@ func (UsageLog) Fields() []ent.Field {
 			MaxLen(45). // 支持 IPv6
 			Optional().
 			Nillable(),
+		field.Int64("proxy_id").
+			Optional().
+			Nillable().
+			Comment("代理 ID（请求发生时账号绑定的代理）"),
+		field.Int64("request_traffic_bytes").
+			Default(0).
+			Comment("请求体流量字节数"),
+		field.Int64("response_traffic_bytes").
+			Default(0).
+			Comment("响应体流量字节数"),
+		field.Int64("total_traffic_bytes").
+			Default(0).
+			Comment("请求+响应总流量字节数"),
 
 		// 图片生成字段（仅 gemini-3-pro-image 等图片模型使用）
 		field.Int("image_count").
@@ -172,6 +185,10 @@ func (UsageLog) Edges() []ent.Edge {
 			Ref("usage_logs").
 			Field("subscription_id").
 			Unique(),
+		edge.From("proxy", Proxy.Type).
+			Ref("usage_logs").
+			Field("proxy_id").
+			Unique(),
 	}
 }
 
@@ -187,9 +204,11 @@ func (UsageLog) Indexes() []ent.Index {
 		index.Fields("model"),
 		index.Fields("requested_model"),
 		index.Fields("request_id"),
+		index.Fields("proxy_id"),
 		// 复合索引用于时间范围查询
 		index.Fields("user_id", "created_at"),
 		index.Fields("api_key_id", "created_at"),
+		index.Fields("proxy_id", "created_at"),
 		// 分组维度时间范围查询（线上由 SQL 迁移创建 group_id IS NOT NULL 的部分索引）
 		index.Fields("group_id", "created_at"),
 	}
