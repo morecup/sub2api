@@ -32,6 +32,11 @@ func isOpenAIAccount(account *Account) bool {
 }
 
 func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte) bool {
+	// Codex OAuth bypass: 429/403/5xx 不标记运行时状态，让调度器仍可选到该账号。
+	if shouldSkipFailoverForCodexFixed(account, statusCode) {
+		return false
+	}
+
 	stateCtx, cancel := openAIAccountStateContext(ctx)
 	defer cancel()
 
