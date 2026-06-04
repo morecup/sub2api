@@ -241,6 +241,87 @@ func TestIsOpenAITransientProcessingError(t *testing.T) {
 	))
 }
 
+func TestIsOpenAIProxySameAccountRetryableError(t *testing.T) {
+	require.True(t, isOpenAIProxySameAccountRetryableError(
+		http.StatusServiceUnavailable,
+		"upstream connect error or disconnect/reset before headers. reset reason: connection refused",
+		nil,
+	))
+
+	require.True(t, isOpenAIProxySameAccountRetryableError(
+		http.StatusInsufficientStorage,
+		"",
+		[]byte(`{"error":{"message":"exceeded request buffer limit while retrying upstream"}}`),
+	))
+
+	require.False(t, isOpenAIProxySameAccountRetryableError(
+		http.StatusServiceUnavailable,
+		"service unavailable",
+		nil,
+	))
+
+	require.False(t, isOpenAIProxySameAccountRetryableError(
+		http.StatusBadGateway,
+		"connection refused",
+		nil,
+	))
+}
+
+func TestShouldRetryOpenAIOnSameAccount(t *testing.T) {
+	nonPoolAccount := &Account{}
+	poolAccount := &Account{Type: AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true}}
+
+	retryable, retryLimit, retryDelay := openAISameAccountRetryPolicy(
+		nonPoolAccount,
+		http.StatusServiceUnavailable,
+		"connection refused",
+		nil,
+	)
+	require.True(t, retryable)
+	require.NotNil(t, retryLimit)
+	require.Equal(t, 1, *retryLimit)
+	require.NotNil(t, retryDelay)
+	require.Zero(t, *retryDelay)
+
+	require.True(t, shouldRetryOpenAIOnSameAccount(
+		nonPoolAccount,
+		http.StatusServiceUnavailable,
+		"connection refused",
+		nil,
+	), "proxy-side connection refused should be short retried even outside pool mode")
+
+	require.True(t, shouldRetryOpenAIOnSameAccount(
+		nonPoolAccount,
+		http.StatusInsufficientStorage,
+		"",
+		[]byte(`{"error":{"message":"exceeded request buffer limit while retrying upstream"}}`),
+	), "proxy-side retry buffer overflow should be short retried even outside pool mode")
+
+	require.False(t, shouldRetryOpenAIOnSameAccount(
+		nonPoolAccount,
+		http.StatusTooManyRequests,
+		"rate limited",
+		nil,
+	), "non-pool accounts should not inherit generic pool-mode retry statuses")
+
+	require.True(t, shouldRetryOpenAIOnSameAccount(
+		poolAccount,
+		http.StatusTooManyRequests,
+		"rate limited",
+		nil,
+	), "pool-mode behavior should be preserved")
+
+	retryable, retryLimit, retryDelay = openAISameAccountRetryPolicy(
+		poolAccount,
+		http.StatusTooManyRequests,
+		"rate limited",
+		nil,
+	)
+	require.True(t, retryable)
+	require.Nil(t, retryLimit)
+	require.Nil(t, retryDelay)
+}
+
 func TestOpenAIGatewayService_Forward_LogsInstructionsRequiredDetails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logSink, restore := captureStructuredLog(t)

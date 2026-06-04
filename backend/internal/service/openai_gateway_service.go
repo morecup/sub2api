@@ -1149,6 +1149,59 @@ func isOpenAITransientProcessingError(upstreamStatusCode int, upstreamMsg string
 	return match(string(upstreamBody))
 }
 
+func isOpenAIProxySameAccountRetryableError(upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	match := func(text string) bool {
+		lower := strings.ToLower(strings.TrimSpace(text))
+		if lower == "" {
+			return false
+		}
+		if upstreamStatusCode == http.StatusServiceUnavailable && strings.Contains(lower, "connection refused") {
+			return true
+		}
+		return upstreamStatusCode == http.StatusInsufficientStorage &&
+			strings.Contains(lower, "exceeded request buffer limit while retrying upstream")
+	}
+
+	if match(upstreamMsg) {
+		return true
+	}
+	if len(upstreamBody) == 0 {
+		return false
+	}
+	if match(gjson.GetBytes(upstreamBody, "error.message").String()) {
+		return true
+	}
+	return match(string(upstreamBody))
+}
+
+func shouldRetryOpenAIOnSameAccount(account *Account, upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) bool {
+	retryable, _, _ := openAISameAccountRetryPolicy(account, upstreamStatusCode, upstreamMsg, upstreamBody)
+	return retryable
+}
+
+func openAISameAccountRetryPolicy(account *Account, upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) (bool, *int, *time.Duration) {
+	if isOpenAIProxySameAccountRetryableError(upstreamStatusCode, upstreamMsg, upstreamBody) {
+		limit := 1
+		delay := time.Duration(0)
+		return true, &limit, &delay
+	}
+	retryable := account != nil && account.IsPoolMode() &&
+		(isPoolModeRetryableStatus(upstreamStatusCode) ||
+			isOpenAITransientProcessingError(upstreamStatusCode, upstreamMsg, upstreamBody))
+	return retryable, nil, nil
+}
+
+func newOpenAIUpstreamFailoverError(account *Account, upstreamStatusCode int, upstreamMsg string, upstreamBody []byte) *UpstreamFailoverError {
+	retryable, retryLimit, retryDelay := openAISameAccountRetryPolicy(account, upstreamStatusCode, upstreamMsg, upstreamBody)
+	return &UpstreamFailoverError{
+		StatusCode:             upstreamStatusCode,
+		ResponseBody:           upstreamBody,
+		RetryableOnSameAccount: retryable,
+		SameAccountRetryLimit:  retryLimit,
+		SameAccountRetryDelay:  retryDelay,
+	}
+}
+
 // ExtractSessionID extracts the raw session ID from headers or body without hashing.
 // Used by ForwardAsAnthropic to pass as prompt_cache_key for upstream cache.
 func (s *OpenAIGatewayService) ExtractSessionID(c *gin.Context, body []byte) string {
@@ -2888,11 +2941,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				})
 
 				s.handleFailoverSideEffects(ctx, resp, account)
-				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
-					RetryableOnSameAccount: account.IsPoolMode() && (isPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
-				}
+				return nil, newOpenAIUpstreamFailoverError(account, resp.StatusCode, upstreamMsg, respBody)
 			}
 			return s.handleErrorResponse(ctx, resp, c, account, body)
 		}
@@ -4208,11 +4257,7 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		Detail:             upstreamDetail,
 	})
 	if shouldDisable {
-		return nil, &UpstreamFailoverError{
-			StatusCode:             resp.StatusCode,
-			ResponseBody:           body,
-			RetryableOnSameAccount: account.IsPoolMode() && isPoolModeRetryableStatus(resp.StatusCode),
-		}
+		return nil, newOpenAIUpstreamFailoverError(account, resp.StatusCode, upstreamMsg, body)
 	}
 
 	// Return appropriate error response
@@ -4342,11 +4387,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 		Detail:             upstreamDetail,
 	})
 	if shouldDisable {
-		return nil, &UpstreamFailoverError{
-			StatusCode:             resp.StatusCode,
-			ResponseBody:           body,
-			RetryableOnSameAccount: account.IsPoolMode() && isPoolModeRetryableStatus(resp.StatusCode),
-		}
+		return nil, newOpenAIUpstreamFailoverError(account, resp.StatusCode, upstreamMsg, body)
 	}
 
 	// Map status code to error type and write response
