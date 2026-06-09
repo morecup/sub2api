@@ -4260,6 +4260,19 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		return nil, newOpenAIUpstreamFailoverError(account, resp.StatusCode, upstreamMsg, body)
 	}
 
+	if shouldPassthroughOpenAIClientError(resp.StatusCode, body) {
+		writeOpenAIPassthroughResponseHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
+		contentType := strings.TrimSpace(resp.Header.Get("Content-Type"))
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		c.Data(resp.StatusCode, contentType, body)
+		if upstreamMsg == "" {
+			return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
+	}
+
 	// Return appropriate error response
 	var errType, errMsg string
 	var statusCode int
@@ -4298,6 +4311,20 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		return nil, fmt.Errorf("upstream error: %d", resp.StatusCode)
 	}
 	return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
+}
+
+func shouldPassthroughOpenAIClientError(statusCode int, body []byte) bool {
+	if statusCode != http.StatusBadRequest {
+		return false
+	}
+	errType := strings.TrimSpace(gjson.GetBytes(body, "error.type").String())
+	if errType == "" {
+		inner := strings.TrimSpace(gjson.GetBytes(body, "error.message").String())
+		if strings.HasPrefix(inner, "{") {
+			errType = strings.TrimSpace(gjson.Get(inner, "error.type").String())
+		}
+	}
+	return errType == "invalid_request_error"
 }
 
 // compatErrorWriter is the signature for format-specific error writers used by
