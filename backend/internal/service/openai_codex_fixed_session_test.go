@@ -63,6 +63,12 @@ func TestApplyCodexBypassToolFrame(t *testing.T) {
 		require.Equal(t, body, out, "must not modify body when already a continuation frame")
 	})
 
+	t.Run("noop when last is compaction_trigger", func(t *testing.T) {
+		body := []byte(`{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"hi"},{"type":"compaction_trigger"}]}`)
+		out := applyCodexBypassToolFrame(body)
+		require.Equal(t, body, out, "remote compaction v2 body must not gain bypass tool frames")
+	})
+
 	t.Run("preserves existing tools and appends stub once", func(t *testing.T) {
 		body := []byte(`{"model":"gpt-5.5","tools":[{"type":"function","name":"shell"}],"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hi"}]}]}`)
 		out := applyCodexBypassToolFrame(body)

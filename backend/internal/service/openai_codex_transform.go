@@ -112,6 +112,7 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 	result := codexTransformResult{}
 	// 工具续链需求会影响存储策略与 input 过滤逻辑。
 	needsToolContinuation := NeedsToolContinuation(reqBody)
+	isRemoteCompactionV2 := isCodexRemoteCompactionV2RequestBody(reqBody)
 
 	model := ""
 	if v, ok := reqBody["model"].(string); ok {
@@ -205,34 +206,36 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 	}
 
 	// 提取 input 中 role:"system" 消息至 instructions（OAuth 上游不支持 system role）。
-	if extractSystemMessagesFromInput(reqBody) {
+	if !isRemoteCompactionV2 && extractSystemMessagesFromInput(reqBody) {
 		result.Modified = true
 	}
 
 	// instructions 处理逻辑：根据是否是 Codex CLI 分别调用不同方法
-	if !opts.SkipDefaultInstructions && applyInstructions(reqBody, opts.IsCodexCLI) {
+	if !isRemoteCompactionV2 && !opts.SkipDefaultInstructions && applyInstructions(reqBody, opts.IsCodexCLI) {
 		result.Modified = true
 	}
-	if isCodexSparkModel(normalizedModel) && applyCodexSparkImageUnsupportedInstructions(reqBody) {
+	if !isRemoteCompactionV2 && isCodexSparkModel(normalizedModel) && applyCodexSparkImageUnsupportedInstructions(reqBody) {
 		result.Modified = true
 	}
 
 	// 续链场景保留 item_reference 与 id，避免 call_id 上下文丢失。
 	if input, ok := reqBody["input"].([]any); ok {
-		if normalizedInput, modified := normalizeCodexToolRoleMessages(input); modified {
-			input = normalizedInput
+		if !isRemoteCompactionV2 {
+			if normalizedInput, modified := normalizeCodexToolRoleMessages(input); modified {
+				input = normalizedInput
+				result.Modified = true
+			}
+			if normalizedInput, modified := normalizeCodexMessageContentText(input); modified {
+				input = normalizedInput
+				result.Modified = true
+			}
+			input = filterCodexInputWithOptions(input, codexInputFilterOptions{
+				PreserveReferences: needsToolContinuation,
+				PreserveCallIDs:    opts.PreserveToolCallIDs,
+			})
+			reqBody["input"] = input
 			result.Modified = true
 		}
-		if normalizedInput, modified := normalizeCodexMessageContentText(input); modified {
-			input = normalizedInput
-			result.Modified = true
-		}
-		input = filterCodexInputWithOptions(input, codexInputFilterOptions{
-			PreserveReferences: needsToolContinuation,
-			PreserveCallIDs:    opts.PreserveToolCallIDs,
-		})
-		reqBody["input"] = input
-		result.Modified = true
 	} else if inputStr, ok := reqBody["input"].(string); ok {
 		// ChatGPT codex endpoint requires input to be a list, not a string.
 		// Convert string input to the expected message array format.

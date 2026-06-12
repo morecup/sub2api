@@ -1178,6 +1178,39 @@ func TestApplyCodexOAuthTransform_ExtractsSystemMessages(t *testing.T) {
 	require.Equal(t, "You are a coding assistant.", instructions)
 }
 
+func TestApplyCodexOAuthTransform_RemoteCompactionV2PreservesInput(t *testing.T) {
+	reqBody := map[string]any{
+		"model":  "gpt-5.5",
+		"store":  true,
+		"stream": false,
+		"input": []any{
+			map[string]any{"type": "message", "role": "system", "content": "system prompt"},
+			map[string]any{"type": "reasoning", "id": "rs_keep", "summary": []any{}},
+			map[string]any{"type": "function_call", "id": "call_1", "call_id": "call_1", "name": "shell", "arguments": "{}"},
+			map[string]any{"type": "function_call_output", "call_id": "call_1", "output": "ok"},
+			map[string]any{"type": "compaction_trigger"},
+		},
+	}
+
+	result := applyCodexOAuthTransform(reqBody, true, false)
+
+	require.True(t, result.Modified)
+	require.False(t, reqBody["store"].(bool))
+	require.True(t, reqBody["stream"].(bool))
+	require.NotContains(t, reqBody, "instructions")
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 5)
+	require.Equal(t, "message", input[0].(map[string]any)["type"])
+	require.Equal(t, "system", input[0].(map[string]any)["role"])
+	require.Equal(t, "reasoning", input[1].(map[string]any)["type"])
+	require.Equal(t, "rs_keep", input[1].(map[string]any)["id"])
+	require.Equal(t, "call_1", input[2].(map[string]any)["call_id"])
+	require.Equal(t, "call_1", input[3].(map[string]any)["call_id"])
+	require.Equal(t, "compaction_trigger", input[4].(map[string]any)["type"])
+}
+
 func TestIsInstructionsEmpty(t *testing.T) {
 	tests := []struct {
 		name     string

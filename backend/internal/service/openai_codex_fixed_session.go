@@ -1,6 +1,8 @@
 package service
 
 import (
+	"strings"
+
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -34,6 +36,9 @@ const codexBypassStubToolName = "noop"
 
 func appendBypassToolFrameIfNeeded(body []byte) []byte {
 	if len(body) == 0 {
+		return body
+	}
+	if isCodexRemoteCompactionV2Body(body) {
 		return body
 	}
 	input := gjson.GetBytes(body, "input")
@@ -118,4 +123,38 @@ func ensureCodexBypassStubTool(body []byte) ([]byte, bool) {
 // 仅作用于 Responses API 格式的请求（有 input 数组）；Chat Completions 格式无 input 字段，自动跳过。
 func applyCodexBypassToolFrame(body []byte) []byte {
 	return appendBypassToolFrameIfNeeded(body)
+}
+
+func isCodexRemoteCompactionV2Body(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	input := gjson.GetBytes(body, "input")
+	if !input.IsArray() {
+		return false
+	}
+	items := input.Array()
+	return len(items) > 0 && items[len(items)-1].Get("type").String() == "compaction_trigger"
+}
+
+func isCodexRemoteCompactionV2RequestBody(reqBody map[string]any) bool {
+	if reqBody == nil {
+		return false
+	}
+	input, ok := reqBody["input"].([]any)
+	if !ok {
+		return false
+	}
+	return isCodexRemoteCompactionV2Input(input)
+}
+
+func isCodexRemoteCompactionV2Input(input []any) bool {
+	if len(input) == 0 {
+		return false
+	}
+	last, ok := input[len(input)-1].(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(firstNonEmptyString(last["type"])) == "compaction_trigger"
 }

@@ -21,7 +21,9 @@ func appendOpenAICompatClaudeCodeTodoGuard(req *apicompat.ResponsesRequest) bool
 	if err := json.Unmarshal(req.Input, &items); err != nil {
 		return false
 	}
-	if len(items) == 0 || responsesInputItemsContainText(items, openAICompatClaudeCodeTodoGuardMarker) {
+	if len(items) == 0 ||
+		responsesInputItemsEndWithCompactionTrigger(items) ||
+		responsesInputItemsContainText(items, openAICompatClaudeCodeTodoGuardMarker) {
 		return false
 	}
 
@@ -62,7 +64,10 @@ func appendOpenAICompatClaudeCodeTodoGuardToRequestBody(reqBody map[string]any) 
 	}
 
 	input, ok := reqBody["input"].([]any)
-	if !ok || len(input) == 0 || inputContainsText(input, openAICompatClaudeCodeTodoGuardMarker) {
+	if !ok ||
+		len(input) == 0 ||
+		isCodexRemoteCompactionV2Input(input) ||
+		inputContainsText(input, openAICompatClaudeCodeTodoGuardMarker) {
 		return false
 	}
 
@@ -91,6 +96,13 @@ func appendOpenAICompatClaudeCodeTodoGuardToRequestBody(reqBody map[string]any) 
 	input[insertAt] = guard
 	reqBody["input"] = input
 	return true
+}
+
+func responsesInputItemsEndWithCompactionTrigger(items []apicompat.ResponsesInputItem) bool {
+	if len(items) == 0 {
+		return false
+	}
+	return strings.TrimSpace(items[len(items)-1].Type) == "compaction_trigger"
 }
 
 func responsesInputItemsContainText(items []apicompat.ResponsesInputItem, needle string) bool {
