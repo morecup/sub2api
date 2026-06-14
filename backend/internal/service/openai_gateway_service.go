@@ -1380,7 +1380,8 @@ func shouldAutoPauseOpenAIAccountByQuota(ctx context.Context, account *Account) 
 	disabled7d := resolveAccountExtraBool(account.Extra, "auto_pause_7d_disabled")
 	threshold5h, threshold7d := resolveOpenAIQuotaAutoPauseThresholds(ctx, account)
 	now := time.Now()
-	if !disabled5h && threshold5h > 0 {
+	ignore5hAutoPauseForToolFrame := account.IsOpenAIOAuth() && resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey)
+	if !ignore5hAutoPauseForToolFrame && !disabled5h && threshold5h > 0 {
 		if utilization, ok := resolveOpenAIQuotaUtilization(account.Extra, "5h", now); ok && utilization >= threshold5h {
 			return true, openAIQuotaAutoPauseDecision{window: "5h", threshold: threshold5h, utilization: utilization}
 		}
@@ -2722,6 +2723,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			requestView = newOpenAIRequestView(body)
 		}
 	}
+	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
+		if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+			body = nextBody
+			requestView = newOpenAIRequestView(body)
+			reqBody = nil
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot (account: %s)", account.Name)
+		}
+	}
 	imageBillingModel := ""
 	imageSizeTier := ""
 	imageInputSize := ""
@@ -2964,6 +2973,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	}
 
 	httpInvalidEncryptedContentRetryTried := false
+	httpCodexToolFrameRetryTried := false
 	for {
 		// Build upstream request
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
@@ -3014,6 +3024,19 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					continue
 				}
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Skip non-WSv2 invalid_encrypted_content retry because encrypted reasoning items are missing (account: %s)", account.Name)
+			}
+			if !httpCodexToolFrameRetryTried &&
+				resp.StatusCode == http.StatusTooManyRequests &&
+				shouldRetryCodexToolFrameFrom429(account, resp.Header) {
+				s.persistCodexUsageSnapshotForRetry(ctx, account, resp.Header)
+				if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+					body = nextBody
+					requestView = newOpenAIRequestView(body)
+					reqBody = nil
+					httpCodexToolFrameRetryTried = true
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying request once with Codex tool-frame after 5h quota 429 (account: %s)", account.Name)
+					continue
+				}
 			}
 			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
 				upstreamDetail := ""
@@ -3221,6 +3244,13 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		imageSizeTier = imageCfg.SizeTier
 		imageInputSize = imageCfg.InputSize
 	}
+	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
+		if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+			body = nextBody
+			reqStream = gjson.GetBytes(body, "stream").Bool()
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot for passthrough (account: %s)", account.Name)
+		}
+	}
 
 	logger.LegacyPrintf("service.openai_gateway",
 		"[OpenAI 自动透传] 命中自动透传分支: account=%d name=%s type=%s model=%s stream=%v",
@@ -3251,13 +3281,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		return nil, err
 	}
 
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, err
-	}
-
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
@@ -3267,25 +3290,53 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		c.Set("openai_passthrough", true)
 	}
 
-	upstreamStart := time.Now()
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
-	if err != nil {
-		// Transport-level failure (proxy/DNS/TCP/TLS — no HTTP response). Convert to
-		// a failover so the handler switches to a healthy account, and temporarily
-		// unschedule the account on durable faults (e.g. rejected proxy credentials).
-		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
+	httpCodexToolFrameRetryTried := false
+	var resp *http.Response
+	for {
+		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+		upstreamReq, err := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
+		releaseUpstreamCtx()
+		if err != nil {
+			return nil, err
+		}
+
+		upstreamStart := time.Now()
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
+		if err != nil {
+			// Transport-level failure (proxy/DNS/TCP/TLS — no HTTP response). Convert to
+			// a failover so the handler switches to a healthy account, and temporarily
+			// unschedule the account on durable faults (e.g. rejected proxy credentials).
+			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
+		}
+
+		if resp.StatusCode >= 400 {
+			if !httpCodexToolFrameRetryTried &&
+				resp.StatusCode == http.StatusTooManyRequests &&
+				shouldRetryCodexToolFrameFrom429(account, resp.Header) {
+				respBody := s.readUpstreamErrorBody(resp)
+				_ = resp.Body.Close()
+				resp.Body = io.NopCloser(bytes.NewReader(respBody))
+				s.persistCodexUsageSnapshotForRetry(ctx, account, resp.Header)
+				if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+					body = nextBody
+					reqStream = gjson.GetBytes(body, "stream").Bool()
+					httpCodexToolFrameRetryTried = true
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying passthrough request once with Codex tool-frame after 5h quota 429 (account: %s)", account.Name)
+					continue
+				}
+			}
+			defer func() { _ = resp.Body.Close() }()
+			// 透传模式默认保持原样代理；但 429/529 属于网关必须兜底的
+			// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
+			if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {
+				return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body)
+			}
+			return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body)
+		}
+		break
 	}
 	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		// 透传模式默认保持原样代理；但 429/529 属于网关必须兜底的
-		// 上游容量类错误，应先触发多账号 failover 以维持基础 SLA。
-		if shouldFailoverOpenAIPassthroughResponse(resp.StatusCode) {
-			return nil, s.handleFailoverErrorResponsePassthrough(ctx, resp, c, account, body)
-		}
-		return nil, s.handleErrorResponsePassthrough(ctx, resp, c, account, body)
-	}
 
 	serviceTier := extractOpenAIServiceTierFromBody(body)
 

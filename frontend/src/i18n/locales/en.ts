@@ -3446,6 +3446,9 @@ export default {
         codexCLIOnlyAllowClaudeCode: "Also allow Claude Code's Codex plugin",
         codexCLIOnlyAllowClaudeCodeDesc:
           'Only takes effect when the switch above is on. Additionally allows requests from the Claude Code Codex plugin (exact match on originator=Claude Code) without weakening blocking of other non-official clients.',
+        codexToolFrameOn5hExhausted: 'Use Tool Frame after 5h is exhausted',
+        codexToolFrameOn5hExhaustedDesc:
+          'Disabled by default. When enabled, the gateway uses Tool Frame only after the Codex 5h quota is exhausted while the 7d quota is still available; 7d exhaustion still follows normal rate-limit handling.',
         codexImageGenerationBridge: 'Codex image-generation bridge',
         codexImageGenerationBridgeDesc:
           'Account policy takes precedence over channel and global settings. Only controls whether Codex requests through the /responses text endpoint receive the image_generation tool; standalone image-generation endpoints are unaffected.',
