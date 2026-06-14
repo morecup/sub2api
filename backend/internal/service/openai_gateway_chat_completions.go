@@ -229,7 +229,9 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return nil, fmt.Errorf("build upstream request: %w", err)
 	}
 
-	if promptCacheKey != "" {
+	// 非 OAuth（APIKey/兼容）账号：补一个确定性 UUID 形态的 session_id。
+	// OAuth 账号的 session-id/thread-id 已由 buildUpstreamRequest 的 Codex 伪装统一设置，无需在此覆盖。
+	if promptCacheKey != "" && account.Type != AccountTypeOAuth {
 		apiKeyID := getAPIKeyIDFromContext(c)
 		upstreamReq.Header.Set("session_id", generateSessionUUID(isolateOpenAISessionID(apiKeyID, promptCacheKey)))
 	}

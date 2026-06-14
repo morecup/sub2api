@@ -205,6 +205,12 @@ gateway:
   #
   # 注意：开启后会影响所有客户端的行为（不仅限于 VS Code / Codex CLI），请谨慎开启。
   force_codex_cli: false
+  # Disable zstd request-body compression for OpenAI OAuth Codex upstream requests.
+  # 关闭 OpenAI OAuth Codex 上游请求体 zstd 压缩。
+  #
+  # Default false keeps zstd enabled to match real Codex CLI's Content-Encoding.
+  # 默认 false：保持启用 zstd，以匹配真实 Codex CLI 的 Content-Encoding。
+  openai_codex_request_compression_disabled: false
   # Enable Codex image-generation bridge injection for /openai/v1/responses.
   # 是否为 Codex /responses 请求自动注入 image_generation 工具与桥接指令。
   #

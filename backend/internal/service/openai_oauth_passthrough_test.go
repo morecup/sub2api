@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
@@ -38,10 +39,13 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 	u.lastReq = req
 	if req != nil && req.Body != nil {
 		b, _ := io.ReadAll(req.Body)
-		u.lastBody = b
-		u.bodies = append(u.bodies, append([]byte(nil), b...))
 		_ = req.Body.Close()
+		// 保持 req.Body 与 Content-Encoding 头原样（高保真），仅在记录用快照时按需解压，
+		// 使既有针对 lastBody 的 JSON 断言在默认开启 zstd 压缩后依然有效。
 		req.Body = io.NopCloser(bytes.NewReader(b))
+		decoded := decodeRecorderRequestBody(req.Header.Get("Content-Encoding"), b)
+		u.lastBody = decoded
+		u.bodies = append(u.bodies, append([]byte(nil), decoded...))
 	}
 	u.requests = append(u.requests, req)
 	if u.err != nil {
@@ -57,6 +61,79 @@ func (u *httpUpstreamRecorder) Do(req *http.Request, proxyURL string, accountID 
 
 func (u *httpUpstreamRecorder) DoWithTLS(req *http.Request, proxyURL string, accountID int64, accountConcurrency int, profile *tlsfingerprint.Profile) (*http.Response, error) {
 	return u.Do(req, proxyURL, accountID, accountConcurrency)
+}
+
+// decodeRecorderRequestBody 解压记录用的请求体快照（仅支持 zstd），失败或非压缩时原样返回。
+func decodeRecorderRequestBody(encoding string, raw []byte) []byte {
+	if !strings.EqualFold(strings.TrimSpace(encoding), "zstd") {
+		return raw
+	}
+	dec, err := zstd.NewReader(nil)
+	if err != nil {
+		return raw
+	}
+	defer dec.Close()
+	out, err := dec.DecodeAll(raw, nil)
+	if err != nil {
+		return raw
+	}
+	return out
+}
+
+func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"hi"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	account := &Account{Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc"}}
+
+	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", true, "sess-seed-1", true)
+	require.NoError(t, err)
+
+	// 1:1 Codex 伪装头：session-id/thread-id/x-client-request-id 三者同值（连字符命名）。
+	sessionID := req.Header.Get("Session-Id")
+	require.Len(t, sessionID, 36)
+	require.Equal(t, sessionID, req.Header.Get("Thread-Id"))
+	require.Equal(t, sessionID, req.Header.Get("X-Client-Request-Id"))
+	require.Equal(t, sessionID+":0", req.Header.Get("X-Codex-Window-Id"))
+	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
+	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=terminal_resize_reflow。
+	require.Equal(t, "terminal_resize_reflow", req.Header.Get("X-Codex-Beta-Features"))
+	require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
+	require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
+	// UA 无条件强制为 Codex CLI 画像（忽略入站 UA）。
+	require.Equal(t, codexCLIUserAgent, req.Header.Get("User-Agent"))
+	// HTTP 路径不发送 OpenAI-Beta / x-codex-installation-id，且旧下划线 session_id 变体已移除。
+	require.Empty(t, req.Header.Get("OpenAI-Beta"))
+	require.Empty(t, req.Header.Get("Session_Id"))
+	require.Empty(t, req.Header.Get("X-Codex-Installation-Id"))
+
+	// x-codex-turn-metadata：字段与真实 Codex 0.139.0 实抓报文对齐（含 thread_source，无 installation_id）。
+	meta := req.Header.Get("X-Codex-Turn-Metadata")
+	require.Equal(t, sessionID, gjson.Get(meta, "session_id").String())
+	require.Equal(t, sessionID, gjson.Get(meta, "thread_id").String())
+	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.False(t, gjson.Get(meta, "installation_id").Exists())
+	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "turn", gjson.Get(meta, "request_kind").String())
+	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
+	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
+	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
+
+	// 请求体 zstd 压缩，且可解压回原始 JSON。
+	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
+	require.NotNil(t, req.Body)
+	compressed, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(compressed)), req.ContentLength)
+	require.Equal(t, body, decodeRecorderRequestBody("zstd", compressed))
+
+	// 确定性派生：相同 (apiKeyID, seed) 复算 session-id 不变。
+	require.Equal(t, sessionID, generateCodexSessionUUID(0, "sess-seed-1"))
 }
 
 func TestOpenAIGatewayService_ResponsesUnknownModelDoesNotFallbackToGPT54(t *testing.T) {
@@ -384,7 +461,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 
 	// 2) only auth is replaced; inbound auth/cookie are not forwarded
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
-	require.Equal(t, "codex_cli_rs/0.1.0", upstream.lastReq.Header.Get("User-Agent"))
+	// User-Agent 无条件强制为 Codex CLI 画像，忽略入站 UA（此处入站为 codex_cli_rs/0.1.0）。
+	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Empty(t, upstream.lastReq.Header.Get("Cookie"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Api-Key"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Goog-Api-Key"))
@@ -450,7 +528,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreami
 	require.Equal(t, "local-test-instructions", strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "instructions").String()))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
 	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
-	require.NotEmpty(t, upstream.lastReq.Header.Get("Session_Id"))
+	require.NotEmpty(t, upstream.lastReq.Header.Get("Session-Id"))
 	require.Equal(t, "chatgpt.com", upstream.lastReq.Host)
 	require.Equal(t, "chatgpt-acc", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Contains(t, rec.Body.String(), `"id":"cmp_123"`)

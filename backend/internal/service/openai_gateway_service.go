@@ -42,10 +42,10 @@ const (
 	// OpenAI Platform API for API Key accounts (fallback)
 	openaiPlatformAPIURL   = "https://api.openai.com/v1/responses"
 	openaiStickySessionTTL = time.Hour // 粘性会话TTL
-	// 与真实 Codex CLI 的 User-Agent 结构对齐：
-	// {originator}/{version} ({OS} {OS_version}; {arch}) {terminal}
-	// 旧值 "codex_cli_rs/0.125.0" 缺少 OS/架构/终端后缀，易被上游指纹识别为非官方客户端。
-	codexCLIUserAgent = "codex_cli_rs/0.125.0 (Ubuntu 22.4.0; x86_64) xterm-256color"
+	// 与真实 Codex CLI 的 User-Agent 结构对齐（codex-rs/login/src/auth/default_client.rs::get_codex_user_agent）：
+	// {originator}/{version} ({OS_type} {OS_version}; {arch}) {terminal}
+	// 取值来自本机真实 codex 0.139.0 实抓报文（交互式 TUI，不含 exec 专属后缀）。
+	codexCLIUserAgent = "codex_cli_rs/0.139.0 (Windows 10.0.26100; x86_64) vscode/1.110.1-devin-desktop"
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -59,7 +59,7 @@ const (
 	openAIWSRetryBackoffMaxDefault     = 2 * time.Second
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
-	codexCLIVersion                    = "0.125.0"
+	codexCLIVersion                    = "0.139.0"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
 	// 配额自动暂停时，超过该时长仍未刷新的 used% 快照视为陈旧，不再据此暂停账号。
@@ -3478,7 +3478,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	req.Header.Del("x-goog-api-key")
 	req.Header.Set("authorization", "Bearer "+token)
 
-	// OAuth 透传到 ChatGPT internal API 时补齐必要头。
+	// OAuth 透传到 ChatGPT internal API：1:1 伪装成真实 Codex CLI 的 HTTP POST 请求头。
 	if account.Type == AccountTypeOAuth {
 		promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 		req.Host = "chatgpt.com"
@@ -3486,39 +3486,24 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
-		// 先保存客户端原始值，再做 compact 补充，避免后续统一隔离时读到已处理的值。
-		clientSessionID := strings.TrimSpace(req.Header.Get("session_id"))
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
-		if isOpenAIResponsesCompactPath(c) {
-			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
-			}
-			if clientSessionID == "" {
-				clientSessionID = resolveOpenAICompactSessionID(c)
-			}
-		} else if req.Header.Get("accept") == "" {
-			req.Header.Set("accept", "text/event-stream")
+		isCompact := isOpenAIResponsesCompactPath(c)
+		// 解析会话种子：优先客户端透传的 session/conversation，其次 compact 会话，最后 prompt_cache_key。
+		seed := strings.TrimSpace(req.Header.Get("session_id"))
+		if seed == "" {
+			seed = strings.TrimSpace(req.Header.Get("conversation_id"))
 		}
-		if req.Header.Get("OpenAI-Beta") == "" {
-			req.Header.Set("OpenAI-Beta", "responses=experimental")
+		if seed == "" && isCompact {
+			seed = resolveOpenAICompactSessionID(c)
 		}
-		if req.Header.Get("originator") == "" {
-			req.Header.Set("originator", "codex_cli_rs")
+		if seed == "" {
+			seed = promptCacheKey
 		}
-		// 用隔离后的 session 标识符覆盖客户端透传值，防止跨用户会话碰撞。
-		if clientSessionID == "" {
-			clientSessionID = promptCacheKey
+		// 解析 originator：保留客户端透传值，缺省回退 codex_cli_rs。
+		originator := strings.TrimSpace(req.Header.Get("originator"))
+		if originator == "" {
+			originator = "codex_cli_rs"
 		}
-		if clientConversationID == "" {
-			clientConversationID = promptCacheKey
-		}
-		if clientSessionID != "" {
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, clientSessionID))
-		}
-		if clientConversationID != "" {
-			req.Header.Set("conversation_id", isolateOpenAISessionID(apiKeyID, clientConversationID))
-		}
+		applyCodexOAuthMimicHeaders(req, apiKeyID, seed, originator, isCompact)
 	}
 
 	// 透传模式也支持账户自定义 User-Agent 与 ForceCodexCLI 兜底。
@@ -3540,6 +3525,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
+	}
+
+	if account.Type == AccountTypeOAuth {
+		s.applyCodexRequestCompression(req, body)
 	}
 
 	return req, nil
@@ -4218,35 +4207,40 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	}
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
-		// 清除客户端透传的 session 头，后续用隔离后的值重新设置，防止跨用户会话碰撞。
-		clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
-		req.Header.Del("conversation_id")
-		req.Header.Del("session_id")
-
+		apiKeyID := getAPIKeyIDFromContext(c)
 		if compatMessagesBridge {
+			// Claude Code → GPT 桥接保持中立（不伪装成 Codex 客户端）：仅设隔离后的 session，
+			// 清除 originator/OpenAI-Beta。会话标识由 ForwardAsAnthropic 后置覆盖为 UUID。
+			clientConversationID := strings.TrimSpace(req.Header.Get("conversation_id"))
+			req.Header.Del("conversation_id")
+			req.Header.Del("session_id")
 			req.Header.Del("OpenAI-Beta")
 			req.Header.Del("originator")
-		} else {
-			req.Header.Set("OpenAI-Beta", "responses=experimental")
-			req.Header.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
-		}
-		apiKeyID := getAPIKeyIDFromContext(c)
-		if isOpenAIResponsesCompactPath(c) {
-			req.Header.Set("accept", "application/json")
-			if req.Header.Get("version") == "" {
-				req.Header.Set("version", codexCLIVersion)
+			if isOpenAIResponsesCompactPath(c) {
+				req.Header.Set("accept", "application/json")
+				if req.Header.Get("version") == "" {
+					req.Header.Set("version", codexCLIVersion)
+				}
+				req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, resolveOpenAICompactSessionID(c)))
+			} else {
+				req.Header.Set("accept", "text/event-stream")
 			}
-			compactSession := resolveOpenAICompactSessionID(c)
-			req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, compactSession))
-		} else {
-			req.Header.Set("accept", "text/event-stream")
-		}
-		if promptCacheKey != "" {
-			isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
-			req.Header.Set("session_id", isolated)
-			if !compatMessagesBridge || clientConversationID != "" {
-				req.Header.Set("conversation_id", isolated)
+			if promptCacheKey != "" {
+				isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
+				req.Header.Set("session_id", isolated)
+				if clientConversationID != "" {
+					req.Header.Set("conversation_id", isolated)
+				}
 			}
+		} else {
+			// 1:1 伪装成真实 Codex CLI 的 HTTP POST 请求头，并对请求体做 zstd 压缩。
+			isCompact := isOpenAIResponsesCompactPath(c)
+			seed := promptCacheKey
+			if seed == "" && isCompact {
+				seed = resolveOpenAICompactSessionID(c)
+			}
+			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, resolveOpenAIUpstreamOriginator(c, isCodexCLI), isCompact)
+			s.applyCodexRequestCompression(req, body)
 		}
 	}
 

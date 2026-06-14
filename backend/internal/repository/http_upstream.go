@@ -1068,6 +1068,13 @@ func buildUpstreamTransport(settings poolSettings, proxyURL *url.URL, protocolMo
 		transport.ForceAttemptHTTP2 = false
 		transport.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
 	}
+	switch protocolMode {
+	case upstreamProtocolModeOpenAIH2, upstreamProtocolModeOpenAIH1, upstreamProtocolModeOpenAIH1Fallback:
+		// 真实 Codex 的 reqwest 未启用任何压缩特性，因此不发送 accept-encoding。
+		// 对 OpenAI 上游禁用 Go Transport 的自动 gzip 协商，避免出现 codex 不会发送的
+		// accept-encoding 头；响应侧由 decompressResponseBody 手动解压兜底，不受影响。
+		transport.DisableCompression = true
+	}
 	if err := proxyutil.ConfigureTransportProxy(transport, proxyURL); err != nil {
 		return nil, err
 	}

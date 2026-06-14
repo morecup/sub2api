@@ -21,6 +21,17 @@ const (
 	maxDecompressedBodySize = 64 << 20
 )
 
+// sharedZstdEncoder is safe for concurrent EncodeAll calls and is reused
+// process-wide to avoid per-request allocation of a zstd encoder.
+var sharedZstdEncoder, _ = zstd.NewWriter(nil)
+
+// CompressZstd compresses raw bytes with zstd using a shared, concurrency-safe
+// encoder. It mirrors the real Codex CLI which sends request bodies with
+// Content-Encoding: zstd.
+func CompressZstd(raw []byte) []byte {
+	return sharedZstdEncoder.EncodeAll(raw, nil)
+}
+
 // ReadRequestBodyWithPrealloc reads request body with preallocated buffer based
 // on content length, transparently decoding any Content-Encoding the upstream
 // client used to compress the body (zstd, gzip, deflate).
