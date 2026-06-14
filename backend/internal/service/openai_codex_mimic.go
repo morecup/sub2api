@@ -21,6 +21,19 @@ const (
 	codexTurnMetadataSandbox = "windows_elevated"
 )
 
+// codexMimicStripInboundHeaders 列出可能经请求头白名单（openaiAllowedHeaders /
+// openaiPassthroughAllowedHeaders）无条件透传进来、但真实 Codex CLI HTTP POST 并不发送的头。
+// 在伪装时统一删除，确保上游请求头是与 Codex 一致的“固定集合”，不被入站客户端污染。
+//
+// 不包含 x-stainless-* / *-timeout 等超时头：它们由运营级开关
+// gateway.openai_passthrough_allow_timeout_headers 显式控制（默认关闭即不透传），
+// 开启时属于运营方主动选择转发，伪装层不应越权删除。
+// 注：必须使用小写键，net/http 在 HTTP/2 下按小写规范化，且 Header.Del 本身大小写不敏感。
+var codexMimicStripInboundHeaders = []string{
+	"accept-language",
+	"x-codex-turn-state",
+}
+
 // generateCodexSessionUUID 由 (apiKeyID, seed) 确定性派生一个合法 UUIDv7 形态的会话标识。
 //
 // 设计目标（与真实 Codex 的进程级 session UUID 对齐）：
@@ -93,11 +106,19 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	req.Header.Del("conversation_id")
 	req.Header.Del("OpenAI-Beta")
 
+	// 清理经请求头白名单透传进来的“非 Codex”噪声头：真实 Codex CLI 的 HTTP POST 实抓中
+	// 不发送以下头。删除它们以保证上游请求头是与 Codex 一致的“固定集合”，不受入站客户端影响。
+	for _, noisy := range codexMimicStripInboundHeaders {
+		req.Header.Del(noisy)
+	}
+
 	// User-Agent 无条件强制为 Codex CLI 画像（忽略入站 UA）；账号自定义 UA 仍可由调用方后置覆盖。
 	req.Header.Set("user-agent", codexCLIUserAgent)
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
 	req.Header.Set("version", codexCLIVersion)
 	req.Header.Set("x-codex-beta-features", codexBetaFeaturesValue)
+	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
+	req.Header.Set("content-type", "application/json")
 	if strings.TrimSpace(originator) != "" {
 		req.Header.Set("originator", originator)
 	}

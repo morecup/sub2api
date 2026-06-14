@@ -87,6 +87,9 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.5","input":[{"type":"message","role":"user","content":"hi"}]}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
+	// 入站噪声头：accept-language / x-codex-turn-state 在请求头白名单内，验证伪装时被剥离（固定请求头）。
+	c.Request.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	c.Request.Header.Set("X-Codex-Turn-State", "inbound-should-be-stripped")
 
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	account := &Account{Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc"}}
@@ -111,6 +114,10 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
 	require.Empty(t, req.Header.Get("Session_Id"))
 	require.Empty(t, req.Header.Get("X-Codex-Installation-Id"))
+	// 固定请求头：经白名单透传进来的非 Codex 噪声头被剥离，content-type 钉死为裸 application/json。
+	require.Empty(t, req.Header.Get("Accept-Language"))
+	require.Empty(t, req.Header.Get("X-Codex-Turn-State"))
+	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
 	// x-codex-turn-metadata：字段与真实 Codex 0.139.0 实抓报文对齐（含 thread_source，无 installation_id）。
 	meta := req.Header.Get("X-Codex-Turn-Metadata")
