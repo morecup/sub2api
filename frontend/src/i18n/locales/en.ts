@@ -3452,6 +3452,9 @@ export default {
         codexToolFrame429NoCooldown: 'Do not cooldown account on Tool Frame 429',
         codexToolFrame429NoCooldownDesc:
           'Enabled by default. If a 5h-only 429 still occurs after Tool Frame is applied, record the request snapshot without marking the account as 429; 7d exhaustion still rate-limits normally.',
+        codexToolFrameForceAfter5h: 'Force Tool Frame after 5h',
+        codexToolFrameForceAfter5hDesc:
+          'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame; any 429 after Tool Frame is already present will never cooldown the account.',
         codexImageGenerationBridge: 'Codex image-generation bridge',
         codexImageGenerationBridgeDesc:
           'Account policy takes precedence over channel and global settings. Only controls whether Codex requests through the /responses text endpoint receive the image_generation tool; standalone image-generation endpoints are unaffected.',

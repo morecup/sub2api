@@ -32,6 +32,12 @@ func TestShouldUseCodexToolFrameByQuota(t *testing.T) {
 	require.False(t, shouldUseCodexToolFrameByQuota(account, now))
 
 	account.Extra = cloneStringAnyMap(baseExtra)
+	account.Extra["codex_7d_used_percent"] = 100.0
+	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
+	require.True(t, shouldUseCodexToolFrameByQuota(account, now))
+	require.True(t, shouldForceCodexToolFrameAfter5h(account, now))
+
+	account.Extra = cloneStringAnyMap(baseExtra)
 	account.Extra["codex_5h_reset_at"] = now.Add(-time.Second).Format(time.RFC3339)
 	require.False(t, shouldUseCodexToolFrameByQuota(account, now))
 
@@ -58,6 +64,9 @@ func TestShouldRetryCodexToolFrameFrom429(t *testing.T) {
 
 	headers.Set("x-codex-primary-used-percent", "100")
 	require.False(t, shouldRetryCodexToolFrameFrom429(account, headers))
+
+	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
+	require.True(t, shouldRetryCodexToolFrameFrom429(account, headers))
 }
 
 func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *testing.T) {
@@ -85,6 +94,9 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	account.Extra[openAICodexToolFrame429NoCooldownKey] = true
 	headers.Set("x-codex-primary-used-percent", "100")
 	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+
+	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
+	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, nil, body))
 }
 
 func TestAppendCodexToolFrameIfNeeded(t *testing.T) {

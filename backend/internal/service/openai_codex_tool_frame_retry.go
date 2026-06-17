@@ -65,6 +65,9 @@ func shouldSuppressCodexToolFrame429AccountMark(account *Account, headers http.H
 	if account == nil {
 		return false
 	}
+	if isCodexToolFrameForceAfter5hEnabled(account) {
+		return true
+	}
 	if !resolveAccountExtraBoolDefault(account.Extra, openAICodexToolFrame429NoCooldownKey, true) {
 		return false
 	}
@@ -125,6 +128,19 @@ func (s *OpenAIGatewayService) recordUnexpectedCodexToolFrame429(
 	body []byte,
 ) {
 	if c == nil || !openAIRequestBodyHasCodexToolFrame(body) {
+		return
+	}
+	if isCodexToolFrameForceAfter5hEnabled(account) {
+		s.appendCodexToolFrameRetryEvent(
+			c,
+			account,
+			passthrough,
+			upstreamRequestID,
+			http.StatusTooManyRequests,
+			message,
+			body,
+			"tool_frame_unexpected_429",
+		)
 		return
 	}
 	if !shouldRetryCodexToolFrameFromUsageLimit(account, headers, time.Now()) {

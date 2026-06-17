@@ -14,6 +14,7 @@ import (
 const (
 	openAICodexToolFrameOn5hExhaustedKey = "codex_tool_frame_on_5h_exhausted"
 	openAICodexToolFrame429NoCooldownKey = "codex_tool_frame_429_no_cooldown"
+	openAICodexToolFrameForceAfter5hKey  = "codex_tool_frame_force_after_5h"
 	codexToolFrameStubToolName           = "noop"
 )
 
@@ -28,7 +29,29 @@ func shouldUseCodexToolFrameByQuota(account *Account, now time.Time) bool {
 	if !ok || utilization5h < 1 {
 		return false
 	}
+	if shouldForceCodexToolFrameAfter5h(account, now) {
+		return true
+	}
 	if utilization7d, ok := resolveOpenAIQuotaUtilization(account.Extra, "7d", now); ok && utilization7d >= 1 {
+		return false
+	}
+	return true
+}
+
+func shouldForceCodexToolFrameAfter5h(account *Account, now time.Time) bool {
+	if !isCodexToolFrameForceAfter5hEnabled(account) {
+		return false
+	}
+	utilization5h, ok := resolveOpenAIQuotaUtilization(account.Extra, "5h", now)
+	return ok && utilization5h >= 1
+}
+
+func isCodexToolFrameForceAfter5hEnabled(account *Account) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return false
+	}
+	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) ||
+		!resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) {
 		return false
 	}
 	return true
@@ -41,6 +64,9 @@ func shouldRetryCodexToolFrameFrom429(account *Account, headers http.Header) boo
 	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
 		return false
 	}
+	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) {
+		return codexRateLimitHeadersIndicate5hExhausted(headers)
+	}
 	return codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers)
 }
 
@@ -51,10 +77,28 @@ func shouldRetryCodexToolFrameFromUsageLimit(account *Account, headers http.Head
 	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
 		return false
 	}
+	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) {
+		if codexRateLimitHeadersIndicate5hExhausted(headers) {
+			return true
+		}
+		return shouldUseCodexToolFrameByQuota(account, now)
+	}
 	if codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers) {
 		return true
 	}
 	return shouldUseCodexToolFrameByQuota(account, now)
+}
+
+func codexRateLimitHeadersIndicate5hExhausted(headers http.Header) bool {
+	snapshot := ParseCodexRateLimitHeaders(headers)
+	if snapshot == nil {
+		return false
+	}
+	normalized := snapshot.Normalize()
+	if normalized == nil || normalized.Used5hPercent == nil {
+		return false
+	}
+	return *normalized.Used5hPercent >= 100
 }
 
 func codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers http.Header) bool {
