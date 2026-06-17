@@ -11,10 +11,11 @@ import (
 // Gin context keys used by Ops error logger for capturing upstream error details.
 // These keys are set by gateway services and consumed by handler/ops_error_logger.go.
 const (
-	OpsUpstreamStatusCodeKey   = "ops_upstream_status_code"
-	OpsUpstreamErrorMessageKey = "ops_upstream_error_message"
-	OpsUpstreamErrorDetailKey  = "ops_upstream_error_detail"
-	OpsUpstreamErrorsKey       = "ops_upstream_errors"
+	OpsUpstreamStatusCodeKey      = "ops_upstream_status_code"
+	OpsUpstreamErrorMessageKey    = "ops_upstream_error_message"
+	OpsUpstreamErrorDetailKey     = "ops_upstream_error_detail"
+	OpsUpstreamErrorsKey          = "ops_upstream_errors"
+	OpsUpstreamRequestSnapshotKey = "ops_upstream_request_snapshot"
 
 	// Optional stage latencies (milliseconds) for troubleshooting and alerting.
 	OpsAuthLatencyMsKey      = "ops_auth_latency_ms"
@@ -139,6 +140,8 @@ type OpsUpstreamErrorEvent struct {
 
 	Message string `json:"message,omitempty"`
 	Detail  string `json:"detail,omitempty"`
+
+	RequestSnapshot *OpenAIUpstreamRequestSnapshot `json:"request_snapshot,omitempty"`
 }
 
 func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
@@ -157,6 +160,9 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	ev.Detail = strings.TrimSpace(ev.Detail)
 	if ev.Message != "" {
 		ev.Message = sanitizeUpstreamErrorMessage(ev.Message)
+	}
+	if ev.RequestSnapshot == nil {
+		ev.RequestSnapshot = currentOpsOpenAIUpstreamRequestSnapshot(c)
 	}
 
 	var existing []*OpsUpstreamErrorEvent

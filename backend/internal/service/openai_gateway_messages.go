@@ -346,7 +346,7 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			}
 		}
 		// Non-failover error: return Anthropic-formatted error to client
-		return s.handleAnthropicErrorResponse(resp, c, account, billingModel)
+		return s.handleAnthropicErrorResponse(resp, c, account, responsesBody, billingModel)
 	}
 
 	if account.Type == AccountTypeOAuth && promptCacheKey != "" {
@@ -413,9 +413,10 @@ func (s *OpenAIGatewayService) handleAnthropicErrorResponse(
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
+	requestBody []byte,
 	requestedModel ...string,
 ) (*OpenAIForwardResult, error) {
-	return s.handleCompatErrorResponse(resp, c, account, writeAnthropicError, requestedModel...)
+	return s.handleCompatErrorResponse(resp, c, account, writeAnthropicError, requestBody, requestedModel...)
 }
 
 // handleAnthropicBufferedStreamingResponse reads all Responses SSE events from

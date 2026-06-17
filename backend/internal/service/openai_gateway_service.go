@@ -1427,6 +1427,38 @@ func resolveAccountExtraBool(extra map[string]any, key string) bool {
 	return false
 }
 
+func resolveAccountExtraBoolDefault(extra map[string]any, key string, defaultValue bool) bool {
+	if len(extra) == 0 {
+		return defaultValue
+	}
+	value, ok := extra[key]
+	if !ok || value == nil {
+		return defaultValue
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed
+		}
+	case float64:
+		return v != 0
+	case float32:
+		return v != 0
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return i != 0
+		}
+	}
+	return defaultValue
+}
+
 func resolveOpenAIQuotaAutoPauseThresholds(ctx context.Context, account *Account) (float64, float64) {
 	threshold5h, _ := resolveAccountExtraNumber(account.Extra, "auto_pause_5h_threshold")
 	threshold7d, _ := resolveAccountExtraNumber(account.Extra, "auto_pause_7d_threshold")
@@ -2359,8 +2391,12 @@ func (s *OpenAIGatewayService) readUpstreamErrorBody(resp *http.Response) []byte
 	return body
 }
 
-func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, resp *http.Response, account *Account, requestedModel ...string) {
+func (s *OpenAIGatewayService) handleFailoverSideEffects(ctx context.Context, resp *http.Response, account *Account, requestBody []byte, c *gin.Context, passthrough bool, upstreamMsg string, requestedModel ...string) {
 	body := s.readUpstreamErrorBody(resp)
+	if resp != nil && resp.StatusCode == http.StatusTooManyRequests &&
+		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, passthrough, resp.Header.Get("x-request-id"), upstreamMsg) {
+		return
+	}
 	if len(requestedModel) > 0 {
 		s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, requestedModel[0])
 		return
@@ -2976,6 +3012,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	httpCodexToolFrameRetryTried := false
 	for {
 		// Build upstream request
+		setOpsOpenAIUpstreamRequestBody(c, body)
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, body, token, reqStream, promptCacheKey, isCodexCLI)
 		releaseUpstreamCtx()
@@ -3028,8 +3065,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			if !httpCodexToolFrameRetryTried &&
 				resp.StatusCode == http.StatusTooManyRequests &&
 				shouldRetryCodexToolFrameFrom429(account, resp.Header) {
-				s.persistCodexUsageSnapshotForRetry(ctx, account, resp.Header)
-				if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+				if nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, false, resp.Header.Get("x-request-id"), upstreamMsg); changed {
 					body = nextBody
 					requestView = newOpenAIRequestView(body)
 					reqBody = nil
@@ -3058,7 +3094,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 					Detail:             upstreamDetail,
 				})
 
-				s.handleFailoverSideEffects(ctx, resp, account, upstreamModel)
+				s.handleFailoverSideEffects(ctx, resp, account, body, c, false, upstreamMsg, upstreamModel)
 				return nil, &UpstreamFailoverError{
 					StatusCode:             resp.StatusCode,
 					ResponseBody:           respBody,
@@ -3080,9 +3116,25 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		responseID := ""
 		imageCount := 0
 		var imageOutputSizes []string
+		shouldRetryHTTPAttempt := false
 		if reqStream {
 			streamResult, err := s.handleStreamingResponse(ctx, resp, c, account, startTime, originalModel, upstreamModel)
 			if err != nil {
+				if s.shouldRetryCodexToolFrameAfter429(account, resp.Header, body, httpCodexToolFrameRetryTried, err) {
+					nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, false, resp.Header.Get("x-request-id"), err.Error())
+					if changed {
+						body = nextBody
+						requestView = newOpenAIRequestView(body)
+						reqBody = nil
+						httpCodexToolFrameRetryTried = true
+						logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying stream request once with Codex tool-frame after 5h quota response.failed 429 (account: %s)", account.Name)
+						shouldRetryHTTPAttempt = true
+					}
+					_ = resp.Body.Close()
+					if shouldRetryHTTPAttempt {
+						continue
+					}
+				}
 				return nil, err
 			}
 			usage = streamResult.usage
@@ -3292,7 +3344,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 
 	httpCodexToolFrameRetryTried := false
 	var resp *http.Response
+retryPassthroughWithToolFrame:
 	for {
+		setOpsOpenAIUpstreamRequestBody(c, body)
 		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 		upstreamReq, err := s.buildUpstreamRequestOpenAIPassthrough(upstreamCtx, c, account, body, token)
 		releaseUpstreamCtx()
@@ -3317,8 +3371,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 				respBody := s.readUpstreamErrorBody(resp)
 				_ = resp.Body.Close()
 				resp.Body = io.NopCloser(bytes.NewReader(respBody))
-				s.persistCodexUsageSnapshotForRetry(ctx, account, resp.Header)
-				if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
+				if nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, true, resp.Header.Get("x-request-id"), extractUpstreamErrorMessage(respBody)); changed {
 					body = nextBody
 					reqStream = gjson.GetBytes(body, "stream").Bool()
 					httpCodexToolFrameRetryTried = true
@@ -3345,9 +3398,24 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	responseID := ""
 	imageCount := 0
 	var imageOutputSizes []string
+	shouldRetryPassthroughAttempt := false
 	if reqStream {
 		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
 		if err != nil {
+			if s.shouldRetryCodexToolFrameAfter429(account, resp.Header, body, httpCodexToolFrameRetryTried, err) {
+				nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, true, resp.Header.Get("x-request-id"), err.Error())
+				if changed {
+					body = nextBody
+					reqStream = gjson.GetBytes(body, "stream").Bool()
+					httpCodexToolFrameRetryTried = true
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying passthrough stream request once with Codex tool-frame after 5h quota response.failed 429 (account: %s)", account.Name)
+					shouldRetryPassthroughAttempt = true
+				}
+				_ = resp.Body.Close()
+				if shouldRetryPassthroughAttempt {
+					goto retryPassthroughWithToolFrame
+				}
+			}
 			return nil, err
 		}
 		usage = result.usage
@@ -3565,7 +3633,10 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
-	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	if !(resp.StatusCode == http.StatusTooManyRequests &&
+		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, true, resp.Header.Get("x-request-id"), upstreamMsg)) {
+		_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:             account.Platform,
 		AccountID:            account.ID,
@@ -3610,7 +3681,10 @@ func (s *OpenAIGatewayService) handleErrorResponsePassthrough(
 	// 透传模式保留原始上游错误响应，但运行态账号状态仍需更新，
 	// 避免粘性路由继续复用刚被限流的账号。
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
-	_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	if !(resp.StatusCode == http.StatusTooManyRequests &&
+		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, true, resp.Header.Get("x-request-id"), upstreamMsg)) {
+		_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:             account.Platform,
 		AccountID:            account.ID,
@@ -3767,6 +3841,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	if message == "" {
 		message = "OpenAI stream disconnected before completion"
 	}
+	upstreamStatus := openAIStreamFailedEventUpstreamStatus(payload, message)
 	detail := ""
 	if len(payload) > 0 && s != nil && s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
 		maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
@@ -3776,10 +3851,10 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 		detail = truncateString(string(payload), maxBytes)
 	}
 	if c != nil {
-		setOpsUpstreamError(c, http.StatusBadGateway, message, detail)
+		setOpsUpstreamError(c, upstreamStatus, message, detail)
 		event := OpsUpstreamErrorEvent{
 			Platform:           PlatformOpenAI,
-			UpstreamStatusCode: http.StatusBadGateway,
+			UpstreamStatusCode: upstreamStatus,
 			UpstreamRequestID:  strings.TrimSpace(upstreamRequestID),
 			Passthrough:        passthrough,
 			Kind:               "failover",
@@ -3795,14 +3870,21 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 	}
 	body, _ := json.Marshal(gin.H{
 		"error": gin.H{
-			"type":    "upstream_error",
+			"type":    openAIStreamFailoverErrorType(upstreamStatus),
 			"message": message,
 		},
 	})
 	return &UpstreamFailoverError{
-		StatusCode:   http.StatusBadGateway,
+		StatusCode:   upstreamStatus,
 		ResponseBody: body,
 	}
+}
+
+func openAIStreamFailoverErrorType(statusCode int) string {
+	if statusCode == http.StatusTooManyRequests {
+		return "rate_limit_error"
+	}
+	return "upstream_error"
 }
 
 func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
@@ -4384,7 +4466,11 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 	if reqModel == "" {
 		reqModel, _, _ = extractOpenAIRequestMetaFromBody(requestBody)
 	}
-	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	shouldDisable := false
+	if !(resp.StatusCode == http.StatusTooManyRequests &&
+		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, false, resp.Header.Get("x-request-id"), upstreamMsg)) {
+		shouldDisable = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, reqModel)
+	}
 	kind := "http_error"
 	if shouldDisable {
 		kind = "failover"
@@ -4463,6 +4549,7 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 	c *gin.Context,
 	account *Account,
 	writeError compatErrorWriter,
+	requestBody []byte,
 	requestedModel ...string,
 ) (*OpenAIForwardResult, error) {
 	body := s.readUpstreamErrorBody(resp)
@@ -4525,9 +4612,13 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 	if len(requestedModel) > 0 {
 		modelForCooldown = requestedModel[0]
 	}
-	shouldDisable := s.handleOpenAIAccountUpstreamError(
-		c.Request.Context(), account, resp.StatusCode, resp.Header, body, modelForCooldown,
-	)
+	shouldDisable := false
+	if !(resp.StatusCode == http.StatusTooManyRequests &&
+		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, false, resp.Header.Get("x-request-id"), upstreamMsg)) {
+		shouldDisable = s.handleOpenAIAccountUpstreamError(
+			c.Request.Context(), account, resp.StatusCode, resp.Header, body, modelForCooldown,
+		)
+	}
 	kind := "http_error"
 	if shouldDisable {
 		kind = "failover"

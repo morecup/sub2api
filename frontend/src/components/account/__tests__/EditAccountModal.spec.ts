@@ -481,6 +481,30 @@ describe('EditAccountModal', () => {
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_tool_frame_on_5h_exhausted).toBe(true)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_tool_frame_429_no_cooldown')
+  })
+
+  it('submits OpenAI OAuth tool-frame 429 no-cooldown opt-out in extra', async () => {
+    const account = buildAccount()
+    account.type = 'oauth'
+    account.credentials = {
+      access_token: 'access-token',
+      refresh_token: 'refresh-token'
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="codex-tool-frame-5h-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="codex-tool-frame-429-no-cooldown-toggle"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_tool_frame_on_5h_exhausted).toBe(true)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.codex_tool_frame_429_no_cooldown).toBe(false)
   })
 
   it('allows saving apikey account when backend redacted api_key but credentials_status reports it exists', async () => {

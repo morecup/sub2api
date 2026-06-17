@@ -60,6 +60,33 @@ func TestShouldRetryCodexToolFrameFrom429(t *testing.T) {
 	require.False(t, shouldRetryCodexToolFrameFrom429(account, headers))
 }
 
+func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *testing.T) {
+	body, changed := appendCodexToolFrameIfNeeded([]byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`))
+	require.True(t, changed)
+
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "70")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "100")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+		},
+	}
+	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+
+	account.Extra[openAICodexToolFrame429NoCooldownKey] = false
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+
+	account.Extra[openAICodexToolFrame429NoCooldownKey] = true
+	headers.Set("x-codex-primary-used-percent", "100")
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+}
+
 func TestAppendCodexToolFrameIfNeeded(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`)
 
@@ -78,6 +105,23 @@ func TestAppendCodexToolFrameIfNeeded(t *testing.T) {
 	compaction := []byte(`{"input":[{"type":"message","role":"user"},{"type":"compaction_trigger"}]}`)
 	_, changed = appendCodexToolFrameIfNeeded(compaction)
 	require.False(t, changed)
+}
+
+func TestOpenAIUpstreamRequestSnapshotDetectsToolFrame(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.1-codex","stream":true,"prompt_cache_key":"secret-cache","input":[{"type":"message","role":"user","content":"hi"}]}`)
+	next, changed := appendCodexToolFrameIfNeeded(body)
+	require.True(t, changed)
+
+	snapshot := buildOpenAIUpstreamRequestSnapshot(next)
+	require.NotNil(t, snapshot)
+	require.Equal(t, "gpt-5.1-codex", snapshot.Model)
+	require.True(t, snapshot.Stream)
+	require.Equal(t, 3, snapshot.InputItems)
+	require.Equal(t, 1, snapshot.ToolsCount)
+	require.True(t, snapshot.HasToolFrame)
+	require.True(t, snapshot.HasPromptCacheKey)
+	require.NotEmpty(t, snapshot.BodySHA256)
+	require.NotContains(t, snapshot.RequestPreview, "secret-cache")
 }
 
 func cloneStringAnyMap(in map[string]any) map[string]any {

@@ -1730,6 +1730,33 @@
             />
           </button>
         </div>
+        <div
+          v-if="codexToolFrameOn5hExhaustedEnabled"
+          class="mt-4 flex items-center justify-between border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+        >
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexToolFrame429NoCooldown') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexToolFrame429NoCooldownDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="codex-tool-frame-429-no-cooldown-toggle"
+            @click="codexToolFrame429NoCooldownEnabled = !codexToolFrame429NoCooldownEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              codexToolFrame429NoCooldownEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                codexToolFrame429NoCooldownEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
       </div>
 
       <div
@@ -2617,6 +2644,7 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAllowClaudeCodeEnabled = ref(false)
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
+const codexToolFrame429NoCooldownEnabled = ref(true)
 type CodexImageGenerationBridgeMode = 'inherit' | 'enabled' | 'disabled'
 const codexImageGenerationBridgeMode = ref<CodexImageGenerationBridgeMode>('inherit')
 const anthropicPassthroughEnabled = ref(false)
@@ -2995,6 +3023,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAllowClaudeCodeEnabled.value = false
   codexToolFrameOn5hExhaustedEnabled.value = false
+  codexToolFrame429NoCooldownEnabled.value = true
   codexImageGenerationBridgeMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
   webSearchEmulationMode.value = 'default'
@@ -3036,6 +3065,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         Array.isArray(extra?.codex_cli_only_allowed_clients) &&
         (extra.codex_cli_only_allowed_clients as unknown[]).includes('claude_code')
       codexToolFrameOn5hExhaustedEnabled.value = extra?.codex_tool_frame_on_5h_exhausted === true
+      codexToolFrame429NoCooldownEnabled.value = extra?.codex_tool_frame_429_no_cooldown !== false
     }
     const credentials = newAccount.credentials as Record<string, unknown> | undefined
     const compactMappings = credentials?.compact_model_mapping as Record<string, string> | undefined
@@ -4169,8 +4199,14 @@ const handleSubmit = async () => {
       if (props.account.type === 'oauth') {
         if (codexToolFrameOn5hExhaustedEnabled.value) {
           newExtra.codex_tool_frame_on_5h_exhausted = true
+          if (codexToolFrame429NoCooldownEnabled.value) {
+            delete newExtra.codex_tool_frame_429_no_cooldown
+          } else {
+            newExtra.codex_tool_frame_429_no_cooldown = false
+          }
         } else {
           delete newExtra.codex_tool_frame_on_5h_exhausted
+          delete newExtra.codex_tool_frame_429_no_cooldown
         }
         if (codexCLIOnlyEnabled.value) {
           newExtra.codex_cli_only = true

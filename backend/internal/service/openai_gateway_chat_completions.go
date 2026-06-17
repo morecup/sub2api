@@ -186,6 +186,12 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 			return nil, fmt.Errorf("remarshal after codex transform: %w", err)
 		}
 	}
+	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
+		if nextBody, changed := appendCodexToolFrameIfNeeded(responsesBody); changed {
+			responsesBody = nextBody
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot for chat completions compat (account: %s)", account.Name)
+		}
+	}
 
 	if account.Type == AccountTypeAPIKey {
 		if trimmedKey := strings.TrimSpace(promptCacheKey); trimmedKey != "" {
@@ -221,97 +227,128 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		return nil, fmt.Errorf("get access token: %w", err)
 	}
 
-	// 6. Build upstream request
-	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, true, promptCacheKey, false)
-	releaseUpstreamCtx()
-	if err != nil {
-		return nil, fmt.Errorf("build upstream request: %w", err)
-	}
-
-	// 非 OAuth（APIKey/兼容）账号：补一个确定性 UUID 形态的 session_id。
-	// OAuth 账号的 session-id/thread-id 已由 buildUpstreamRequest 的 Codex 伪装统一设置，无需在此覆盖。
-	if promptCacheKey != "" && account.Type != AccountTypeOAuth {
-		apiKeyID := getAPIKeyIDFromContext(c)
-		upstreamReq.Header.Set("session_id", generateSessionUUID(isolateOpenAISessionID(apiKeyID, promptCacheKey)))
-	}
-
-	// 7. Send request
 	proxyURL := ""
 	if account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		safeErr := sanitizeUpstreamErrorMessage(err.Error())
-		setOpsUpstreamError(c, 0, safeErr, "")
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: 0,
-			Kind:               "request_error",
-			Message:            safeErr,
-		})
-		writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
-		return nil, fmt.Errorf("upstream request failed: %s", safeErr)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// 8. Handle error response with failover
-	if resp.StatusCode >= 400 {
-		respBody := s.readUpstreamErrorBody(resp)
-		_ = resp.Body.Close()
-		resp.Body = io.NopCloser(bytes.NewReader(respBody))
-
-		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
-		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
-		if account.Type == AccountTypeAPIKey &&
-			openai_compat.ResolveResponsesSupport(account.Extra) == openai_compat.ResponsesSupportUnknown &&
-			!isResponsesEndpointSupportedByStatus(resp.StatusCode) {
-			logger.L().Info("openai chat_completions: /responses unsupported, falling back to raw chat completions",
-				zap.Int64("account_id", account.ID),
-				zap.Int("upstream_status", resp.StatusCode),
-				zap.String("upstream_message", upstreamMsg),
-			)
-			return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	httpCodexToolFrameRetryTried := false
+	var resp *http.Response
+sendChatCompatRequest:
+	for {
+		setOpsOpenAIUpstreamRequestBody(c, responsesBody)
+		upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
+		upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, true, promptCacheKey, false)
+		releaseUpstreamCtx()
+		if err != nil {
+			return nil, fmt.Errorf("build upstream request: %w", err)
 		}
-		if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
-			upstreamDetail := ""
-			if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-				maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
-				if maxBytes <= 0 {
-					maxBytes = 2048
-				}
-				upstreamDetail = truncateString(string(respBody), maxBytes)
-			}
+
+		// 非 OAuth（APIKey/兼容）账号：补一个确定性 UUID 形态的 session_id。
+		// OAuth 账号的 session-id/thread-id 已由 buildUpstreamRequest 的 Codex 伪装统一设置，无需在此覆盖。
+		if promptCacheKey != "" && account.Type != AccountTypeOAuth {
+			apiKeyID := getAPIKeyIDFromContext(c)
+			upstreamReq.Header.Set("session_id", generateSessionUUID(isolateOpenAISessionID(apiKeyID, promptCacheKey)))
+		}
+
+		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		if err != nil {
+			safeErr := sanitizeUpstreamErrorMessage(err.Error())
+			setOpsUpstreamError(c, 0, safeErr, "")
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
-				UpstreamStatusCode: resp.StatusCode,
-				UpstreamRequestID:  resp.Header.Get("x-request-id"),
-				Kind:               "failover",
-				Message:            upstreamMsg,
-				Detail:             upstreamDetail,
+				UpstreamStatusCode: 0,
+				Kind:               "request_error",
+				Message:            safeErr,
 			})
-			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
-			return nil, &UpstreamFailoverError{
-				StatusCode:             resp.StatusCode,
-				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
-			}
+			writeChatCompletionsError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed")
+			return nil, fmt.Errorf("upstream request failed: %s", safeErr)
 		}
-		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
+
+		if resp.StatusCode >= 400 {
+			respBody := s.readUpstreamErrorBody(resp)
+			_ = resp.Body.Close()
+			resp.Body = io.NopCloser(bytes.NewReader(respBody))
+
+			upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
+			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
+			if !httpCodexToolFrameRetryTried &&
+				resp.StatusCode == http.StatusTooManyRequests &&
+				shouldRetryCodexToolFrameFrom429(account, resp.Header) {
+				if nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, responsesBody, resp.Header, false, resp.Header.Get("x-request-id"), upstreamMsg); changed {
+					responsesBody = nextBody
+					httpCodexToolFrameRetryTried = true
+					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying chat completions compat request once with Codex tool-frame after 5h quota 429 (account: %s)", account.Name)
+					continue
+				}
+			}
+			if account.Type == AccountTypeAPIKey &&
+				openai_compat.ResolveResponsesSupport(account.Extra) == openai_compat.ResponsesSupportUnknown &&
+				!isResponsesEndpointSupportedByStatus(resp.StatusCode) {
+				logger.L().Info("openai chat_completions: /responses unsupported, falling back to raw chat completions",
+					zap.Int64("account_id", account.ID),
+					zap.Int("upstream_status", resp.StatusCode),
+					zap.String("upstream_message", upstreamMsg),
+				)
+				return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+			}
+			if s.shouldFailoverOpenAIUpstreamResponse(resp.StatusCode, upstreamMsg, respBody) {
+				upstreamDetail := ""
+				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
+					maxBytes := s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes
+					if maxBytes <= 0 {
+						maxBytes = 2048
+					}
+					upstreamDetail = truncateString(string(respBody), maxBytes)
+				}
+				appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+					Platform:           account.Platform,
+					AccountID:          account.ID,
+					AccountName:        account.Name,
+					UpstreamStatusCode: resp.StatusCode,
+					UpstreamRequestID:  resp.Header.Get("x-request-id"),
+					Kind:               "failover",
+					Message:            upstreamMsg,
+					Detail:             upstreamDetail,
+				})
+				if !(resp.StatusCode == http.StatusTooManyRequests &&
+					s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, responsesBody, false, resp.Header.Get("x-request-id"), upstreamMsg)) {
+					s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
+				}
+				return nil, &UpstreamFailoverError{
+					StatusCode:             resp.StatusCode,
+					ResponseBody:           respBody,
+					RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+				}
+			}
+			return s.handleChatCompletionsErrorResponse(resp, c, account, responsesBody, billingModel)
+		}
+		break
 	}
 
-	// 9. Handle normal response
+	// 8. Handle normal response
 	var result *OpenAIForwardResult
 	var handleErr error
 	if clientStream {
 		result, handleErr = s.handleChatStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime, len(body))
 	} else {
 		result, handleErr = s.handleChatBufferedStreamingResponse(resp, c, account, originalModel, billingModel, upstreamModel, startTime)
+	}
+	if handleErr != nil && s.shouldRetryCodexToolFrameAfter429(account, resp.Header, responsesBody, httpCodexToolFrameRetryTried, handleErr) {
+		nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, responsesBody, resp.Header, false, resp.Header.Get("x-request-id"), handleErr.Error())
+		_ = resp.Body.Close()
+		if changed {
+			responsesBody = nextBody
+			httpCodexToolFrameRetryTried = true
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying chat completions compat stream request once with Codex tool-frame after 5h quota response.failed 429 (account: %s)", account.Name)
+			goto sendChatCompatRequest
+		}
+	}
+	if handleErr != nil {
+		_ = resp.Body.Close()
+	} else {
+		defer func() { _ = resp.Body.Close() }()
 	}
 
 	// Propagate ServiceTier and ReasoningEffort to result for billing
@@ -384,9 +421,10 @@ func (s *OpenAIGatewayService) handleChatCompletionsErrorResponse(
 	resp *http.Response,
 	c *gin.Context,
 	account *Account,
+	requestBody []byte,
 	requestedModel ...string,
 ) (*OpenAIForwardResult, error) {
-	return s.handleCompatErrorResponse(resp, c, account, writeChatCompletionsError, requestedModel...)
+	return s.handleCompatErrorResponse(resp, c, account, writeChatCompletionsError, requestBody, requestedModel...)
 }
 
 // handleChatBufferedStreamingResponse reads all Responses SSE events from the

@@ -215,7 +215,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 				RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 			}
 		}
-		return s.handleChatCompletionsErrorResponse(resp, c, account, billingModel)
+		return s.handleChatCompletionsErrorResponse(resp, c, account, body, billingModel)
 	}
 
 	// 8. Forward response

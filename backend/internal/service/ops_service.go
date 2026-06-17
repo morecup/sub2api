@@ -592,6 +592,7 @@ func isSensitiveKey(key string) bool {
 		"passphrase",
 		"secret",
 		"client_secret",
+		"prompt_cache_key",
 		"private_key",
 		"jwt",
 		"signature",

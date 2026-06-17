@@ -2692,6 +2692,33 @@
             />
           </button>
         </div>
+        <div
+          v-if="codexToolFrameOn5hExhaustedEnabled"
+          class="mt-4 flex items-center justify-between border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+        >
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexToolFrame429NoCooldown') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexToolFrame429NoCooldownDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="codex-tool-frame-429-no-cooldown-toggle"
+            @click="codexToolFrame429NoCooldownEnabled = !codexToolFrame429NoCooldownEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              codexToolFrame429NoCooldownEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                codexToolFrame429NoCooldownEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
       </div>
 
       <!-- OpenAI Compact 能力配置 -->
@@ -3453,6 +3480,7 @@ const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OF
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAllowClaudeCodeEnabled = ref(false)
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
+const codexToolFrame429NoCooldownEnabled = ref(true)
 const anthropicPassthroughEnabled = ref(false)
 const webSearchEmulationMode = ref('default')
 const webSearchGlobalEnabled = ref(false)
@@ -3879,6 +3907,7 @@ watch(
       codexCLIOnlyEnabled.value = false
       codexCLIOnlyAllowClaudeCodeEnabled.value = false
       codexToolFrameOn5hExhaustedEnabled.value = false
+      codexToolFrame429NoCooldownEnabled.value = true
     }
     if (newPlatform !== 'anthropic') {
       anthropicPassthroughEnabled.value = false
@@ -3901,6 +3930,7 @@ watch(
       codexCLIOnlyEnabled.value = false
       codexCLIOnlyAllowClaudeCodeEnabled.value = false
       codexToolFrameOn5hExhaustedEnabled.value = false
+      codexToolFrame429NoCooldownEnabled.value = true
     }
     if (platform !== 'anthropic' || category !== 'apikey') {
       anthropicPassthroughEnabled.value = false
@@ -4283,6 +4313,7 @@ const resetForm = () => {
   codexCLIOnlyEnabled.value = false
   codexCLIOnlyAllowClaudeCodeEnabled.value = false
   codexToolFrameOn5hExhaustedEnabled.value = false
+  codexToolFrame429NoCooldownEnabled.value = true
   anthropicPassthroughEnabled.value = false
   webSearchEmulationMode.value = 'default'
   // Reset quota control state
@@ -4372,8 +4403,14 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   }
   if (accountCategory.value === 'oauth-based' && codexToolFrameOn5hExhaustedEnabled.value) {
     extra.codex_tool_frame_on_5h_exhausted = true
+    if (codexToolFrame429NoCooldownEnabled.value) {
+      delete extra.codex_tool_frame_429_no_cooldown
+    } else {
+      extra.codex_tool_frame_429_no_cooldown = false
+    }
   } else {
     delete extra.codex_tool_frame_on_5h_exhausted
+    delete extra.codex_tool_frame_429_no_cooldown
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value

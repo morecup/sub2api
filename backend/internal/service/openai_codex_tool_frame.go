@@ -13,6 +13,7 @@ import (
 
 const (
 	openAICodexToolFrameOn5hExhaustedKey = "codex_tool_frame_on_5h_exhausted"
+	openAICodexToolFrame429NoCooldownKey = "codex_tool_frame_429_no_cooldown"
 	codexToolFrameStubToolName           = "noop"
 )
 
@@ -41,6 +42,19 @@ func shouldRetryCodexToolFrameFrom429(account *Account, headers http.Header) boo
 		return false
 	}
 	return codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers)
+}
+
+func shouldRetryCodexToolFrameFromUsageLimit(account *Account, headers http.Header, now time.Time) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return false
+	}
+	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
+		return false
+	}
+	if codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers) {
+		return true
+	}
+	return shouldUseCodexToolFrameByQuota(account, now)
 }
 
 func codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers http.Header) bool {

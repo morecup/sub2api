@@ -3592,6 +3592,9 @@ export default {
         codexToolFrameOn5hExhausted: '5h 耗尽后启用 Tool Frame',
         codexToolFrameOn5hExhaustedDesc:
           '默认关闭。开启后仅当 Codex 5h 额度已耗尽且 7d 额度未耗尽时，自动使用 Tool Frame 继续访问；7d 耗尽仍走原限流逻辑。',
+        codexToolFrame429NoCooldown: 'Tool Frame 真实 429 不冷却账号',
+        codexToolFrame429NoCooldownDesc:
+          '默认开启。启用 Tool Frame 后若仍遇到 5h-only 429，只记录请求快照而不把账号标记为 429；7d 耗尽仍正常限流。',
         codexImageGenerationBridge: 'Codex 图片生成桥接',
         codexImageGenerationBridgeDesc:
           '账号级策略优先于渠道和全局配置。仅控制 Codex 走 /responses 文本端点时是否注入 image_generation 工具；不影响独立图片生成接口。',

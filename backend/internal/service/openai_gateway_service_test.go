@@ -46,6 +46,26 @@ func (r *snapshotUpdateAccountRepo) UpdateExtra(ctx context.Context, id int64, u
 	return nil
 }
 
+type openAIToolFrame429AccountRepo struct {
+	stubOpenAIAccountRepo
+	rateLimitCalls int
+	extraUpdates   []map[string]any
+}
+
+func (r *openAIToolFrame429AccountRepo) SetRateLimited(_ context.Context, _ int64, _ time.Time) error {
+	r.rateLimitCalls++
+	return nil
+}
+
+func (r *openAIToolFrame429AccountRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	copied := make(map[string]any, len(updates))
+	for k, v := range updates {
+		copied[k] = v
+	}
+	r.extraUpdates = append(r.extraUpdates, copied)
+	return nil
+}
+
 func (r stubOpenAIAccountRepo) GetByID(ctx context.Context, id int64) (*Account, error) {
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
@@ -1328,6 +1348,220 @@ func TestOpenAIStreamingResponseFailedBeforeOutputCapacityErrorReturnsFailover(t
 	require.Contains(t, string(failoverErr.ResponseBody), "Selected model is at capacity")
 	require.False(t, c.Writer.Written())
 	require.Empty(t, rec.Body.String())
+}
+
+func TestOpenAIStreamingResponseFailedUsageLimitReturns429WithRequestSnapshot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			StreamDataIntervalTimeout: 0,
+			StreamKeepaliveInterval:   0,
+			MaxLineSize:               defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: cfg}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	requestBody := []byte(`{"model":"gpt-5.5","stream":true,"prompt_cache_key":"secret-cache","input":[{"type":"message","role":"user","content":"hi"}],"tools":[{"type":"function","name":"shell"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(requestBody))
+	setOpsOpenAIUpstreamRequestBody(c, requestBody)
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			"event: response.created",
+			`data: {"type":"response.created","response":{"id":"resp_1"}}`,
+			"",
+			"event: response.failed",
+			`data: {"type":"response.failed","error":{"type":"usage_limit_reached","message":"The usage limit has been reached","resets_in_seconds":123}}`,
+			"",
+		}, "\n"))),
+		Header: http.Header{"X-Request-Id": []string{"rid-usage-limit"}},
+	}
+
+	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Name: "acc"}, time.Now(), "model", "model")
+	require.Error(t, err)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+	require.Contains(t, string(failoverErr.ResponseBody), "rate_limit_error")
+	require.False(t, c.Writer.Written())
+	require.Empty(t, rec.Body.String())
+
+	v, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := v.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.Len(t, events, 1)
+	require.Equal(t, http.StatusTooManyRequests, events[0].UpstreamStatusCode)
+	require.NotNil(t, events[0].RequestSnapshot)
+	require.Equal(t, "gpt-5.5", events[0].RequestSnapshot.Model)
+	require.True(t, events[0].RequestSnapshot.Stream)
+	require.Equal(t, 1, events[0].RequestSnapshot.InputItems)
+	require.Equal(t, 1, events[0].RequestSnapshot.ToolsCount)
+	require.True(t, events[0].RequestSnapshot.HasPromptCacheKey)
+	require.NotContains(t, events[0].RequestSnapshot.RequestPreview, "secret-cache")
+}
+
+func TestOpenAIHTTP429WithExistingCodexToolFrameDoesNotMarkAccountRateLimited(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.5","stream":true,"input":[{"type":"message","role":"user","content":"hello"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	headers429 := http.Header{
+		"Content-Type":                          []string{"application/json"},
+		"X-Request-Id":                          []string{"rid_tool_frame_429"},
+		"X-Codex-Primary-Used-Percent":          []string{"23"},
+		"X-Codex-Primary-Window-Minutes":        []string{"10080"},
+		"X-Codex-Secondary-Used-Percent":        []string{"100"},
+		"X-Codex-Secondary-Window-Minutes":      []string{"300"},
+		"X-Codex-Secondary-Reset-After-Seconds": []string{"120"},
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"5h exhausted"}}`)),
+		},
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"still 429 with tool frame"}}`)),
+		},
+	}}
+	repo := &openAIToolFrame429AccountRepo{}
+	svc := &OpenAIGatewayService{
+		cfg:              &config.Config{},
+		httpUpstream:     upstream,
+		accountRepo:      repo,
+		rateLimitService: NewRateLimitService(repo, nil, &config.Config{}, nil, nil),
+	}
+	account := &Account{
+		ID:          1,
+		Name:        "openai-oauth",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+		},
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+	require.Len(t, upstream.bodies, 2)
+	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Zero(t, repo.rateLimitCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+
+	v, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := v.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, len(events), 3)
+	var foundUnexpected bool
+	for _, ev := range events {
+		if ev != nil && ev.Kind == "tool_frame_unexpected_429" {
+			foundUnexpected = true
+			require.NotNil(t, ev.RequestSnapshot)
+			require.True(t, ev.RequestSnapshot.HasToolFrame)
+		}
+	}
+	require.True(t, foundUnexpected)
+}
+
+func TestOpenAIHTTP429WithCodexToolFrameNoCooldownDisabledMarksAccountRateLimited(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.5","stream":true,"input":[{"type":"message","role":"user","content":"hello"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	headers429 := http.Header{
+		"Content-Type":                          []string{"application/json"},
+		"X-Request-Id":                          []string{"rid_tool_frame_429"},
+		"X-Codex-Primary-Used-Percent":          []string{"23"},
+		"X-Codex-Primary-Window-Minutes":        []string{"10080"},
+		"X-Codex-Secondary-Used-Percent":        []string{"100"},
+		"X-Codex-Secondary-Window-Minutes":      []string{"300"},
+		"X-Codex-Secondary-Reset-After-Seconds": []string{"120"},
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"5h exhausted"}}`)),
+		},
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"still 429 with tool frame"}}`)),
+		},
+	}}
+	repo := &openAIToolFrame429AccountRepo{}
+	svc := &OpenAIGatewayService{
+		cfg:              &config.Config{},
+		httpUpstream:     upstream,
+		accountRepo:      repo,
+		rateLimitService: NewRateLimitService(repo, nil, &config.Config{}, nil, nil),
+	}
+	account := &Account{
+		ID:          1,
+		Name:        "openai-oauth",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+			openAICodexToolFrame429NoCooldownKey: false,
+		},
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusTooManyRequests, failoverErr.StatusCode)
+	require.Len(t, upstream.bodies, 2)
+	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Equal(t, 1, repo.rateLimitCalls)
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+
+	v, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := v.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	var foundUnexpected bool
+	for _, ev := range events {
+		if ev != nil && ev.Kind == "tool_frame_unexpected_429" {
+			foundUnexpected = true
+			require.NotNil(t, ev.RequestSnapshot)
+			require.True(t, ev.RequestSnapshot.HasToolFrame)
+		}
+	}
+	require.True(t, foundUnexpected)
 }
 
 func TestOpenAIStreamingPreambleOnlyMissingTerminalReturnsFailover(t *testing.T) {

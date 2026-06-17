@@ -316,6 +316,90 @@ func TestForwardAsChatCompletions_StreamResponseFailedTriggersFailoverBeforeFlus
 	require.False(t, c.Writer.Written())
 }
 
+func TestForwardAsChatCompletions_StreamUsageLimitRetriesWithCodexToolFrame(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.5","messages":[{"role":"user","content":"hello"}],"stream":true}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	firstBody := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_failed","model":"gpt-5.5","status":"in_progress","output":[]}}`,
+		"",
+		`event: response.failed`,
+		`data: {"type":"response.failed","error":{"type":"usage_limit_reached","message":"The usage limit has been reached","resets_in_seconds":123}}`,
+		"",
+	}, "\n")
+	secondBody := strings.Join([]string{
+		`data: {"type":"response.created","response":{"id":"resp_ok","model":"gpt-5.5","status":"in_progress","output":[]}}`,
+		"",
+		`data: {"type":"response.output_text.delta","delta":"ok"}`,
+		"",
+		`data: {"type":"response.completed","response":{"id":"resp_ok","object":"response","model":"gpt-5.5","status":"completed","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}}`,
+		"",
+		`data: [DONE]`,
+		"",
+	}, "\n")
+	headers429 := http.Header{
+		"Content-Type":                          []string{"text/event-stream"},
+		"X-Request-Id":                          []string{"rid_chat_usage_limit_1"},
+		"X-Codex-Primary-Used-Percent":          []string{"23"},
+		"X-Codex-Primary-Window-Minutes":        []string{"10080"},
+		"X-Codex-Secondary-Used-Percent":        []string{"100"},
+		"X-Codex-Secondary-Window-Minutes":      []string{"300"},
+		"X-Codex-Secondary-Reset-After-Seconds": []string{"123"},
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusOK,
+			Header:     headers429,
+			Body:       io.NopCloser(strings.NewReader(firstBody)),
+		},
+		{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "X-Request-Id": []string{"rid_chat_usage_limit_2"}},
+			Body:       io.NopCloser(strings.NewReader(secondBody)),
+		},
+	}}
+
+	svc := &OpenAIGatewayService{httpUpstream: upstream}
+	account := &Account{
+		ID:          1,
+		Name:        "openai-oauth",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+		},
+	}
+
+	result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "gpt-5.5")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "rid_chat_usage_limit_2", result.RequestID)
+	require.Len(t, upstream.bodies, 2)
+	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Contains(t, rec.Body.String(), `"content":"ok"`)
+
+	v, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := v.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.GreaterOrEqual(t, len(events), 2)
+	require.Equal(t, http.StatusTooManyRequests, events[0].UpstreamStatusCode)
+	require.Equal(t, "tool_frame_retry", events[1].Kind)
+	require.NotNil(t, events[1].RequestSnapshot)
+	require.False(t, events[1].RequestSnapshot.HasToolFrame)
+}
+
 func TestForwardAsChatCompletions_StreamsUsageWithoutClientStreamOptions(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
