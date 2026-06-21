@@ -1,0 +1,74 @@
+================================================================================
+Codex Desktop App — GET /codex/models 请求抓包
+================================================================================
+
+捕获时间: 2026-06-21T16:52:59.524038 (UTC+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.616.6631.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.142.0-alpha.6 (bin\8e55c2dd143b6354\codex.exe)
+
+================================================================================
+URL
+================================================================================
+GET https://chatgpt.com/backend-api/codex/models?client_version=0.142.0
+HTTP/2.0
+Status: 200
+
+================================================================================
+Request Headers (wire order — 按实际抓包顺序)
+================================================================================
+
+version: 0.142.0-alpha.6
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImFlNjc5NWRjLTRiYWUtNDE4YS04NjVkLTA4YTY0MzllZWRhNiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJwd2QiXSwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X2RhdGFfcmVzaWRlbmN5Ijoibm9fY29uc3RyYWludCIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1wdjg0Q0MyVDFWOUpSdjJmTEJyY3Rwb00iLCJ1c2VyX2lkIjoidXNlci16dkRJN3hHaElsV0hCYXFHa1lvUVNpb0EifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoid2hpdG5leW1vbnJvZTEyMzhAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4MTk5NDQ0MTYxMiwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJlbWFpbCIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19ZRTdQMlNST3laV2RMNjJEY01wdGJNajgiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8ek41UHpqVklvbDN6WW5MdDBZVGgzZWI4IiwiaWF0IjoxNzgxOTk0NDQzLCJleHAiOjE3ODI4NTg0NDMsImp0aSI6Ijk3MzBhODEwMGVhZTQxYjliNWQzNmMzMzZjZjQzNjE0IiwibmJmIjoxNzgxOTk0NDQzfQ.YQXy49d4gQLtGqf7nxzZQUaqjNpanqGwShTXj89lYkrtQu7dv5nPIiqt32myKU--gjTkBpN1FTWYIC-pT2abRnWVVMriFIPy3Dz1TRR3-dhZNVps6oUWEzYqw7fp1_k7Or-xSfkDNCeXO-oHIciX41bOvLVbepgSOZXIFXIdf2SzKkVhasnAdglG5LbGC87xX-NCZr944bUd70kM-YfyntacC8-jZvzp1UENVUaFM4l5bOZ9ZKuE3icHxbaxVSxc48t443mTpthAQbhGIMbpvtATolnl0IlgfayjUn9pL6J9infPdeTciiUyeSadV_-juXe8gPIMoVCx4wlFGxkcHXLC1g1yTxuttcCjXDQWVYjIHN3FkDnDf8esz-Vf65gfXe3t3-R88qMhPeqdmdcILwG8dB6vyypjJG8FThjnzeX38ZLvhZzNd8nGf8rOD51vAABZmLHEezwsWAIpgEFe6UWg07V22H7jv16Xx6zSOBDrIIb2jSp1ejdLkzLocIiN7ulEsNAbaDcT4B3ZDuJPst3wG2h7KrRAhaxbfCriCdXlJBnslOSZIhy19vsMzOamYMXu42mW17P9hiK6TK5mRxfnGsJFmSZ-7p_sa3AZ1JOSFRfNRfBUtrgaXpT9g_yj6PrxE5plGJP90YFoux8sRAh1I-o6A_ZO_KCXAs0Zres
+chatgpt-account-id: ccbbfa80-937b-4bde-8ddc-70359815f896
+accept: */*
+originator: Codex Desktop
+user-agent: Codex Desktop/0.142.0-alpha.6 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.616.51431)
+cookie: __cflb=0H28vzvP5FJafnkHxisyrUFUAuuJgZWNJXwmqRXQwmM; _cfuvid=W6zs55N54BHtVzf4IUrX7XqfoaVBK9XVa3UhC2l8qR0-1782031443.4984157-1.0.1.1-PbhLWJp.1lZ5oQ7qhV5ol1sf0KQ0dTzi3HurrQ5tzTY; __cf_bm=W6A2N2SwFza1yVa0tDf4uCwl4ciyjBKAQ2662YAJIi4-1782031433.716065-1.0.1.1-XVG44zkXbi2Qib3wusGycxdnJ6Inyh2h5y.ZeczRfQxVRwJXg_Y8VhYUDpt74AkqKwJQJeV1KQC_s4er0Pp8quOFip1Mj35oXGsWgPwwIj5sCoJZaqadQuHyd2F5Lc2f
+
+================================================================================
+Request Body
+================================================================================
+(empty — GET 请求无 body)
+
+================================================================================
+Response Headers
+================================================================================
+
+date: Sun, 21 Jun 2026 08:53:00 GMT
+content-type: application/json
+content-length: 111654
+server: cloudflare
+etag: W/"c10d6d2c6e14aacc0447f4e611c2b625"
+x-oai-request-id: d41a0888-6434-49b5-a569-c4cb1237f20c
+x-openai-proxy-wasm: v0.1
+cf-cache-status: DYNAMIC
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+x-content-type-options: nosniff
+report-to: {"group":"cf-nel","max_age":604800,...}
+nel: {"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}
+referrer-policy: strict-origin-when-cross-origin
+cross-origin-opener-policy: same-origin-allow-popups
+cf-ray: a0f1c7c6fd0fdfaa-NRT
+alt-svc: h3=":443"; ma=86400
+
+================================================================================
+Response Body (前 1000 字符)
+================================================================================
+
+{"models":[{"slug":"gpt-5.5","prefer_websockets":true,"support_verbosity":true,"default_verbosity":"low","apply_patch_tool_type":"freeform","web_search_tool_type":"text_and_image","input_modalities":["text","image"],"supports_image_detail_original":true,"truncation_policy":{"mode":"tokens","limit":10000},"supports_parallel_tool_calls":true,"tool_mode":null,"multi_agent_version":null,"use_responses_lite":false,"auto_review_model_override":null,"context_window":272000,"max_context_window":272000,"auto_compact_token_limit":null,"comp_hash":"2911","reasoning_summary_format":"experimental","default_reasoning_summary":"none","display_name":"GPT-5.5","description":"Frontier model for complex coding, research, and real-world work.","default_reasoning_level":"medium","supported_reasoning_levels":[...]}]}
+... (truncated, total 111494 bytes)
+
+================================================================================
+备注
+================================================================================
+
+1. URL 带 query 参数 client_version=0.142.0
+2. 请求头比 /codex/responses POST 简单很多:
+   - 无 x-codex-beta-features, x-codex-turn-metadata, x-codex-window-id
+   - 无 x-client-request-id, session-id, thread-id
+   - 无 x-oai-attestation
+   - 无 content-encoding, content-type (GET 无 body)
+   - accept: */* (不是 text/event-stream)
+3. 共有的头: version, authorization, chatgpt-account-id, originator, user-agent, cookie
+4. 响应无额度相关 x-codex-* 字段 (额度只在 /codex/responses 响应头中返回)
+5. 响应有 etag, 可用于客户端缓存 (后续请求可带 If-None-Match)

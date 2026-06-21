@@ -1,0 +1,113 @@
+================================================================================
+Codex Desktop App — 账号剩余额度信息
+================================================================================
+
+额度信息没有独立的查询端点。
+它作为 POST /backend-api/codex/responses 的 Response Headers 返回。
+每次发起 codex 请求时，响应头中都会携带当前账号的额度状态。
+
+================================================================================
+获取额度的请求
+================================================================================
+
+POST https://chatgpt.com/backend-api/codex/responses
+HTTP/2.0
+Status: 200
+
+--- Request Headers (wire order) ---
+  version: 0.142.0-alpha.6
+  x-codex-beta-features: remote_compaction_v2
+  x-codex-window-id: <session_id>:0
+  x-codex-turn-metadata: {"installation_id":"...","session_id":"...","thread_id":"...","turn_id":"...","window_id":"...","request_kind":"turn","sandbox":"none","workspaces":{...},"turn_started_at_unix_ms":...,"workspace_kind":"project"}
+  x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAW..."}
+  x-client-request-id: <session_id>
+  session-id: <session_id>
+  thread-id: <session_id>
+  accept: text/event-stream
+  content-encoding: zstd
+  content-type: application/json
+  authorization: Bearer eyJ...
+  chatgpt-account-id: ccbbfa80-937b-4bde-8ddc-70359815f896
+  originator: Codex Desktop
+  user-agent: Codex Desktop/0.142.0-alpha.6 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.616.51431)
+  cookie: __cflb=...; _cfuvid=...; __cf_bm=...
+  content-length: <body_size>
+
+================================================================================
+Response Headers — 额度相关字段
+================================================================================
+
+x-codex-active-limit: premium
+x-codex-plan-type: free
+x-codex-primary-used-percent: 16
+x-codex-secondary-used-percent: 0
+x-codex-primary-window-minutes: 43200
+x-codex-primary-over-secondary-limit-percent: 0
+x-codex-secondary-window-minutes: 0
+x-codex-primary-reset-after-seconds: 2587943
+x-codex-secondary-reset-after-seconds: 0
+x-codex-primary-reset-at: 1784619464
+x-codex-secondary-reset-at:
+x-codex-credits-has-credits: False
+x-codex-credits-balance:
+x-codex-credits-unlimited: False
+x-models-etag: W/"c10d6d2c6e14aacc0447f4e611c2b625"
+
+================================================================================
+额度字段解析
+================================================================================
+
+x-codex-active-limit: premium
+  -> 当前生效的限额等级为 premium
+
+x-codex-plan-type: free
+  -> 账号计划类型为 free（免费版）
+
+x-codex-primary-used-percent: 16
+  -> 主限额已使用 16%
+
+x-codex-secondary-used-percent: 0
+  -> 次限额已使用 0%
+
+x-codex-primary-window-minutes: 43200
+  -> 主限额窗口为 43200 分钟 = 30 天
+
+x-codex-primary-over-secondary-limit-percent: 0
+  -> 超出次限额的百分比为 0%
+
+x-codex-secondary-window-minutes: 0
+  -> 次限额窗口为 0（无次级限额）
+
+x-codex-primary-reset-after-seconds: 2587943
+  -> 主限额将在 2587943 秒后重置（约 29.95 天）
+
+x-codex-secondary-reset-after-seconds: 0
+  -> 次限额无重置时间
+
+x-codex-primary-reset-at: 1784619464
+  -> 主限额重置时间戳 (Unix) = 2026-07-21 08:45:22 UTC+08:00
+
+x-codex-secondary-reset-at: (空)
+  -> 次限额无重置时间
+
+x-codex-credits-has-credits: False
+  -> 无 credits 余额
+
+x-codex-credits-balance: (空)
+  -> credits 余额为空
+
+x-codex-credits-unlimited: False
+  -> 非无限 credits
+
+x-models-etag: W/"c10d6d2c6e14aacc0447f4e611c2b625"
+  -> 模型列表的 ETag，用于缓存判断
+
+================================================================================
+备注
+================================================================================
+
+1. 额度信息只在 /codex/responses POST 的响应头中返回，没有独立查询端点
+2. 两次 POST 请求的额度响应头基本一致，仅 reset-after-seconds 有 1 秒差异（2587943 vs 2587942）
+3. 请求头本身不携带额度信息，额度完全由服务端在响应中返回
+4. 请求所需的头与 codex_desktop_app_http_post_sse_headers.txt 中记录的完全一致
+5. 只要能成功发起 /codex/responses POST 请求，响应头中就会包含额度信息

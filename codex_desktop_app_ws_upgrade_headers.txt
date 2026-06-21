@@ -1,0 +1,115 @@
+================================================================================
+Codex Desktop App — WebSocket Upgrade 请求头抓包
+================================================================================
+
+捕获时间: 2026-06-21T16:45:19.890082 (UTC+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.616.6631.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.142.0-alpha.6 (bin\8e55c2dd143b6354\codex.exe)
+抓包方式: mitmproxy addon 拦截 WS 升级请求并返回 426, 触发 HTTP POST 回退
+说明: 这是用户发送消息后触发的 WS 升级请求 (request_kind=prewarm)
+
+================================================================================
+URL
+================================================================================
+GET https://chatgpt.com/backend-api/codex/responses
+(WebSocket Upgrade)
+
+================================================================================
+WS Upgrade Request Headers (wire order — 按实际抓包顺序)
+================================================================================
+
+Host: chatgpt.com
+Connection: Upgrade
+Upgrade: websocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: OjOdOv00dgO3k/qYKrRLmA==
+chatgpt-account-id: ccbbfa80-937b-4bde-8ddc-70359815f896
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImFlNjc5NWRjLTRiYWUtNDE4YS04NjVkLTA4YTY0MzllZWRhNiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJwd2QiXSwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X2RhdGFfcmVzaWRlbmN5Ijoibm9fY29uc3RyYWludCIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1wdjg0Q0MyVDFWOUpSdjJmTEJyY3Rwb00iLCJ1c2VyX2lkIjoidXNlci12dkRJN3hHaElsV0hCYXFHa1lvUVNpb0EifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoid2hpdG5leW1vbnJvZTEyMzhAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4MTk5NDQ0MTYxMiwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJlbWFpbCIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19ZRTdQMlNST3laV2RMNjJEY01wdGJNajgiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8ek41UHpqVklvbDN6WW5MdDBZVGgzZWI4IiwiaWF0IjoxNzgxOTk0NDQzLCJleHAiOjE3ODI4NTg0NDMsImp0aSI6Ijk3MzBhODEwMGVhZTQxYjliNWQzNmMzMzZjZjQzNjE0IiwibmJmIjoxNzgxOTk0NDQzfQ.YQXy49d4gQLtGqf7nxzZQUaqjNpanqGwShTXj89lYkrtQu7dv5nPIiqt32myKU--gjTkBpN1FTWYIC-pT2abRnWVVMriFIPy3Dz1TRR3-dhZNVps6oUWEzYqw7fp1_k7Or-xSfkDNCeXO-oHIciX41bOvLVbepgSOZXIFXIdf2SzKkVhasnAdglG5LbGC87xX-NCZr944bUd70kM-YfyntacC8-jZvzp1UENVUaFM4l5bOZ9ZKuE3icHxbaxVSxc48t443mTpthAQbhGIMbpvtATolnl0IlgfayjUn9pL6J9infPdeTciiUyeSadV_-juXe8gPIMoVCx4wlFGxkcHXLC1g1yTxuttcCjXDQWVYjIHN3FkDnDf8esz-Vf65gfXe3t3-R88qMhPeqdmdcILwG8dB6vyypjJG8FThjnzeX38ZLvhZzNd8nGf8rOD51vAABZmLHEezwsWAIpgEFe6UWg07V22H7jv16Xx6zSOBDrIIb2jSp1ejdLkzLocIiN7ulEsNAbaDcT4B3ZDuJPst3wG2h7KrRAhaxbfCriCdXlJBnslOSZIhy19vsMzOamYMXu42mW17P9hiK6TK5mRxfnGsJFmSZ-7p_sa3AZ1JOSFRfNRfBUtrgaXpT9g_yj6PrxE5plGJP90YFoux8sRAh1I-o6A_ZO_KCXAs0Zres
+user-agent: Codex Desktop/0.142.0-alpha.6 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.616.51431)
+originator: Codex Desktop
+openai-beta: responses_websockets=2026-02-06
+version: 0.142.0-alpha.6
+x-codex-beta-features: remote_compaction_v2
+x-client-request-id: 019ee95b-087b-7501-8cd3-26f557c17cc1
+session-id: 019ee95b-087b-7501-8cd3-26f557c17cc1
+thread-id: 019ee95b-087b-7501-8cd3-26f557c17cc1
+x-codex-window-id: 019ee95b-087b-7501-8cd3-26f557c17cc1:0
+x-codex-turn-metadata: {"installation_id":"00e9ffcb-88d7-4ee8-aeca-1982d91a1330","session_id":"019ee95b-087b-7501-8cd3-26f557c17cc1","thread_id":"019ee95b-087b-7501-8cd3-26f557c17cc1","turn_id":"","window_id":"019ee95b-087b-7501-8cd3-26f557c17cc1:0","request_kind":"prewarm","sandbox":"windows_elevated"}
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}
+sec-websocket-extensions: permessage-deflate; client_max_window_bits
+
+================================================================================
+x-codex-turn-metadata 字段解析
+================================================================================
+
+{
+  "installation_id": "00e9ffcb-88d7-4ee8-aeca-1982d91a1330",
+  "session_id": "019ee95b-087b-7501-8cd3-26f557c17cc1",
+  "thread_id": "019ee95b-087b-7501-8cd3-26f557c17cc1",
+  "turn_id": "",
+  "window_id": "019ee95b-087b-7501-8cd3-26f557c17cc1:0",
+  "request_kind": "prewarm",
+  "sandbox": "windows_elevated"
+}
+
+================================================================================
+WS vs HTTP POST 头对比
+================================================================================
+
+WS 升级请求独有:
+  - Host (HTTP/2 不需要)
+  - Connection: Upgrade
+  - Upgrade: websocket
+  - Sec-WebSocket-Version: 13
+  - Sec-WebSocket-Key: <base64随机值>
+  - sec-websocket-extensions: permessage-deflate; client_max_window_bits
+  - openai-beta: responses_websockets=2026-02-06
+
+HTTP POST SSE 独有:
+  - accept: text/event-stream
+  - content-encoding: zstd
+  - content-type: application/json
+  - content-length: <body_size>
+
+两者共有:
+  - version: 0.142.0-alpha.6
+  - x-codex-beta-features: remote_compaction_v2
+  - x-codex-window-id
+  - x-codex-turn-metadata (但字段内容不同)
+  - x-oai-attestation
+  - x-client-request-id
+  - session-id
+  - thread-id
+  - authorization
+  - chatgpt-account-id
+  - originator: Codex Desktop
+  - user-agent: Codex Desktop/0.142.0-alpha.6 (...)
+  - cookie
+
+================================================================================
+WS vs HTTP POST 的 turn-metadata 差异
+================================================================================
+
+WS (prewarm):
+  - turn_id: "" (空)
+  - request_kind: "prewarm"
+  - sandbox: "windows_elevated"
+  - 无 workspaces, workspace_kind, turn_started_at_unix_ms
+
+HTTP POST (turn):
+  - turn_id: "019ee95b-089a-79b1-8351-065a82503fd3" (有值)
+  - request_kind: "turn"
+  - sandbox: "none"
+  - 有 workspaces, workspace_kind: "project", turn_started_at_unix_ms
+
+================================================================================
+备注
+================================================================================
+
+1. WS 升级是 GET 请求, 无 body, 无 content-type/content-encoding/content-length
+2. WS 头顺序: WebSocket 协议头 (Host/Connection/Upgrade/Sec-WebSocket-*) 在前, 业务头在后
+3. openai-beta: responses_websockets=2026-02-06 是 WS 专用头, HTTP POST 路径不发送
+4. WS prewarm 的 sandbox 为 "windows_elevated", 但 HTTP POST turn 的 sandbox 为 "none"
+   (注意: 第二个 HTTP POST 的 sandbox 又变回了 "windows_elevated", 说明 sandbox 取决于具体执行上下文)
+5. WS prewarm 的 turn_id 为空, 因为还没有真正开始 turn
+6. x-oai-attestation 在 WS 和 HTTP POST 中都存在, 是桌面应用特有的远程证明头

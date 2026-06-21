@@ -1,0 +1,120 @@
+================================================================================
+Codex Desktop App — HTTP POST SSE 请求抓包
+================================================================================
+
+捕获时间: 2026-06-21T16:45:23.228898 (UTC+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.616.6631.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.142.0-alpha.6 (bin\8e55c2dd143b6354\codex.exe)
+抓包方式: mitmproxy 拦截 WS 升级返回 426 -> 桌面应用回退到 HTTP POST SSE
+
+================================================================================
+URL
+================================================================================
+POST https://chatgpt.com/backend-api/codex/responses
+HTTP/2.0
+Status: 200
+
+================================================================================
+Request Headers (wire order — 按实际抓包顺序)
+================================================================================
+
+version: 0.142.0-alpha.6
+x-codex-beta-features: remote_compaction_v2
+x-codex-window-id: 019ee959-decc-78f2-8795-8087d4c1bf5d:0
+x-codex-turn-metadata: {"installation_id":"00e9ffcb-88d7-4ee8-aeca-1982d91a1330","session_id":"019ee959-decc-78f2-8795-8087d4c1bf5d","thread_id":"019ee959-decc-78f2-8795-8087d4c1bf5d","turn_id":"019ee95b-089a-79b1-8351-065a82503fd3","window_id":"019ee959-decc-78f2-8795-8087d4c1bf5d:0","request_kind":"turn","sandbox":"none","workspaces":{"D:\\language\\ai\\sub2api":{"associated_remote_urls":{"origin":"https://github.com/morecup/sub2api"},"latest_git_commit_hash":"90e20272f5bba17efd6c0af5305c5e298503c7cc","has_changes":true}},"turn_started_at_unix_ms":1782031518089,"workspace_kind":"project"}
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}
+x-client-request-id: 019ee959-decc-78f2-8795-8087d4c1bf5d
+session-id: 019ee959-decc-78f2-8795-8087d4c1bf5d
+thread-id: 019ee959-decc-78f2-8795-8087d4c1bf5d
+accept: text/event-stream
+content-encoding: zstd
+content-type: application/json
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6ImFlNjc5NWRjLTRiYWUtNDE4YS04NjVkLTA4YTY0MzllZWRhNiIsInR5cCI6IkpXVCJ9.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJwd2QiXSwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X2RhdGFfcmVzaWRlbmN5Ijoibm9fY29uc3RyYWludCIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1wdjg0Q0MyVDFWOUpSdjJmTEJyY3Rwb00iLCJ1c2VyX2lkIjoidXNlci16dkRJN3hHaElsV0hCYXFHa1lvUVNpb0EifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoid2hpdG5leW1vbnJvZTEyMzhAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZX0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4MTk5NDQ0MTYxMiwic2NwIjpbIm9wZW5pZCIsInByb2ZpbGUiLCJlbWFpbCIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19ZRTdQMlNST3laV2RMNjJEY01wdGJNajgiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8ek41UHpqVklvbDN6WW5MdDBZVGgzZWI4IiwiaWF0IjoxNzgxOTk0NDQzLCJleHAiOjE3ODI4NTg0NDMsImp0aSI6Ijk3MzBhODEwMGVhZTQxYjliNWQzNmMzMzZjZjQzNjE0IiwibmJmIjoxNzgxOTk0NDQzfQ.YQXy49d4gQLtGqf7nxzZQUaqjNpanqGwShTXj89lYkrtQu7dv5nPIiqt32myKU--gjTkBpN1FTWYIC-pT2abRnWVVMriFIPy3Dz1TRR3-dhZNVps6oUWEzYqw7fp1_k7Or-xSfkDNCeXO-oHIciX41bOvLVbepgSOZXIFXIdf2SzKkVhasnAdglG5LbGC87xX-NCZr944bUd70kM-YfyntacC8-jZvzp1UENVUaFM4l5bOZ9ZKuE3icHxbaxVSxc48t443mTpthAQbhGIMbpvtATolnl0IlgfayjUn9pL6J9infPdeTciiUyeSadV_-juXe8gPIMoVCx4wlFGxkcHXLC1g1yTxuttcCjXDQWVYjIHN3FkDnDf8esz-Vf65gfXe3t3-R88qMhPeqdmdcILwG8dB6vyypjJG8FThjnzeX38ZLvhZzNd8nGf8rOD51vAABZmLHEezwsWAIpgEFe6UWg07V22H7jv16Xx6zSOBDrIIb2jSp1ejdLkzLocIiN7ulEsNAbaDcT4B3ZDuJPst3wG2h7KrRAhaxbfCriCdXlJBnslOSZIhy19vsMzOamYMXu42mW17P9hiK6TK5mRxfnGsJFmSZ-7p_sa3AZ1JOSFRfNRfBUtrgaXpT9g_yj6PrxE5plGJP90YFoux8sRAh1I-o6A_ZO_KCXAs0Zres
+chatgpt-account-id: ccbbfa80-937b-4bde-8ddc-70359815f896
+originator: Codex Desktop
+user-agent: Codex Desktop/0.142.0-alpha.6 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.616.51431)
+cookie: __cflb=0H28vzvP5FJafnkHxisyrUFUAuuJgZWNJXwmqRXQwmM; _cfuvid=W6zs55N54BHtVzf4IUrX7XqfoaVBK9XVa3UhC2l8qR0-1782031443.4984157-1.0.1.1-PbhLWJp.1lZ5oQ7qhV5ol1sf0KQ0dTzi3HurrQ5tzTY; __cf_bm=W6A2N2SwFza1yVa0tDf4uCwl4ciyjBKAQ2662YAJIi4-1782031433.716065-1.0.1.1-XVG44zkXbi2Qib3wusGycxdnJ6Inyh2h5y.ZeczRfQxVRwJXg_Y8VhYUDpt74AkqKwJQJeV1KQC_s4er0Pp8quOFip1Mj35oXGsWgPwwIj5sCoJZaqadQuHyd2F5Lc2f
+content-length: 27671
+
+================================================================================
+x-codex-turn-metadata 字段解析
+================================================================================
+
+{
+  "installation_id": "00e9ffcb-88d7-4ee8-aeca-1982d91a1330",
+  "session_id": "019ee959-decc-78f2-8795-8087d4c1bf5d",
+  "thread_id": "019ee959-decc-78f2-8795-8087d4c1bf5d",
+  "turn_id": "019ee95b-089a-79b1-8351-065a82503fd3",
+  "window_id": "019ee959-decc-78f2-8795-8087d4c1bf5d:0",
+  "request_kind": "turn",
+  "sandbox": "none",
+  "workspaces": {
+    "D:\\language\\ai\\sub2api": {
+      "associated_remote_urls": {
+        "origin": "https://github.com/morecup/sub2api"
+      },
+      "latest_git_commit_hash": "90e20272f5bba17efd6c0af5305c5e298503c7cc",
+      "has_changes": true
+    }
+  },
+  "turn_started_at_unix_ms": 1782031518089,
+  "workspace_kind": "project"
+}
+
+================================================================================
+Response Headers
+================================================================================
+
+date: Sun, 21 Jun 2026 08:45:22 GMT
+server: cloudflare
+x-codex-active-limit: premium
+x-codex-plan-type: free
+x-codex-primary-used-percent: 16
+x-codex-secondary-used-percent: 0
+x-codex-primary-window-minutes: 43200
+x-codex-primary-over-secondary-limit-percent: 0
+x-codex-secondary-window-minutes: 0
+x-codex-primary-reset-after-seconds: 2587943
+x-codex-secondary-reset-after-seconds: 0
+x-codex-primary-reset-at: 1784619464
+x-codex-secondary-reset-at:
+x-codex-credits-has-credits: False
+x-codex-credits-balance:
+x-codex-credits-unlimited: False
+x-models-etag: W/"c10d6d2c6e14aacc0447f4e611c2b625"
+x-oai-request-id: 34bdedcc-5cb8-4ae3-8752-b41df7c3a11b
+x-openai-proxy-wasm: v0.1
+cf-cache-status: DYNAMIC
+strict-transport-security: max-age=31536000; includeSubDomains; preload
+x-content-type-options: nosniff
+report-to: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=5r30xyngqhpHbfx%2BdT9cwuW01NHsXbxoYHmjj4JcTLd5tRIFI%2Fi%2FZMgESPTWT6bqAkdaSXLmYjiomrzefZk2YFGP6RFgxnAo%2FainWXLEb3vqqddv9C%2BEH6voWPxV"}]}
+nel: {"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}
+referrer-policy: strict-origin-when-cross-origin
+cross-origin-opener-policy: same-origin-allow-popups
+cf-ray: a0f1bc91df3925c6-NRT
+alt-svc: h3=":443"; ma=86400
+
+================================================================================
+Response Body (SSE 流, 前 1000 字符)
+================================================================================
+
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_0a8fa27b5a0ecf10016a37a4a2222481919a50b3ceccb36e54","object":"response","created_at":1782031522,"status":"in_progress",...}}
+
+================================================================================
+备注
+================================================================================
+
+1. originator = "Codex Desktop" (CLI 是 "codex_cli_rs")
+2. user-agent 格式 = "Codex Desktop/<codex_rs_version> (<OS>) unknown (Codex Desktop; <app_version>)"
+   - codex_rs_version = 0.142.0-alpha.6
+   - app_version = 26.616.51431
+3. x-codex-beta-features = "remote_compaction_v2" (CLI 0.139.0 是 "terminal_resize_reflow")
+4. x-codex-turn-metadata 比 CLI 多了: installation_id, workspaces, workspace_kind
+5. x-codex-turn-metadata 比 CLI 少了: thread_source
+6. sandbox = "none" (CLI exec 是 "windows_elevated")
+7. 新增 x-oai-attestation 头 (CLI 无此头)
+8. 无 openai-beta 头 (HTTP SSE 路径)
+9. 无 accept-encoding 头 (reqwest 不压缩)
+10. session-id == thread-id == x-client-request-id == turn-metadata.session_id
+11. turn_id 是独立的 UUIDv7，与 session_id 不同
