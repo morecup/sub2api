@@ -93,8 +93,8 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	c.Request.Header.Set("session_id", "inbound-session-should-be-ignored")
 	c.Request.Header.Set("conversation_id", "inbound-conversation-should-be-ignored")
 	c.Request.Header.Set("originator", "Codex Desktop")
-	// 入站 x-codex-turn-metadata 中的 workspaces 应被保留并合并到伪装后的 metadata 中。
-	c.Request.Header.Set("X-Codex-Turn-Metadata", `{"workspaces":{"/foo/bar":{"associated_remote_urls":{"origin":"https://github.com/foo/bar"},"latest_git_commit_hash":"abc123","has_changes":true}},"session_id":"inbound-should-be-overwritten","thread_source":"inbound-should-be-removed"}`)
+	// 入站 x-codex-turn-metadata 中的 workspaces 和 workspace_kind 应被保留并合并到伪装后的 metadata 中。
+	c.Request.Header.Set("X-Codex-Turn-Metadata", `{"workspaces":{"/foo/bar":{"associated_remote_urls":{"origin":"https://github.com/foo/bar"},"latest_git_commit_hash":"abc123","has_changes":true}},"workspace_kind":"projectless","session_id":"inbound-should-be-overwritten","thread_source":"inbound-should-be-removed"}`)
 
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc", "user_agent": "custom-ua-should-not-override"}}
@@ -135,7 +135,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
 	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
-	require.Equal(t, "project", gjson.Get(meta, "workspace_kind").String())
+	require.Equal(t, "projectless", gjson.Get(meta, "workspace_kind").String())
 	require.True(t, gjson.Get(meta, "workspaces").IsObject())
 	require.Equal(t, "https://github.com/foo/bar", gjson.Get(meta, "workspaces./foo/bar.associated_remote_urls.origin").String())
 	require.Equal(t, "abc123", gjson.Get(meta, "workspaces./foo/bar.latest_git_commit_hash").String())
