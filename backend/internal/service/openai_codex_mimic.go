@@ -13,12 +13,20 @@ import (
 	"github.com/google/uuid"
 )
 
-// 真实 Codex CLI HTTP POST 固定头值（基准：codex 0.139.0 实抓报文）。
+// 真实 Codex Desktop App 固定头值（基准：Codex Desktop 0.142.0-alpha.6 实抓报文）。
 const (
-	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（实抓：HTTP POST 恒定发送该值）。
-	codexBetaFeaturesValue = "terminal_resize_reflow"
-	// codexTurnMetadataSandbox 对应 x-codex-turn-metadata.sandbox 字段。
-	codexTurnMetadataSandbox = "windows_elevated"
+	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（实抓：Desktop App 恒定发送该值）。
+	codexBetaFeaturesValue = "remote_compaction_v2"
+	// codexTurnMetadataSandbox 对应 HTTP POST x-codex-turn-metadata.sandbox 字段（实抓：Desktop App HTTP POST 为 none）。
+	codexTurnMetadataSandbox = "none"
+	// codexWSPrewarmSandbox 对应 WS prewarm x-codex-turn-metadata.sandbox 字段（实抓：Desktop App WS 为 windows_elevated）。
+	codexWSPrewarmSandbox = "windows_elevated"
+	// codexDesktopOriginator 对应 originator 头（实抓：Desktop App 为 "Codex Desktop"）。
+	codexDesktopOriginator = "Codex Desktop"
+	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段（实抓固定值）。
+	codexInstallationID = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
+	// codexOAIAttestation 对应 x-oai-attestation 头（实抓固定值，Desktop App 特有）。
+	codexOAIAttestation = `{"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}`
 )
 
 // codexMimicStripInboundHeaders 列出可能经请求头白名单（openaiAllowedHeaders /
@@ -57,32 +65,38 @@ func generateCodexSessionUUID(apiKeyID int64, seed string) string {
 }
 
 // buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合与顺序严格对齐真实 Codex
-// 0.139.0 实抓报文（普通一轮 request_kind=turn）：
-// session_id, thread_id, thread_source, turn_id, sandbox, turn_started_at_unix_ms, request_kind, window_id。
+// Desktop App 0.142.0-alpha.6 实抓报文（普通一轮 request_kind=turn）：
+// installation_id, session_id, thread_id, turn_id, window_id, request_kind, sandbox, workspaces, turn_started_at_unix_ms, workspace_kind。
 // turn_id 为每请求新生成的 UUIDv7；session_id/thread_id 复用会话 UUID。
+// 注意：Desktop App 不含 thread_source 字段，sandbox 为 "none"（与 CLI 的 "windows_elevated" 不同）。
+// workspaces 为代理端无法获知的客户端本地动态数据，置空对象 {} 以保持字段集合一致。
 func buildCodexTurnMetadata(sessionUUID, windowID string) string {
 	turnID := sessionUUID
 	if v, err := uuid.NewV7(); err == nil {
 		turnID = v.String()
 	}
 	meta := struct {
-		SessionID           string `json:"session_id"`
-		ThreadID            string `json:"thread_id"`
-		ThreadSource        string `json:"thread_source"`
-		TurnID              string `json:"turn_id"`
-		Sandbox             string `json:"sandbox"`
-		TurnStartedAtUnixMs int64  `json:"turn_started_at_unix_ms"`
-		RequestKind         string `json:"request_kind"`
-		WindowID            string `json:"window_id"`
+		InstallationID      string         `json:"installation_id"`
+		SessionID           string         `json:"session_id"`
+		ThreadID            string         `json:"thread_id"`
+		TurnID              string         `json:"turn_id"`
+		WindowID            string         `json:"window_id"`
+		RequestKind         string         `json:"request_kind"`
+		Sandbox             string         `json:"sandbox"`
+		Workspaces          map[string]any `json:"workspaces"`
+		TurnStartedAtUnixMs int64          `json:"turn_started_at_unix_ms"`
+		WorkspaceKind       string         `json:"workspace_kind"`
 	}{
+		InstallationID:      codexInstallationID,
 		SessionID:           sessionUUID,
 		ThreadID:            sessionUUID,
-		ThreadSource:        "user",
 		TurnID:              turnID,
-		Sandbox:             codexTurnMetadataSandbox,
-		TurnStartedAtUnixMs: time.Now().UnixMilli(),
-		RequestKind:         "turn",
 		WindowID:            windowID,
+		RequestKind:         "turn",
+		Sandbox:             codexTurnMetadataSandbox,
+		Workspaces:          map[string]any{},
+		TurnStartedAtUnixMs: time.Now().UnixMilli(),
+		WorkspaceKind:       "project",
 	}
 	b, err := json.Marshal(meta)
 	if err != nil {
@@ -91,23 +105,28 @@ func buildCodexTurnMetadata(sessionUUID, windowID string) string {
 	return string(b)
 }
 
+// buildCodexWSPrewarmMetadata 生成 WS prewarm 的 x-codex-turn-metadata 头 JSON 值，
+// 字段集合与顺序对齐 Codex Desktop App 0.142.0-alpha.6 实抓报文：
+// installation_id, session_id, thread_id, turn_id, window_id, request_kind, sandbox。
+// 注意：Desktop App WS prewarm 不含 thread_source/turn_started_at_unix_ms/workspace_kind，
+// sandbox 为 "windows_elevated"（与 HTTP POST 的 "none" 不同）。
 func buildCodexWSPrewarmMetadata(sessionUUID, windowID string) string {
 	meta := struct {
-		SessionID    string `json:"session_id"`
-		ThreadID     string `json:"thread_id"`
-		ThreadSource string `json:"thread_source"`
-		TurnID       string `json:"turn_id"`
-		Sandbox      string `json:"sandbox"`
-		RequestKind  string `json:"request_kind"`
-		WindowID     string `json:"window_id"`
+		InstallationID string `json:"installation_id"`
+		SessionID      string `json:"session_id"`
+		ThreadID       string `json:"thread_id"`
+		TurnID         string `json:"turn_id"`
+		WindowID       string `json:"window_id"`
+		RequestKind    string `json:"request_kind"`
+		Sandbox        string `json:"sandbox"`
 	}{
-		SessionID:    sessionUUID,
-		ThreadID:     sessionUUID,
-		ThreadSource: "user",
-		TurnID:       "",
-		Sandbox:      codexTurnMetadataSandbox,
-		RequestKind:  "prewarm",
-		WindowID:     windowID,
+		InstallationID: codexInstallationID,
+		SessionID:      sessionUUID,
+		ThreadID:       sessionUUID,
+		TurnID:         "",
+		WindowID:       windowID,
+		RequestKind:    "prewarm",
+		Sandbox:        codexWSPrewarmSandbox,
 	}
 	b, err := json.Marshal(meta)
 	if err != nil {
@@ -116,7 +135,7 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID string) string {
 	return string(b)
 }
 
-// applyCodexOAuthMimicHeaders 将 OAuth 上游请求头无条件重建为与真实 Codex CLI HTTP POST 一致
+// applyCodexOAuthMimicHeaders 将 OAuth 上游请求头无条件重建为与真实 Codex Desktop App HTTP POST 一致
 // （字段集合 + 取值 + 实抓基准），完全无视入站客户端传入的对应头。不处理 HTTP/2 头发送顺序（按既定范围）。
 //
 // sessionSeed 为隔离前的原始会话种子；为空时回退随机 UUIDv7，
@@ -136,14 +155,16 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	}
 	_ = originator
 
-	// User-Agent 无条件强制为 Codex CLI 画像（忽略入站 UA），后续调用方不得覆盖。
-	req.Header.Set("user-agent", codexCLIUserAgent)
+	// User-Agent 无条件强制为 Codex Desktop 画像（忽略入站 UA），后续调用方不得覆盖。
+	req.Header.Set("user-agent", codexDesktopUserAgent)
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
-	req.Header.Set("version", codexCLIVersion)
+	req.Header.Set("version", codexDesktopVersion)
 	req.Header.Set("x-codex-beta-features", codexBetaFeaturesValue)
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("originator", "codex_cli_rs")
+	req.Header.Set("originator", codexDesktopOriginator)
+	// x-oai-attestation 为 Desktop App 特有的远程证明头（实抓固定值）。
+	req.Header.Set("x-oai-attestation", codexOAIAttestation)
 
 	if isCompact {
 		req.Header.Set("accept", "application/json")
@@ -169,7 +190,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID))
 }
 
-// applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex CLI 画像。
+// applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
 // WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
 // Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。
 func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionSeed, originator, turnMetadata string) {
@@ -190,11 +211,13 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionS
 	_ = originator
 	_ = turnMetadata
 
-	headers.Set("user-agent", codexCLIUserAgent)
-	headers.Set("version", codexCLIVersion)
+	headers.Set("user-agent", codexDesktopUserAgent)
+	headers.Set("version", codexDesktopVersion)
 	headers.Set("openai-beta", openAIWSBetaV2Value)
-	headers.Set("originator", "codex_cli_rs")
+	headers.Set("originator", codexDesktopOriginator)
 	headers.Set("x-codex-beta-features", codexBetaFeaturesValue)
+	// x-oai-attestation 为 Desktop App 特有的远程证明头（实抓固定值）。
+	headers.Set("x-oai-attestation", codexOAIAttestation)
 
 	sessUUID := generateCodexSessionUUID(apiKeyID, sessionSeed)
 	if sessUUID == "" {

@@ -2325,8 +2325,8 @@ func TestOpenAIBuildUpstreamRequestOpenAIPassthroughPreservesCompactPath(t *test
 	require.NoError(t, err)
 	require.Equal(t, chatgptCodexURL+"/compact", req.URL.String())
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
-	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
-	require.Equal(t, codexCLIUserAgent, req.Header.Get("User-Agent"))
+	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
+	require.Equal(t, codexDesktopUserAgent, req.Header.Get("User-Agent"))
 	require.NotEmpty(t, req.Header.Get("Session-Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
@@ -2347,7 +2347,7 @@ func TestOpenAIBuildUpstreamRequestCompactForcesJSONAcceptForOAuth(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, chatgptCodexURL+"/compact", req.URL.String())
 	require.Equal(t, "application/json", req.Header.Get("Accept"))
-	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
+	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
 	require.NotEmpty(t, req.Header.Get("Session-Id"))
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
 }
@@ -2406,9 +2406,9 @@ func TestOpenAIBuildUpstreamRequestOAuthOfficialClientOriginatorCompatibility(t 
 		originator     string
 		wantOriginator string
 	}{
-		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "codex_cli_rs"},
-		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "codex_cli_rs"},
-		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
+		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
+		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "Codex Desktop"},
+		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop"},
 	}
 
 	for _, tt := range tests {

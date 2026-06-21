@@ -661,7 +661,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.True(t, gjson.Get(requestJSON, "stream").Exists(), "WSv2 payload 应保留 stream 字段")
 	require.True(t, gjson.Get(requestJSON, "stream").Bool(), "OAuth Codex 规范化后应强制 stream=true")
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
-	require.Equal(t, codexCLIUserAgent, captureDialer.lastHeaders.Get("user-agent"))
+	require.Equal(t, codexDesktopUserAgent, captureDialer.lastHeaders.Get("user-agent"))
 	require.Equal(t, codexBetaFeaturesValue, captureDialer.lastHeaders.Get("x-codex-beta-features"))
 	// OAuth WS 握手按 Codex CLI 画像使用 session-id/thread-id，不再发送 HTTP 兼容的
 	// session_id/conversation_id。测试中未设置 api_key 到 context，apiKeyID=0。
@@ -674,16 +674,18 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("accept-language"))
-	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
+	require.Equal(t, codexDesktopVersion, captureDialer.lastHeaders.Get("version"))
 	meta := captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader)
 	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, wantSessionID, gjson.Get(meta, "thread_id").String())
-	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.False(t, gjson.Get(meta, "thread_source").Exists())
+	require.Equal(t, codexInstallationID, gjson.Get(meta, "installation_id").String())
 	require.Empty(t, gjson.Get(meta, "turn_id").String())
 	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
 	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, wantSessionID+":0", gjson.Get(meta, "window_id").String())
 	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
+	require.False(t, gjson.Get(meta, "workspace_kind").Exists())
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
@@ -695,9 +697,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 		originator     string
 		wantOriginator string
 	}{
-		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "codex_cli_rs"},
-		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "codex_cli_rs"},
-		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
+		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
+		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "Codex Desktop"},
+		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop"},
 	}
 
 	for _, tt := range tests {
@@ -809,8 +811,8 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 	require.Equal(t, "Bearer oauth-token", headers.Get("authorization"))
 	require.Equal(t, "acct-ws-sanitize", headers.Get("chatgpt-account-id"))
 	require.Equal(t, openAIWSBetaV2Value, headers.Get("OpenAI-Beta"))
-	require.Equal(t, codexCLIUserAgent, headers.Get("user-agent"))
-	require.Equal(t, "codex_cli_rs", headers.Get("originator"))
+	require.Equal(t, codexDesktopUserAgent, headers.Get("user-agent"))
+	require.Equal(t, "Codex Desktop", headers.Get("originator"))
 	require.Equal(t, codexBetaFeaturesValue, headers.Get("x-codex-beta-features"))
 	require.Equal(t, wantSessionID, headers.Get("session-id"))
 	require.Equal(t, wantSessionID, headers.Get("thread-id"))
@@ -819,7 +821,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 	require.Empty(t, headers.Get("session_id"))
 	require.Empty(t, headers.Get("conversation_id"))
 	require.Empty(t, headers.Get("accept-language"))
-	require.Equal(t, codexCLIVersion, headers.Get("version"))
+	require.Equal(t, codexDesktopVersion, headers.Get("version"))
 	require.Empty(t, headers.Get(openAIWSTurnStateHeader))
 	meta := headers.Get(openAIWSTurnMetadataHeader)
 	require.NotContains(t, meta, "spoof")

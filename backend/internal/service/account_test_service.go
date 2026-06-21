@@ -592,7 +592,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
-		applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("account-test:%d:%s", account.ID, testModelID), "codex_cli_rs", false)
+		applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("account-test:%d:%s", account.ID, testModelID), codexDesktopOriginator, false)
 		applyCodexRequestCompressionRaw(req, payloadBytes)
 	}
 
@@ -747,10 +747,9 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("User-Agent", codexCLIUserAgent)
-	req.Header.Set("Version", codexCLIVersion)
+	req.Header.Set("Originator", codexDesktopOriginator)
+	req.Header.Set("User-Agent", codexDesktopUserAgent)
+	req.Header.Set("Version", codexDesktopVersion)
 	probeSessionID := compactProbeSessionID(account.ID)
 	req.Header.Set("Session_ID", probeSessionID)
 	req.Header.Set("Conversation_ID", probeSessionID)
@@ -760,7 +759,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
-		applyCodexOAuthMimicHeaders(req, 0, probeSessionID, "codex_cli_rs", true)
+		applyCodexOAuthMimicHeaders(req, 0, probeSessionID, codexDesktopOriginator, true)
 		applyCodexRequestCompressionRaw(req, payloadBytes)
 	}
 
@@ -1606,7 +1605,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	if chatgptAccountID := strings.TrimSpace(account.GetChatGPTAccountID()); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
-	applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), "codex_cli_rs", false)
+	applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false)
 	applyCodexRequestCompressionRaw(req, responsesBody)
 
 	proxyURL := ""

@@ -1172,11 +1172,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		}
 	}
 	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		headers.Set("user-agent", codexCLIUserAgent)
+		headers.Set("user-agent", codexDesktopUserAgent)
 	}
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
-		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), "codex_cli_rs", "")
+		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), codexDesktopOriginator, "")
 	}
 
 	return headers, sessionResolution

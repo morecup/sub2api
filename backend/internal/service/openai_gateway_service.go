@@ -42,10 +42,10 @@ const (
 	// OpenAI Platform API for API Key accounts (fallback)
 	openaiPlatformAPIURL   = "https://api.openai.com/v1/responses"
 	openaiStickySessionTTL = time.Hour // 粘性会话TTL
-	// 与真实 Codex CLI 的 User-Agent 结构对齐（codex-rs/login/src/auth/default_client.rs::get_codex_user_agent）：
-	// {originator}/{version} ({OS_type} {OS_version}; {arch}) {terminal}
-	// 取值来自本机真实 codex 0.139.0 实抓报文（交互式 TUI，不含 exec 专属后缀）。
-	codexCLIUserAgent = "codex_cli_rs/0.139.0 (Windows 10.0.26100; x86_64) vscode/1.110.1-devin-desktop"
+	// 与真实 Codex Desktop App 的 User-Agent 结构对齐：
+	// Codex Desktop/{codex_rs_version} ({OS_type} {OS_version}; {arch}) unknown (Codex Desktop; {app_version})
+	// 取值来自 Codex 桌面应用 0.142.0-alpha.6 实抓报文。
+	codexDesktopUserAgent = "Codex Desktop/0.142.0-alpha.6 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.616.51431)"
 	// codex_cli_only 拒绝时单个请求头日志长度上限（字符）
 	codexCLIOnlyHeaderValueMaxBytes = 256
 
@@ -59,7 +59,7 @@ const (
 	openAIWSRetryBackoffMaxDefault     = 2 * time.Second
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
-	codexCLIVersion                    = "0.139.0"
+	codexDesktopVersion                = "0.142.0-alpha.6"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
 	openAICodexSnapshotPersistMinInterval = 30 * time.Second
 	// 配额自动暂停时，超过该时长仍未刷新的 used% 快照视为陈旧，不再据此暂停账号。
@@ -4275,7 +4275,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if isOpenAIResponsesCompactPath(c) {
 				req.Header.Set("accept", "application/json")
 				if req.Header.Get("version") == "" {
-					req.Header.Set("version", codexCLIVersion)
+					req.Header.Set("version", codexDesktopVersion)
 				}
 				req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, resolveOpenAICompactSessionID(c)))
 			} else {
@@ -4299,7 +4299,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 				req.Header.Set("chatgpt-account-id", chatgptAccountID)
 			}
-			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, "codex_cli_rs", isCompact)
+			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
 			s.applyCodexRequestCompression(req, body)
 			codexMimicApplied = true
 		}
@@ -4315,7 +4315,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
 		// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
 		if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-			req.Header.Set("user-agent", codexCLIUserAgent)
+			req.Header.Set("user-agent", codexDesktopUserAgent)
 		}
 
 		// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器

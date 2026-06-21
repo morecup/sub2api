@@ -129,8 +129,8 @@ const antigravityUserAgentVersionErrorTTL = 5 * time.Second
 const antigravityUserAgentVersionDBTimeout = 5 * time.Second
 
 // DefaultOpenAICodexUserAgent OpenAI Codex 默认 User-Agent（用于规避 Cloudflare 对浏览器 UA 的质询）。
-// 与 Codex 伪装路径强制使用的 codexCLIUserAgent 保持一致（单一事实来源，Windows codex_cli_rs 画像）。
-const DefaultOpenAICodexUserAgent = codexCLIUserAgent
+// 与 Codex 伪装路径强制使用的 codexDesktopUserAgent 保持一致（单一事实来源，Windows Codex Desktop 画像）。
+const DefaultOpenAICodexUserAgent = codexDesktopUserAgent
 
 // cachedOpenAICodexUserAgent 缓存 OpenAI Codex UA（进程内缓存，60s TTL）
 type cachedOpenAICodexUserAgent struct {

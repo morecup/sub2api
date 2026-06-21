@@ -106,13 +106,13 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID, req.Header.Get("Thread-Id"))
 	require.Equal(t, sessionID, req.Header.Get("X-Client-Request-Id"))
 	require.Equal(t, sessionID+":0", req.Header.Get("X-Codex-Window-Id"))
-	require.Equal(t, codexCLIVersion, req.Header.Get("Version"))
-	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=terminal_resize_reflow。
-	require.Equal(t, "terminal_resize_reflow", req.Header.Get("X-Codex-Beta-Features"))
+	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
+	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=remote_compaction_v2。
+	require.Equal(t, "remote_compaction_v2", req.Header.Get("X-Codex-Beta-Features"))
 	require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
-	require.Equal(t, "codex_cli_rs", req.Header.Get("Originator"))
-	// UA 无条件强制为 Codex CLI 画像（忽略入站 UA）。
-	require.Equal(t, codexCLIUserAgent, req.Header.Get("User-Agent"))
+	require.Equal(t, "Codex Desktop", req.Header.Get("Originator"))
+	// UA 无条件强制为 Codex Desktop 画像（忽略入站 UA）。
+	require.Equal(t, codexDesktopUserAgent, req.Header.Get("User-Agent"))
 	// HTTP 路径不发送 OpenAI-Beta / x-codex-installation-id，且旧下划线 session_id 变体已移除。
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
 	require.Empty(t, req.Header.Get("Session_Id"))
@@ -122,17 +122,21 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Empty(t, req.Header.Get("X-Codex-Turn-State"))
 	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
-	// x-codex-turn-metadata：字段与真实 Codex 0.139.0 实抓报文对齐（含 thread_source，无 installation_id）。
+	// x-codex-turn-metadata：字段与真实 Codex Desktop App 0.142.0-alpha.6 实抓报文对齐（含 installation_id，无 thread_source）。
 	meta := req.Header.Get("X-Codex-Turn-Metadata")
 	require.Equal(t, sessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, sessionID, gjson.Get(meta, "thread_id").String())
-	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
-	require.False(t, gjson.Get(meta, "installation_id").Exists())
-	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
+	require.False(t, gjson.Get(meta, "thread_source").Exists())
+	require.Equal(t, codexInstallationID, gjson.Get(meta, "installation_id").String())
+	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
 	require.Equal(t, "turn", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
 	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
+	require.Equal(t, "project", gjson.Get(meta, "workspace_kind").String())
+	require.True(t, gjson.Get(meta, "workspaces").IsObject())
+	// x-oai-attestation 为 Desktop App 特有的远程证明头。
+	require.NotEmpty(t, req.Header.Get("X-Oai-Attestation"))
 
 	// 请求体 zstd 压缩，且可解压回原始 JSON。
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
@@ -472,8 +476,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 
 	// 2) only auth is replaced; inbound auth/cookie are not forwarded
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
-	// User-Agent 无条件强制为 Codex CLI 画像，忽略入站 UA（此处入站为 codex_cli_rs/0.1.0）。
-	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	// User-Agent 无条件强制为 Codex Desktop 画像，忽略入站 UA（此处入站为 codex_cli_rs/0.1.0）。
+	require.Equal(t, codexDesktopUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 	require.Empty(t, upstream.lastReq.Header.Get("Cookie"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Api-Key"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Goog-Api-Key"))
@@ -538,7 +542,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreami
 	require.Equal(t, "compact me", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
 	require.Equal(t, "local-test-instructions", strings.TrimSpace(gjson.GetBytes(upstream.lastBody, "instructions").String()))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
-	require.Equal(t, codexCLIVersion, upstream.lastReq.Header.Get("Version"))
+	require.Equal(t, codexDesktopVersion, upstream.lastReq.Header.Get("Version"))
 	require.NotEmpty(t, upstream.lastReq.Header.Get("Session-Id"))
 	require.Equal(t, "chatgpt.com", upstream.lastReq.Host)
 	require.Equal(t, "chatgpt-acc", upstream.lastReq.Header.Get("chatgpt-account-id"))
@@ -774,7 +778,7 @@ func TestOpenAIGatewayService_OAuthLegacy_CompositeCodexUAUsesCodexOriginator(t 
 	_, err := svc.Forward(context.Background(), c, account, inputBody)
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, "codex_cli_rs", upstream.lastReq.Header.Get("originator"))
+	require.Equal(t, "Codex Desktop", upstream.lastReq.Header.Get("originator"))
 	require.NotEqual(t, "opencode", upstream.lastReq.Header.Get("originator"))
 }
 
@@ -1064,7 +1068,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_NonCodexUAFallbackToCodexUA(t *te
 	require.NoError(t, err)
 	require.Equal(t, false, gjson.GetBytes(upstream.lastBody, "store").Bool())
 	require.Equal(t, true, gjson.GetBytes(upstream.lastBody, "stream").Bool())
-	require.Equal(t, codexCLIUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, codexDesktopUserAgent, upstream.lastReq.Header.Get("User-Agent"))
 }
 
 func TestOpenAIGatewayService_CodexCLIOnly_RejectsNonCodexClient(t *testing.T) {

@@ -629,7 +629,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
-	applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("codex-snapshot:%d", account.ID), "codex_cli_rs", false)
+	applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("codex-snapshot:%d", account.ID), codexDesktopOriginator, false)
 	applyCodexRequestCompressionRaw(req, payloadBytes)
 
 	proxyURL := ""
