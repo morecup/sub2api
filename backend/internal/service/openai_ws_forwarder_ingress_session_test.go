@@ -824,9 +824,15 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		t.Fatal("等待 passthrough websocket 结束超时")
 	}
 
-	require.Equal(t, isolateOpenAISessionID(0, "pcache_passthrough"), captureDialer.lastHeaders.Get("session_id"))
-	require.Equal(t, "turn-state-1", captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))
-	require.Equal(t, "turn-meta-1", captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader))
+	wantSessionID := generateCodexSessionUUID(0, "pcache_passthrough")
+	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("session-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))
+	meta := captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader)
+	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
+	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
+	require.Empty(t, gjson.Get(meta, "turn_id").String())
+	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
 }
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_ModeOffReturnsPolicyViolation(t *testing.T) {

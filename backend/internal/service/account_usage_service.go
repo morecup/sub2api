@@ -625,21 +625,12 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		return nil, fmt.Errorf("create openai probe request: %w", err)
 	}
 	req.Host = "chatgpt.com"
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", openAICodexProbeVersion)
-	req.Header.Set("User-Agent", codexCLIUserAgent)
-	if s.identityCache != nil {
-		if fp, fpErr := s.identityCache.GetFingerprint(reqCtx, account.ID); fpErr == nil && fp != nil && strings.TrimSpace(fp.UserAgent) != "" {
-			req.Header.Set("User-Agent", strings.TrimSpace(fp.UserAgent))
-		}
-	}
 	if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
+	applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("codex-snapshot:%d", account.ID), "codex_cli_rs", false)
+	applyCodexRequestCompressionRaw(req, payloadBytes)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -649,6 +640,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		ProxyURL:              proxyURL,
 		Timeout:               15 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
+		DisableCompression:    true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("build openai probe client: %w", err)

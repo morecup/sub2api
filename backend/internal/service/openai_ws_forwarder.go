@@ -1122,21 +1122,13 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	headers.Set("authorization", "Bearer "+token)
 
 	sessionResolution := resolveOpenAIWSSessionHeaders(c, promptCacheKey)
-	if c != nil && c.Request != nil {
+	isOAuthAccount := account != nil && account.Type == AccountTypeOAuth
+	if !isOAuthAccount && c != nil && c.Request != nil {
 		if v := strings.TrimSpace(c.Request.Header.Get("accept-language")); v != "" {
 			headers.Set("accept-language", v)
 		}
 	}
-	// OAuth 账号：将 apiKeyID 混入 session 标识符，防止跨用户会话碰撞。
-	if account != nil && account.Type == AccountTypeOAuth {
-		apiKeyID := getAPIKeyIDFromContext(c)
-		if sessionResolution.SessionID != "" {
-			headers.Set("session_id", isolateOpenAISessionID(apiKeyID, sessionResolution.SessionID))
-		}
-		if sessionResolution.ConversationID != "" {
-			headers.Set("conversation_id", isolateOpenAISessionID(apiKeyID, sessionResolution.ConversationID))
-		}
-	} else {
+	if !isOAuthAccount {
 		if sessionResolution.SessionID != "" {
 			headers.Set("session_id", sessionResolution.SessionID)
 		}
@@ -1144,18 +1136,22 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 			headers.Set("conversation_id", sessionResolution.ConversationID)
 		}
 	}
-	if state := strings.TrimSpace(turnState); state != "" {
+	inboundTurnState := ""
+	if c != nil {
+		inboundTurnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
+	}
+	if state := strings.TrimSpace(turnState); state != "" && (!isOAuthAccount || state != inboundTurnState) {
 		headers.Set(openAIWSTurnStateHeader, state)
 	}
-	if metadata := strings.TrimSpace(turnMetadata); metadata != "" {
+	if !isOAuthAccount && strings.TrimSpace(turnMetadata) != "" {
+		metadata := strings.TrimSpace(turnMetadata)
 		headers.Set(openAIWSTurnMetadataHeader, metadata)
 	}
 
-	if account != nil && account.Type == AccountTypeOAuth {
+	if isOAuthAccount {
 		if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 			headers.Set("chatgpt-account-id", chatgptAccountID)
 		}
-		headers.Set("originator", resolveOpenAIUpstreamOriginator(c, isCodexCLI))
 	}
 
 	betaValue := openAIWSBetaV2Value
@@ -1168,9 +1164,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if account != nil {
 		customUA = account.GetOpenAIUserAgent()
 	}
-	if strings.TrimSpace(customUA) != "" {
+	if !isOAuthAccount && strings.TrimSpace(customUA) != "" {
 		headers.Set("user-agent", customUA)
-	} else if c != nil {
+	} else if !isOAuthAccount && c != nil {
 		if ua := strings.TrimSpace(c.GetHeader("User-Agent")); ua != "" {
 			headers.Set("user-agent", ua)
 		}
@@ -1178,8 +1174,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if s != nil && s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
 		headers.Set("user-agent", codexCLIUserAgent)
 	}
-	if account != nil && account.Type == AccountTypeOAuth && !openai.IsCodexCLIRequest(headers.Get("user-agent")) {
-		headers.Set("user-agent", codexCLIUserAgent)
+	if isOAuthAccount {
+		apiKeyID := getAPIKeyIDFromContext(c)
+		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), "codex_cli_rs", "")
 	}
 
 	return headers, sessionResolution

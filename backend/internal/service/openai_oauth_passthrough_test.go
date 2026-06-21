@@ -90,9 +90,12 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	// 入站噪声头：accept-language / x-codex-turn-state 在请求头白名单内，验证伪装时被剥离（固定请求头）。
 	c.Request.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	c.Request.Header.Set("X-Codex-Turn-State", "inbound-should-be-stripped")
+	c.Request.Header.Set("session_id", "inbound-session-should-be-ignored")
+	c.Request.Header.Set("conversation_id", "inbound-conversation-should-be-ignored")
+	c.Request.Header.Set("originator", "Codex Desktop")
 
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
-	account := &Account{Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc"}}
+	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc", "user_agent": "custom-ua-should-not-override"}}
 
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", true, "sess-seed-1", true)
 	require.NoError(t, err)
@@ -141,6 +144,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 
 	// 确定性派生：相同 (apiKeyID, seed) 复算 session-id 不变。
 	require.Equal(t, sessionID, generateCodexSessionUUID(0, "sess-seed-1"))
+	require.NotEqual(t, sessionID, generateCodexSessionUUID(0, "inbound-session-should-be-ignored"))
 }
 
 func TestOpenAIGatewayService_ResponsesUnknownModelDoesNotFallbackToGPT54(t *testing.T) {
@@ -1438,7 +1442,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_DefaultFiltersTimeoutHeaders(t *t
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
 }
 
-func TestOpenAIGatewayService_OAuthPassthrough_AllowTimeoutHeadersWhenConfigured(t *testing.T) {
+func TestOpenAIGatewayService_OAuthPassthrough_CodexMimicStripsTimeoutHeadersWhenConfigured(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -1483,6 +1487,6 @@ func TestOpenAIGatewayService_OAuthPassthrough_AllowTimeoutHeadersWhenConfigured
 	_, err := svc.Forward(context.Background(), c, account, originalBody)
 	require.NoError(t, err)
 	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, "120000", upstream.lastReq.Header.Get("x-stainless-timeout"))
+	require.Empty(t, upstream.lastReq.Header.Get("x-stainless-timeout"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
 }

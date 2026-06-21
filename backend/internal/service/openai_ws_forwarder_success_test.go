@@ -661,10 +661,29 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.True(t, gjson.Get(requestJSON, "stream").Exists(), "WSv2 payload 应保留 stream 字段")
 	require.True(t, gjson.Get(requestJSON, "stream").Bool(), "OAuth Codex 规范化后应强制 stream=true")
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
-	// OAuth 账号的 session_id/conversation_id 应被 isolateOpenAISessionID 隔离，
-	// 测试中未设置 api_key 到 context，apiKeyID=0。
-	require.Equal(t, isolateOpenAISessionID(0, "sess-oauth-1"), captureDialer.lastHeaders.Get("session_id"))
-	require.Equal(t, isolateOpenAISessionID(0, "conv-oauth-1"), captureDialer.lastHeaders.Get("conversation_id"))
+	require.Equal(t, codexCLIUserAgent, captureDialer.lastHeaders.Get("user-agent"))
+	require.Equal(t, codexBetaFeaturesValue, captureDialer.lastHeaders.Get("x-codex-beta-features"))
+	// OAuth WS 握手按 Codex CLI 画像使用 session-id/thread-id，不再发送 HTTP 兼容的
+	// session_id/conversation_id。测试中未设置 api_key 到 context，apiKeyID=0。
+	wantSessionID := captureDialer.lastHeaders.Get("session-id")
+	require.Len(t, wantSessionID, 36)
+	require.NotEqual(t, generateCodexSessionUUID(0, "sess-oauth-1"), wantSessionID)
+	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("thread-id"))
+	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("x-client-request-id"))
+	require.Equal(t, wantSessionID+":0", captureDialer.lastHeaders.Get("x-codex-window-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("accept-language"))
+	require.Equal(t, codexCLIVersion, captureDialer.lastHeaders.Get("version"))
+	meta := captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader)
+	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
+	require.Equal(t, wantSessionID, gjson.Get(meta, "thread_id").String())
+	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.Empty(t, gjson.Get(meta, "turn_id").String())
+	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
+	require.Equal(t, wantSessionID+":0", gjson.Get(meta, "window_id").String())
+	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
@@ -676,9 +695,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 		originator     string
 		wantOriginator string
 	}{
-		{name: "desktop originator preserved", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
-		{name: "vscode originator preserved", originator: "codex_vscode", wantOriginator: "codex_vscode"},
-		{name: "official ua fallback to codex_cli_rs", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
+		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "codex_cli_rs"},
+		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "codex_cli_rs"},
+		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "codex_cli_rs"},
 	}
 
 	for _, tt := range tests {
@@ -747,6 +766,68 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 	}
 }
 
+func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbound(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/openai/v1/responses", nil)
+	c.Request.Header.Set("User-Agent", "unit-test-agent/1.0")
+	c.Request.Header.Set("originator", "opencode")
+	c.Request.Header.Set("session_id", "sess-ws-sanitize")
+	c.Request.Header.Set("conversation_id", "conv-should-not-pass")
+	c.Request.Header.Set("accept-language", "zh-CN")
+	c.Request.Header.Set("version", "999.0")
+	c.Request.Header.Set(openAIWSTurnStateHeader, "spoof-turn-state")
+	c.Request.Header.Set(openAIWSTurnMetadataHeader, `{"spoof":true}`)
+
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "acct-ws-sanitize",
+			"user_agent":         "custom-agent/9.9",
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+
+	headers, _ := svc.buildOpenAIWSHeaders(
+		c,
+		account,
+		"oauth-token",
+		OpenAIWSProtocolDecision{Transport: OpenAIUpstreamTransportResponsesWebsocketV2},
+		false,
+		"spoof-turn-state",
+		`{"spoof":true}`,
+		"",
+	)
+
+	wantSessionID := headers.Get("session-id")
+	require.Len(t, wantSessionID, 36)
+	require.NotEqual(t, generateCodexSessionUUID(0, "sess-ws-sanitize"), wantSessionID)
+	require.Equal(t, "Bearer oauth-token", headers.Get("authorization"))
+	require.Equal(t, "acct-ws-sanitize", headers.Get("chatgpt-account-id"))
+	require.Equal(t, openAIWSBetaV2Value, headers.Get("OpenAI-Beta"))
+	require.Equal(t, codexCLIUserAgent, headers.Get("user-agent"))
+	require.Equal(t, "codex_cli_rs", headers.Get("originator"))
+	require.Equal(t, codexBetaFeaturesValue, headers.Get("x-codex-beta-features"))
+	require.Equal(t, wantSessionID, headers.Get("session-id"))
+	require.Equal(t, wantSessionID, headers.Get("thread-id"))
+	require.Equal(t, wantSessionID, headers.Get("x-client-request-id"))
+	require.Equal(t, wantSessionID+":0", headers.Get("x-codex-window-id"))
+	require.Empty(t, headers.Get("session_id"))
+	require.Empty(t, headers.Get("conversation_id"))
+	require.Empty(t, headers.Get("accept-language"))
+	require.Equal(t, codexCLIVersion, headers.Get("version"))
+	require.Empty(t, headers.Get(openAIWSTurnStateHeader))
+	meta := headers.Get(openAIWSTurnMetadataHeader)
+	require.NotContains(t, meta, "spoof")
+	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
+	require.Empty(t, gjson.Get(meta, "turn_id").String())
+	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
+}
+
 func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheKey(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -805,8 +886,10 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.NotNil(t, result)
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
-	// OAuth 账号的 session_id 应被 isolateOpenAISessionID 隔离（apiKeyID=0，未在 context 设置）。
-	require.Equal(t, isolateOpenAISessionID(0, "pcache_123"), captureDialer.lastHeaders.Get("session_id"))
+	// OAuth WS 握手使用 Codex CLI 的 session-id/thread-id 头形态（apiKeyID=0，未在 context 设置）。
+	require.Equal(t, generateCodexSessionUUID(0, "pcache_123"), captureDialer.lastHeaders.Get("session-id"))
+	require.Equal(t, captureDialer.lastHeaders.Get("session-id"), captureDialer.lastHeaders.Get("thread-id"))
+	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))
 	require.NotNil(t, captureConn.lastWrite)
 	require.True(t, gjson.Get(requestToJSONString(captureConn.lastWrite), "stream").Exists())

@@ -589,10 +589,11 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	// Set OAuth-specific headers for ChatGPT internal API
 	if isOAuth {
 		req.Host = "chatgpt.com"
-		req.Header.Set("accept", "text/event-stream")
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
+		applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("account-test:%d:%s", account.ID, testModelID), "codex_cli_rs", false)
+		applyCodexRequestCompressionRaw(req, payloadBytes)
 	}
 
 	// Get proxy URL
@@ -759,6 +760,8 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 		if chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
+		applyCodexOAuthMimicHeaders(req, 0, probeSessionID, "codex_cli_rs", true)
+		applyCodexRequestCompressionRaw(req, payloadBytes)
 	}
 
 	proxyURL := ""
@@ -1600,18 +1603,11 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 	req.Host = "chatgpt.com"
 	req.Header.Set("Authorization", "Bearer "+authToken)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("OpenAI-Beta", "responses=experimental")
-	req.Header.Set("originator", "opencode")
-	if customUA := strings.TrimSpace(account.GetOpenAIUserAgent()); customUA != "" {
-		req.Header.Set("User-Agent", customUA)
-	} else {
-		req.Header.Set("User-Agent", codexCLIUserAgent)
-	}
 	if chatgptAccountID := strings.TrimSpace(account.GetChatGPTAccountID()); chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
+	applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), "codex_cli_rs", false)
+	applyCodexRequestCompressionRaw(req, responsesBody)
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

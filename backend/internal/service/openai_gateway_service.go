@@ -3551,46 +3551,18 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	if account.Type == AccountTypeOAuth {
 		promptCacheKey := strings.TrimSpace(gjson.GetBytes(body, "prompt_cache_key").String())
 		req.Host = "chatgpt.com"
+		req.Header.Del("chatgpt-account-id")
 		if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
 			req.Header.Set("chatgpt-account-id", chatgptAccountID)
 		}
 		apiKeyID := getAPIKeyIDFromContext(c)
 		isCompact := isOpenAIResponsesCompactPath(c)
-		// 解析会话种子：优先客户端透传的 session/conversation，其次 compact 会话，最后 prompt_cache_key。
-		seed := strings.TrimSpace(req.Header.Get("session_id"))
-		if seed == "" {
-			seed = strings.TrimSpace(req.Header.Get("conversation_id"))
-		}
+		seed := promptCacheKey
 		if seed == "" && isCompact {
-			seed = resolveOpenAICompactSessionID(c)
+			seed = resolveOpenAICompactMimicSessionID(c)
 		}
-		if seed == "" {
-			seed = promptCacheKey
-		}
-		// 解析 originator：保留客户端透传值，缺省回退 codex_cli_rs。
-		originator := strings.TrimSpace(req.Header.Get("originator"))
-		if originator == "" {
-			originator = "codex_cli_rs"
-		}
-		applyCodexOAuthMimicHeaders(req, apiKeyID, seed, originator, isCompact)
+		applyCodexOAuthMimicHeaders(req, apiKeyID, seed, "codex_cli_rs", isCompact)
 	}
-
-	// 透传模式也支持账户自定义 User-Agent 与 ForceCodexCLI 兜底。
-	customUA := account.GetOpenAIUserAgent()
-	if customUA != "" {
-		req.Header.Set("user-agent", customUA)
-	}
-	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
-	}
-	// OAuth 安全透传：对非 Codex UA 统一兜底，降低被上游风控拦截概率。
-	if account.Type == AccountTypeOAuth && !openai.IsCodexCLIRequest(req.Header.Get("user-agent")) {
-		req.Header.Set("user-agent", codexCLIUserAgent)
-	}
-
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
-	s.overrideBrowserUserAgent(ctx, account, req)
 
 	if req.Header.Get("content-type") == "" {
 		req.Header.Set("content-type", "application/json")
@@ -4288,6 +4260,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 		}
 	}
+	codexMimicApplied := false
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		apiKeyID := getAPIKeyIDFromContext(c)
@@ -4320,28 +4293,35 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			isCompact := isOpenAIResponsesCompactPath(c)
 			seed := promptCacheKey
 			if seed == "" && isCompact {
-				seed = resolveOpenAICompactSessionID(c)
+				seed = resolveOpenAICompactMimicSessionID(c)
 			}
-			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, resolveOpenAIUpstreamOriginator(c, isCodexCLI), isCompact)
+			req.Header.Del("chatgpt-account-id")
+			if chatgptAccountID := account.GetChatGPTAccountID(); chatgptAccountID != "" {
+				req.Header.Set("chatgpt-account-id", chatgptAccountID)
+			}
+			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, "codex_cli_rs", isCompact)
 			s.applyCodexRequestCompression(req, body)
+			codexMimicApplied = true
 		}
 	}
 
-	// Apply custom User-Agent if configured
-	customUA := account.GetOpenAIUserAgent()
-	if customUA != "" {
-		req.Header.Set("user-agent", customUA)
-	}
+	if !codexMimicApplied {
+		// Apply custom User-Agent if configured
+		customUA := account.GetOpenAIUserAgent()
+		if customUA != "" {
+			req.Header.Set("user-agent", customUA)
+		}
 
-	// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
-	// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
-	if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
-		req.Header.Set("user-agent", codexCLIUserAgent)
-	}
+		// 若开启 ForceCodexCLI，则强制将上游 User-Agent 伪装为 Codex CLI。
+		// 用于网关未透传/改写 User-Agent 时，仍能命中 Codex 侧识别逻辑。
+		if s.cfg != nil && s.cfg.Gateway.ForceCodexCLI {
+			req.Header.Set("user-agent", codexCLIUserAgent)
+		}
 
-	// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
-	// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
-	s.overrideBrowserUserAgent(ctx, account, req)
+		// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效，若最终 user-agent 仍为浏览器
+		// （Chrome/Firefox/Safari/Edge 等），替换为后台配置的 Codex UA，避免 Cloudflare 触发 JS 质询。
+		s.overrideBrowserUserAgent(ctx, account, req)
+	}
 
 	// Ensure required headers exist
 	if req.Header.Get("content-type") == "" {
@@ -5803,6 +5783,17 @@ func resolveOpenAICompactSessionID(c *gin.Context) string {
 		if conversationID := strings.TrimSpace(c.GetHeader("conversation_id")); conversationID != "" {
 			return conversationID
 		}
+		if seed, ok := c.Get(openAICompactSessionSeedKey); ok {
+			if seedStr, ok := seed.(string); ok && strings.TrimSpace(seedStr) != "" {
+				return strings.TrimSpace(seedStr)
+			}
+		}
+	}
+	return uuid.NewString()
+}
+
+func resolveOpenAICompactMimicSessionID(c *gin.Context) string {
+	if c != nil {
 		if seed, ok := c.Get(openAICompactSessionSeedKey); ok {
 			if seedStr, ok := seed.(string); ok && strings.TrimSpace(seedStr) != "" {
 				return strings.TrimSpace(seedStr)

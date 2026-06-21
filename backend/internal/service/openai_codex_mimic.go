@@ -91,6 +91,31 @@ func buildCodexTurnMetadata(sessionUUID, windowID string) string {
 	return string(b)
 }
 
+func buildCodexWSPrewarmMetadata(sessionUUID, windowID string) string {
+	meta := struct {
+		SessionID    string `json:"session_id"`
+		ThreadID     string `json:"thread_id"`
+		ThreadSource string `json:"thread_source"`
+		TurnID       string `json:"turn_id"`
+		Sandbox      string `json:"sandbox"`
+		RequestKind  string `json:"request_kind"`
+		WindowID     string `json:"window_id"`
+	}{
+		SessionID:    sessionUUID,
+		ThreadID:     sessionUUID,
+		ThreadSource: "user",
+		TurnID:       "",
+		Sandbox:      codexTurnMetadataSandbox,
+		RequestKind:  "prewarm",
+		WindowID:     windowID,
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 // applyCodexOAuthMimicHeaders 将 OAuth 上游请求头无条件重建为与真实 Codex CLI HTTP POST 一致
 // （字段集合 + 取值 + 实抓基准），完全无视入站客户端传入的对应头。不处理 HTTP/2 头发送顺序（按既定范围）。
 //
@@ -100,28 +125,25 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	if req == nil {
 		return
 	}
-	// 删除入站/历史变体：真实 Codex HTTP POST 使用 session-id/thread-id（连字符），
-	// 且 HTTP 路径不发送 OpenAI-Beta（该头仅出现在 WebSocket 升级请求中）。
-	req.Header.Del("session_id")
-	req.Header.Del("conversation_id")
-	req.Header.Del("OpenAI-Beta")
-
-	// 清理经请求头白名单透传进来的“非 Codex”噪声头：真实 Codex CLI 的 HTTP POST 实抓中
-	// 不发送以下头。删除它们以保证上游请求头是与 Codex 一致的“固定集合”，不受入站客户端影响。
-	for _, noisy := range codexMimicStripInboundHeaders {
-		req.Header.Del(noisy)
+	authorization := strings.TrimSpace(req.Header.Get("authorization"))
+	chatgptAccountID := strings.TrimSpace(req.Header.Get("chatgpt-account-id"))
+	req.Header = make(http.Header)
+	if authorization != "" {
+		req.Header.Set("authorization", authorization)
 	}
+	if chatgptAccountID != "" {
+		req.Header.Set("chatgpt-account-id", chatgptAccountID)
+	}
+	_ = originator
 
-	// User-Agent 无条件强制为 Codex CLI 画像（忽略入站 UA）；账号自定义 UA 仍可由调用方后置覆盖。
+	// User-Agent 无条件强制为 Codex CLI 画像（忽略入站 UA），后续调用方不得覆盖。
 	req.Header.Set("user-agent", codexCLIUserAgent)
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
 	req.Header.Set("version", codexCLIVersion)
 	req.Header.Set("x-codex-beta-features", codexBetaFeaturesValue)
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
-	if strings.TrimSpace(originator) != "" {
-		req.Header.Set("originator", originator)
-	}
+	req.Header.Set("originator", "codex_cli_rs")
 
 	if isCompact {
 		req.Header.Set("accept", "application/json")
@@ -147,6 +169,54 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID))
 }
 
+// applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex CLI 画像。
+// WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
+// Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。
+func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionSeed, originator, turnMetadata string) {
+	if headers == nil {
+		return
+	}
+	authorization := strings.TrimSpace(headers.Get("authorization"))
+	chatgptAccountID := strings.TrimSpace(headers.Get("chatgpt-account-id"))
+	for key := range headers {
+		delete(headers, key)
+	}
+	if authorization != "" {
+		headers.Set("authorization", authorization)
+	}
+	if chatgptAccountID != "" {
+		headers.Set("chatgpt-account-id", chatgptAccountID)
+	}
+	_ = originator
+	_ = turnMetadata
+
+	headers.Set("user-agent", codexCLIUserAgent)
+	headers.Set("version", codexCLIVersion)
+	headers.Set("openai-beta", openAIWSBetaV2Value)
+	headers.Set("originator", "codex_cli_rs")
+	headers.Set("x-codex-beta-features", codexBetaFeaturesValue)
+
+	sessUUID := generateCodexSessionUUID(apiKeyID, sessionSeed)
+	if sessUUID == "" {
+		if v, err := uuid.NewV7(); err == nil {
+			sessUUID = v.String()
+		}
+	}
+	if sessUUID == "" {
+		return
+	}
+	windowID := sessUUID + ":0"
+	headers.Set("session-id", sessUUID)
+	headers.Set("thread-id", sessUUID)
+	headers.Set("x-client-request-id", sessUUID)
+	headers.Set("x-codex-window-id", windowID)
+
+	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID)
+	if metadata != "" {
+		headers.Set("x-codex-turn-metadata", metadata)
+	}
+}
+
 // codexRequestCompressionEnabled 是否对 OAuth Codex 上游请求体启用 zstd 压缩（默认启用）。
 func (s *OpenAIGatewayService) codexRequestCompressionEnabled() bool {
 	if s == nil || s.cfg == nil {
@@ -159,6 +229,13 @@ func (s *OpenAIGatewayService) codexRequestCompressionEnabled() bool {
 // 仅改写 req.Body / ContentLength / GetBody，不影响外部用于计费与日志的原始 body 切片。
 func (s *OpenAIGatewayService) applyCodexRequestCompression(req *http.Request, body []byte) {
 	if req == nil || !s.codexRequestCompressionEnabled() {
+		return
+	}
+	applyCodexRequestCompressionRaw(req, body)
+}
+
+func applyCodexRequestCompressionRaw(req *http.Request, body []byte) {
+	if req == nil {
 		return
 	}
 	compressed := httputil.CompressZstd(body)
