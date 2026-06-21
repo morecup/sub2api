@@ -705,6 +705,31 @@ export async function setPrivacy(id: number): Promise<Account> {
   return data
 }
 
+// ===== Codex Desktop API =====
+
+export async function getInviteEligibility(id: number): Promise<any> {
+  const { data } = await apiClient.get(`/admin/accounts/${id}/codex/invite-eligibility`)
+  return data
+}
+
+export async function inviteFriends(id: number, emails: string[]): Promise<any> {
+  const { data } = await apiClient.post(`/admin/accounts/${id}/codex/invite`, { emails })
+  return data
+}
+
+export async function getRateLimitResetCredits(id: number): Promise<any[]> {
+  const { data } = await apiClient.get(`/admin/accounts/${id}/codex/reset-credits`)
+  return data
+}
+
+export async function consumeResetCredit(id: number, creditId: string, redeemRequestId?: string): Promise<any> {
+  const { data } = await apiClient.post(`/admin/accounts/${id}/codex/consume-credit`, {
+    credit_id: creditId,
+    redeem_request_id: redeemRequestId || ''
+  })
+  return data
+}
+
 export const accountsAPI = {
   list,
   listWithEtag,
@@ -746,7 +771,11 @@ export const accountsAPI = {
   batchClearError,
   batchRefresh,
   setPrivacy,
-  revertProxyFallback
+  revertProxyFallback,
+  getInviteEligibility,
+  inviteFriends,
+  getRateLimitResetCredits,
+  consumeResetCredit
 }
 
 export default accountsAPI

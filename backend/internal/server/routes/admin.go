@@ -339,6 +339,12 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		accounts.POST("/exchange-setup-token-code", h.Admin.OAuth.ExchangeSetupTokenCode)
 		accounts.POST("/cookie-auth", h.Admin.OAuth.CookieAuth)
 		accounts.POST("/setup-token-cookie-auth", h.Admin.OAuth.SetupTokenCookieAuth)
+
+		// Codex Desktop API
+		accounts.GET("/:id/codex/invite-eligibility", h.Admin.Account.GetInviteEligibility)
+		accounts.POST("/:id/codex/invite", h.Admin.Account.InviteFriends)
+		accounts.GET("/:id/codex/reset-credits", h.Admin.Account.GetRateLimitResetCredits)
+		accounts.POST("/:id/codex/consume-credit", h.Admin.Account.ConsumeResetCredit)
 	}
 }
 

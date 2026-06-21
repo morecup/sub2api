@@ -58,16 +58,22 @@ def run(
 ) -> subprocess.CompletedProcess[str]:
     display_cwd = f" (cwd={cwd})" if cwd else ""
     info("$ " + " ".join(shlex.quote(part) for part in cmd) + display_cwd)
-    return subprocess.run(
+    input_bytes = None
+    if input_text is not None:
+        input_bytes = input_text.replace('\r\n', '\n').encode('utf-8')
+    result = subprocess.run(
         cmd,
         cwd=str(cwd) if cwd else None,
         env=env,
-        input=input_text,
-        text=True,
-        check=True,
+        input=input_bytes,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.STDOUT if capture else None,
+        check=True,
     )
+    if capture:
+        stdout = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''
+        return subprocess.CompletedProcess(cmd, result.returncode, stdout, None)
+    return subprocess.CompletedProcess(cmd, result.returncode, None, None)
 
 
 def output(cmd: list[str], *, cwd: Path | None = None) -> str:
@@ -299,9 +305,9 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build frontend, embed it into the Linux backend binary, upload to VPS, restart service.",
     )
-    parser.add_argument("--host", default=os.getenv("SUB2API_DEPLOY_HOST", "107.175.76.239"), help="SSH host")
+    parser.add_argument("--host", default=os.getenv("SUB2API_DEPLOY_HOST", "bald@107.175.76.239"), help="SSH host")
     parser.add_argument("--port", type=int, default=int(os.getenv("SUB2API_DEPLOY_PORT", "2222")), help="SSH port")
-    parser.add_argument("--identity-file", default=os.getenv("SUB2API_DEPLOY_IDENTITY_FILE"), help="SSH private key")
+    parser.add_argument("--identity-file", default=os.getenv("SUB2API_DEPLOY_IDENTITY_FILE", str(Path.home() / ".ssh" / "id_rsa")), help="SSH private key")
     parser.add_argument("--ssh-option", action="append", help="Extra ssh/scp -o option, can be repeated")
     parser.add_argument("--ssh-bin", default=os.getenv("SUB2API_SSH_BIN"), help="Path to ssh executable")
     parser.add_argument("--scp-bin", default=os.getenv("SUB2API_SCP_BIN"), help="Path to scp executable")
@@ -313,12 +319,15 @@ def parse_args(argv: Iterable[str]) -> argparse.Namespace:
     parser.add_argument("--skip-frontend-build", action="store_true", help="Do not run pnpm build")
     parser.add_argument("--no-install", action="store_true", help="Do not auto-run pnpm install when node_modules is missing")
     parser.add_argument("--build-only", action="store_true", help="Only build the Linux binary; do not upload or restart")
-    parser.add_argument("--no-sudo", action="store_true", help="Do not use sudo for remote install/restart")
+    parser.add_argument("--no-sudo", action="store_true", default=True, help="Do not use sudo for remote install/restart (default)")
+    parser.add_argument("--use-sudo", action="store_true", help="Use sudo for remote install/restart")
     return parser.parse_args(list(argv))
 
 
 def main(argv: Iterable[str] = sys.argv[1:]) -> int:
     args = parse_args(argv)
+    if args.use_sudo:
+        args.no_sudo = False
 
     if not args.skip_frontend_build:
         build_frontend(skip_install=args.no_install)

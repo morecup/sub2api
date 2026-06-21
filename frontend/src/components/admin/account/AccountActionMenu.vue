@@ -45,6 +45,17 @@
               <Icon name="refresh" size="sm" />
               {{ t('admin.accounts.resetQuota') }}
             </button>
+            <template v-if="isOpenAIOAuth">
+              <div class="my-1 border-t border-gray-100 dark:border-dark-700"></div>
+              <button @click="$emit('codex-invite', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-gray-100 dark:hover:bg-dark-700">
+                <Icon name="gift" size="sm" />
+                {{ t('admin.accounts.codexInvite') }}
+              </button>
+              <button @click="$emit('codex-reset-credits', account); $emit('close')" class="flex w-full items-center gap-2 px-4 py-2 text-sm text-amber-600 hover:bg-gray-100 dark:hover:bg-dark-700">
+                <Icon name="creditCard" size="sm" />
+                {{ t('admin.accounts.codexResetCredits') }}
+              </button>
+            </template>
           </template>
         </div>
       </div>
@@ -59,7 +70,7 @@ import { Icon } from '@/components/icons'
 import type { Account } from '@/types'
 
 const props = defineProps<{ show: boolean; account: Account | null; position: { top: number; left: number } | null }>()
-const emit = defineEmits(['close', 'test', 'stats', 'schedule', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy'])
+const emit = defineEmits(['close', 'test', 'stats', 'schedule', 'reauth', 'refresh-token', 'recover-state', 'reset-quota', 'set-privacy', 'codex-invite', 'codex-reset-credits'])
 const { t } = useI18n()
 const isRateLimited = computed(() => {
   if (props.account?.rate_limit_reset_at && new Date(props.account.rate_limit_reset_at) > new Date()) {

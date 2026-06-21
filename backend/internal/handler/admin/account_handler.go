@@ -58,6 +58,7 @@ type AccountHandler struct {
 	sessionLimitCache       service.SessionLimitCache
 	rpmCache                service.RPMCache
 	tokenCacheInvalidator   service.TokenCacheInvalidator
+	codexDesktopService     *service.CodexDesktopAPIService
 }
 
 // NewAccountHandler creates a new admin account handler
@@ -75,6 +76,7 @@ func NewAccountHandler(
 	sessionLimitCache service.SessionLimitCache,
 	rpmCache service.RPMCache,
 	tokenCacheInvalidator service.TokenCacheInvalidator,
+	codexDesktopService *service.CodexDesktopAPIService,
 ) *AccountHandler {
 	return &AccountHandler{
 		adminService:            adminService,
@@ -90,6 +92,7 @@ func NewAccountHandler(
 		sessionLimitCache:       sessionLimitCache,
 		rpmCache:                rpmCache,
 		tokenCacheInvalidator:   tokenCacheInvalidator,
+		codexDesktopService:     codexDesktopService,
 	}
 }
 
@@ -2425,4 +2428,137 @@ func sanitizeExtraBaseRPM(extra map[string]any) {
 		v = 10000
 	}
 	extra["base_rpm"] = v
+}
+
+// Codex Desktop API handlers
+
+func (h *AccountHandler) validateCodexDesktopAccount(ctx context.Context, accountID int64) (*service.Account, error) {
+	account, err := h.adminService.GetAccount(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	if account.Platform != service.PlatformOpenAI {
+		return nil, fmt.Errorf("account is not an OpenAI account")
+	}
+	if !account.IsOAuth() {
+		return nil, fmt.Errorf("account is not an OAuth account")
+	}
+	return account, nil
+}
+
+// GetInviteEligibility checks if the account is eligible to invite friends.
+// GET /api/v1/admin/accounts/:id/codex/invite-eligibility
+func (h *AccountHandler) GetInviteEligibility(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	account, err := h.validateCodexDesktopAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.codexDesktopService.GetInviteEligibility(c.Request.Context(), account)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+// InviteFriends sends invite emails to friends.
+// POST /api/v1/admin/accounts/:id/codex/invite
+func (h *AccountHandler) InviteFriends(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	var req struct {
+		Emails []string `json:"emails" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if len(req.Emails) == 0 {
+		response.BadRequest(c, "At least one email is required")
+		return
+	}
+
+	account, err := h.validateCodexDesktopAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.codexDesktopService.InviteFriends(c.Request.Context(), account, req.Emails)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, result)
+}
+
+// GetRateLimitResetCredits fetches available rate-limit reset credits.
+// GET /api/v1/admin/accounts/:id/codex/reset-credits
+func (h *AccountHandler) GetRateLimitResetCredits(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	account, err := h.validateCodexDesktopAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	credits, err := h.codexDesktopService.GetRateLimitResetCredits(c.Request.Context(), account)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, credits)
+}
+
+// ConsumeResetCredit consumes a rate-limit reset credit.
+// POST /api/v1/admin/accounts/:id/codex/consume-credit
+func (h *AccountHandler) ConsumeResetCredit(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+
+	var req struct {
+		CreditID        string `json:"credit_id" binding:"required"`
+		RedeemRequestID string `json:"redeem_request_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+
+	account, err := h.validateCodexDesktopAccount(c.Request.Context(), accountID)
+	if err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	result, err := h.codexDesktopService.ConsumeRateLimitResetCredit(c.Request.Context(), account, req.CreditID, req.RedeemRequestID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+
+	response.Success(c, result)
 }
