@@ -64,16 +64,38 @@ func generateCodexSessionUUID(apiKeyID int64, seed string) string {
 	return u.String()
 }
 
+// extractCodexWorkspaces 从入站 x-codex-turn-metadata 中安全提取 workspaces 对象。
+// 仅保留 workspaces 字段，其余字段由伪装层强制重写；解析失败或非对象时返回 nil。
+func extractCodexWorkspaces(turnMetadata string) map[string]any {
+	if turnMetadata == "" {
+		return nil
+	}
+	var payload struct {
+		Workspaces map[string]any `json:"workspaces"`
+	}
+	if err := json.Unmarshal([]byte(turnMetadata), &payload); err != nil {
+		return nil
+	}
+	if payload.Workspaces == nil {
+		return nil
+	}
+	return payload.Workspaces
+}
+
 // buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合与顺序严格对齐真实 Codex
 // Desktop App 0.142.0-alpha.6 实抓报文（普通一轮 request_kind=turn）：
 // installation_id, session_id, thread_id, turn_id, window_id, request_kind, sandbox, workspaces, turn_started_at_unix_ms, workspace_kind。
 // turn_id 为每请求新生成的 UUIDv7；session_id/thread_id 复用会话 UUID。
 // 注意：Desktop App 不含 thread_source 字段，sandbox 为 "none"（与 CLI 的 "windows_elevated" 不同）。
-// workspaces 为代理端无法获知的客户端本地动态数据，置空对象 {} 以保持字段集合一致。
-func buildCodexTurnMetadata(sessionUUID, windowID string) string {
+// workspaces 优先使用入站 x-codex-turn-metadata 中的客户端值（代理端无法获知本地 git 信息），
+// 未提供时回退空对象 {} 以保持字段集合一致。
+func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any) string {
 	turnID := sessionUUID
 	if v, err := uuid.NewV7(); err == nil {
 		turnID = v.String()
+	}
+	if workspaces == nil {
+		workspaces = map[string]any{}
 	}
 	meta := struct {
 		InstallationID      string         `json:"installation_id"`
@@ -94,7 +116,7 @@ func buildCodexTurnMetadata(sessionUUID, windowID string) string {
 		WindowID:            windowID,
 		RequestKind:         "turn",
 		Sandbox:             codexTurnMetadataSandbox,
-		Workspaces:          map[string]any{},
+		Workspaces:          workspaces,
 		TurnStartedAtUnixMs: time.Now().UnixMilli(),
 		WorkspaceKind:       "project",
 	}
@@ -146,6 +168,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	}
 	authorization := strings.TrimSpace(req.Header.Get("authorization"))
 	chatgptAccountID := strings.TrimSpace(req.Header.Get("chatgpt-account-id"))
+	inboundWorkspaces := extractCodexWorkspaces(req.Header.Get("x-codex-turn-metadata"))
 	req.Header = make(http.Header)
 	if authorization != "" {
 		req.Header.Set("authorization", authorization)
@@ -187,7 +210,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	// x-client-request-id 与真实 Codex 一致，取 thread-id（实抓三者同值）。
 	req.Header.Set("x-client-request-id", sessUUID)
 	req.Header.Set("x-codex-window-id", windowID)
-	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID))
+	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces))
 }
 
 // applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
