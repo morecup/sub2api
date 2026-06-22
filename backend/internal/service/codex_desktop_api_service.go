@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -36,9 +37,15 @@ const (
 
 // InviteEligibility represents the eligibility response for referral invite.
 type InviteEligibility struct {
-	IsEligible bool   `json:"is_eligible"`
-	Reason     string `json:"reason,omitempty"`
-	Raw        any    `json:"raw,omitempty"`
+	IsEligible           bool   `json:"is_eligible"`
+	ShouldShow           *bool  `json:"should_show,omitempty"`
+	GrantAction          string `json:"grant_action,omitempty"`
+	GrantAmount          *int64 `json:"grant_amount,omitempty"`
+	RemainingReferrals   *int64 `json:"remaining_referrals,omitempty"`
+	IneligibleReason     string `json:"ineligible_reason,omitempty"`
+	IneligibleReasonCode string `json:"ineligible_reason_code,omitempty"`
+	Reason               string `json:"reason,omitempty"`
+	Raw                  any    `json:"raw,omitempty"`
 }
 
 // ResetCredit represents a rate-limit reset credit entry.
@@ -63,10 +70,35 @@ type ConsumeCreditResult struct {
 func (s *CodexDesktopAPIService) setDesktopHeaders(req *http.Request, accessToken, chatgptAccountID string) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("ChatGPT-Account-Id", chatgptAccountID)
+	req.Header.Set("User-Agent", codexDesktopUserAgent)
 	req.Header.Set("OAI-Language", codexDesktopAPILanguage)
 	req.Header.Set("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth)
 	req.Header.Set("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState)
 	req.Header.Set("originator", codexDesktopOriginator)
+}
+
+func codexDesktopOptionalCookie(account *Account) string {
+	if account == nil {
+		return ""
+	}
+	for _, key := range []string{"chatgpt_cookie", "chatgpt_browser_cookie", "browser_cookie", "cookie"} {
+		if value := strings.TrimSpace(account.GetCredential(key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func codexDesktopOptionalBrowserUserAgent(account *Account) string {
+	if account == nil {
+		return codexDesktopUserAgent
+	}
+	for _, key := range []string{"chatgpt_user_agent", "chatgpt_browser_user_agent", "browser_user_agent"} {
+		if value := strings.TrimSpace(account.GetCredential(key)); value != "" {
+			return value
+		}
+	}
+	return codexDesktopUserAgent
 }
 
 func (s *CodexDesktopAPIService) resolveProxyURL(ctx context.Context, account *Account) string {
@@ -107,20 +139,27 @@ func (s *CodexDesktopAPIService) GetInviteEligibility(ctx context.Context, accou
 
 	url := fmt.Sprintf("%s/referrals/invite/eligibility?referral_key=%s", codexDesktopAPIBaseURL, codexDesktopAPIReferralKey)
 
-	resp, err := client.R().
+	request := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
+		SetHeader("User-Agent", codexDesktopOptionalBrowserUserAgent(account)).
 		SetHeader("OAI-Language", codexDesktopAPILanguage).
 		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
 		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
 		SetHeader("originator", codexDesktopOriginator).
-		SetHeader("Accept", "application/json").
-		Get(url)
+		SetHeader("Accept", "application/json")
+	if cookie := codexDesktopOptionalCookie(account); cookie != "" {
+		request.SetHeader("Cookie", cookie)
+	}
+	resp, err := request.Get(url)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_REQUEST_FAILED", "request failed: %v", err)
 	}
 	if !resp.IsSuccessState() {
+		if resp.StatusCode == http.StatusForbidden {
+			return nil, infraerrors.Newf(resp.StatusCode, "CODEX_DESKTOP_ELIGIBILITY_FORBIDDEN", "eligibility check forbidden: upstream may require the same-account ChatGPT browser Cookie; status %d, body: %s", resp.StatusCode, truncate(resp.String(), 300))
+		}
 		return nil, infraerrors.Newf(resp.StatusCode, "CODEX_DESKTOP_ELIGIBILITY_FAILED", "eligibility check failed: status %d, body: %s", resp.StatusCode, truncate(resp.String(), 300))
 	}
 
@@ -129,17 +168,7 @@ func (s *CodexDesktopAPIService) GetInviteEligibility(ctx context.Context, accou
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_PARSE_ERROR", "failed to parse response: %v", err)
 	}
 
-	result := &InviteEligibility{Raw: raw}
-	if m, ok := raw.(map[string]any); ok {
-		if eligible, ok := m["is_eligible"].(bool); ok {
-			result.IsEligible = eligible
-		}
-		if reason, ok := m["reason"].(string); ok {
-			result.Reason = reason
-		}
-	}
-
-	return result, nil
+	return parseInviteEligibility(raw), nil
 }
 
 // InviteFriends sends invite emails to friends.
@@ -169,18 +198,22 @@ func (s *CodexDesktopAPIService) InviteFriends(ctx context.Context, account *Acc
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_MARSHAL_ERROR", "failed to marshal request body: %v", err)
 	}
 
-	resp, err := client.R().
+	request := client.R().
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
+		SetHeader("User-Agent", codexDesktopOptionalBrowserUserAgent(account)).
 		SetHeader("OAI-Language", codexDesktopAPILanguage).
 		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
 		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
 		SetHeader("originator", codexDesktopOriginator).
 		SetHeader("Content-Type", "application/json").
 		SetHeader("Accept", "application/json").
-		SetBody(bodyBytes).
-		Post(url)
+		SetBody(bodyBytes)
+	if cookie := codexDesktopOptionalCookie(account); cookie != "" {
+		request.SetHeader("Cookie", cookie)
+	}
+	resp, err := request.Post(url)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_REQUEST_FAILED", "request failed: %v", err)
 	}
@@ -212,6 +245,7 @@ func (s *CodexDesktopAPIService) GetRateLimitResetCredits(ctx context.Context, a
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
+		SetHeader("User-Agent", codexDesktopUserAgent).
 		SetHeader("OAI-Language", codexDesktopAPILanguage).
 		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
 		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
@@ -265,6 +299,7 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 		SetContext(ctx).
 		SetHeader("Authorization", "Bearer "+accessToken).
 		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
+		SetHeader("User-Agent", codexDesktopUserAgent).
 		SetHeader("OAI-Language", codexDesktopAPILanguage).
 		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
 		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
@@ -283,6 +318,104 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 	var raw any
 	_ = json.Unmarshal([]byte(resp.String()), &raw)
 	return &ConsumeCreditResult{Success: true, Raw: raw}, nil
+}
+
+func parseInviteEligibility(raw any) *InviteEligibility {
+	result := &InviteEligibility{Raw: raw}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return result
+	}
+
+	if shouldShow, ok := boolMapValue(m, "should_show"); ok {
+		result.ShouldShow = &shouldShow
+		result.IsEligible = shouldShow
+	} else if eligible, ok := boolMapValue(m, "is_eligible"); ok {
+		result.IsEligible = eligible
+	} else if eligible, ok := boolMapValue(m, "eligible"); ok {
+		result.IsEligible = eligible
+	}
+
+	result.GrantAction = stringMapValue(m, "grant_action")
+	result.GrantAmount = int64MapValue(m, "grant_amount")
+	result.RemainingReferrals = int64MapValue(m, "remaining_referrals")
+	result.IneligibleReason = stringMapValue(m, "ineligible_reason")
+	result.IneligibleReasonCode = stringMapValue(m, "ineligible_reason_code")
+
+	result.Reason = firstNonEmptyInviteString(
+		stringMapValue(m, "reason"),
+		result.IneligibleReason,
+		result.IneligibleReasonCode,
+	)
+	return result
+}
+
+func boolMapValue(m map[string]any, key string) (bool, bool) {
+	value, ok := m[key]
+	if !ok || value == nil {
+		return false, false
+	}
+	switch v := value.(type) {
+	case bool:
+		return v, true
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(v))
+		if err == nil {
+			return parsed, true
+		}
+	}
+	return false, false
+}
+
+func stringMapValue(m map[string]any, key string) string {
+	value, ok := m[key]
+	if !ok || value == nil {
+		return ""
+	}
+	if s, ok := value.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
+func int64MapValue(m map[string]any, key string) *int64 {
+	value, ok := m[key]
+	if !ok || value == nil {
+		return nil
+	}
+	var parsed int64
+	switch v := value.(type) {
+	case int:
+		parsed = int64(v)
+	case int64:
+		parsed = v
+	case float64:
+		parsed = int64(v)
+	case json.Number:
+		n, err := v.Int64()
+		if err != nil {
+			return nil
+		}
+		parsed = n
+	case string:
+		n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			return nil
+		}
+		parsed = n
+	default:
+		return nil
+	}
+	return &parsed
+}
+
+func firstNonEmptyInviteString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 // parseResetCredits extracts ResetCredit entries from the API response.

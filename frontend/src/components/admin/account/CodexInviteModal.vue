@@ -57,7 +57,7 @@
       </button>
       <button
         @click="handleInvite"
-        :disabled="!eligibility?.is_eligible || sending || !emailsText.trim()"
+        :disabled="sending || !emailsText.trim()"
         class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
       >
         {{ sending ? t('common.loading') + '...' : t('admin.accounts.codexSendInvite') }}
