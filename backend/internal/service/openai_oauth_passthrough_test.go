@@ -459,7 +459,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 		Type:           AccountTypeOAuth,
 		Concurrency:    1,
 		Credentials:    map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
-		Extra:          map[string]any{"openai_passthrough": true},
+		Extra:          map[string]any{"openai_passthrough": true, "openai_device_id": "dev-should-not-leak"},
 		Status:         StatusActive,
 		Schedulable:    true,
 		RateMultiplier: f64p(1),
@@ -480,6 +480,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	// 其余关键字段保持原值。
 	require.Equal(t, "gpt-5.2", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
+	require.Equal(t, codexInstallationID, gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
+	require.NotEqual(t, "dev-should-not-leak", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 
 	// 2) only auth is replaced; inbound auth/cookie are not forwarded
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))

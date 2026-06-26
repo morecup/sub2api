@@ -2811,8 +2811,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if codexResult.Modified {
 			markDecodedModified()
 		}
-		// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐（compact 形态不同，跳过）。
-		if !isCompactRequest && applyCodexClientMetadata(decoded, account) {
+		// 补齐 client_metadata 安装标识，与 x-codex-turn-metadata.installation_id 保持同源同值
+		// （compact 形态不同，跳过）。
+		if !isCompactRequest && applyCodexClientMetadata(decoded) {
 			markDecodedModified()
 		}
 		if codexResult.NormalizedModel != "" {
@@ -7095,6 +7096,14 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 			next, err := sjson.SetBytes(normalized, "stream", true)
 			if err != nil {
 				return body, false, fmt.Errorf("normalize passthrough body stream=true: %w", err)
+			}
+			normalized = next
+			changed = true
+		}
+		if installationID := gjson.GetBytes(normalized, "client_metadata.x-codex-installation-id"); !installationID.Exists() || strings.TrimSpace(installationID.String()) != codexInstallationID {
+			next, err := sjson.SetBytes(normalized, "client_metadata.x-codex-installation-id", codexInstallationID)
+			if err != nil {
+				return body, false, fmt.Errorf("normalize passthrough body codex installation id: %w", err)
 			}
 			normalized = next
 			changed = true

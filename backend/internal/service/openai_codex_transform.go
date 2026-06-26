@@ -1052,41 +1052,33 @@ func ensureCodexReasoningInclude(reqBody map[string]any) bool {
 	}
 }
 
-// applyCodexClientMetadata 在请求体补齐 client_metadata["x-codex-installation-id"]，
-// 取值为账号真实的 openai_device_id（最新 Codex 在请求体携带的安装标识）。
+// applyCodexClientMetadata 在请求体写入 client_metadata["x-codex-installation-id"]。
 //
-// 加法式、幂等：仅在账号存在 device_id 且该键缺失时注入，绝不覆盖既有 client_metadata
-// （如 turn metadata），也不伪造——无 device_id 时不写入。
-func applyCodexClientMetadata(reqBody map[string]any, account *Account) bool {
-	if account == nil {
-		return false
-	}
-	deviceID := strings.TrimSpace(account.GetOpenAIDeviceID())
-	if deviceID == "" {
-		return false
-	}
+// 该字段与 x-codex-turn-metadata.installation_id 同源，均使用当前固定的 Codex
+// Desktop 安装标识；已有不一致值会被覆盖，避免同一请求出现两套 installation id。
+func applyCodexClientMetadata(reqBody map[string]any) bool {
 	const key = "x-codex-installation-id"
 	switch existing := reqBody["client_metadata"].(type) {
 	case map[string]any:
-		if v, ok := existing[key].(string); ok && strings.TrimSpace(v) != "" {
+		if v, ok := existing[key].(string); ok && strings.TrimSpace(v) == codexInstallationID {
 			return false
 		}
-		existing[key] = deviceID
+		existing[key] = codexInstallationID
 		reqBody["client_metadata"] = existing
 		return true
 	case map[string]string:
-		if strings.TrimSpace(existing[key]) != "" {
+		if strings.TrimSpace(existing[key]) == codexInstallationID {
 			return false
 		}
 		next := make(map[string]any, len(existing)+1)
 		for k, v := range existing {
 			next[k] = v
 		}
-		next[key] = deviceID
+		next[key] = codexInstallationID
 		reqBody["client_metadata"] = next
 		return true
 	case nil:
-		reqBody["client_metadata"] = map[string]any{key: deviceID}
+		reqBody["client_metadata"] = map[string]any{key: codexInstallationID}
 		return true
 	default:
 		return false
