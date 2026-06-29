@@ -4126,9 +4126,6 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 		line := scanner.Text()
 		lineStartsClientOutput := false
 		forceFlushFailedEvent := false
-		if account != nil && account.Type == AccountTypeOAuth && strings.TrimSpace(line) == "event: response.incomplete" {
-			line = "event: response.completed"
-		}
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
 			trimmedData := strings.TrimSpace(data)
@@ -4189,14 +4186,6 @@ func (s *OpenAIGatewayService) handleStreamingResponsePassthrough(
 				dataBytes = sanitizedData
 				trimmedData = strings.TrimSpace(string(sanitizedData))
 				line = "data: " + string(sanitizedData)
-			}
-			if account != nil && account.Type == AccountTypeOAuth {
-				if completedData, completed := normalizeOpenAIIncompleteMaxOutputForClient(dataBytes, eventType); completed {
-					dataBytes = completedData
-					trimmedData = strings.TrimSpace(string(completedData))
-					line = "data: " + string(completedData)
-					eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
-				}
 			}
 			lineStartsClientOutput = forceFlushFailedEvent || openAIStreamDataStartsClientOutput(trimmedData, eventType)
 			if firstTokenMs == nil && lineStartsClientOutput && trimmedData != "[DONE]" {
@@ -5126,9 +5115,6 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 		if streamFailoverErr != nil {
 			return
 		}
-		if account != nil && account.Type == AccountTypeOAuth && strings.TrimSpace(line) == "event: response.incomplete" {
-			line = "event: response.completed"
-		}
 		// Extract data from SSE line (supports both "data: " and "data:" formats)
 		if data, ok := extractOpenAISSEDataLine(line); ok {
 			dataBytes := []byte(data)
@@ -5200,14 +5186,6 @@ func (s *OpenAIGatewayService) handleStreamingResponse(ctx context.Context, resp
 				dataBytes = sanitizedData
 				data = string(sanitizedData)
 				line = "data: " + data
-			}
-			if account != nil && account.Type == AccountTypeOAuth {
-				if completedData, completed := normalizeOpenAIIncompleteMaxOutputForClient(dataBytes, eventType); completed {
-					dataBytes = completedData
-					data = string(completedData)
-					line = "data: " + data
-					eventType = strings.TrimSpace(gjson.GetBytes(dataBytes, "type").String())
-				}
 			}
 			// Replace model in response if needed.
 			// Fast path: most events do not contain model field values.
@@ -5915,69 +5893,6 @@ func normalizeResponsesStreamingTerminalOutput(data []byte, acc *apicompat.Buffe
 		return data, false
 	}
 	return updated, true
-}
-
-func normalizeOpenAIIncompleteMaxOutputForClient(data []byte, eventType string) ([]byte, bool) {
-	if eventType != "response.incomplete" || len(data) == 0 || !gjson.ValidBytes(data) {
-		return data, false
-	}
-	response := gjson.GetBytes(data, "response")
-	if !response.Exists() || strings.TrimSpace(response.Get("incomplete_details.reason").String()) != "max_output_tokens" {
-		return data, false
-	}
-	if !openAIIncompleteResponseHasMessageOutput(response) {
-		return data, false
-	}
-
-	updated, err := sjson.SetBytes(data, "type", "response.completed")
-	if err != nil {
-		return data, false
-	}
-	if updated, err = sjson.SetBytes(updated, "response.status", "completed"); err != nil {
-		return data, false
-	}
-	if updated, err = sjson.DeleteBytes(updated, "response.incomplete_details"); err != nil {
-		return data, false
-	}
-	completedAt := gjson.GetBytes(updated, "response.completed_at")
-	if !completedAt.Exists() || completedAt.Type == gjson.Null {
-		ts := response.Get("created_at").Int()
-		if ts <= 0 {
-			ts = time.Now().Unix()
-		}
-		if updated, err = sjson.SetBytes(updated, "response.completed_at", ts); err != nil {
-			return data, false
-		}
-	}
-	for i, item := range response.Get("output").Array() {
-		if strings.TrimSpace(item.Get("status").String()) != "incomplete" {
-			continue
-		}
-		path := fmt.Sprintf("response.output.%d.status", i)
-		if updated, err = sjson.SetBytes(updated, path, "completed"); err != nil {
-			return data, false
-		}
-	}
-	return updated, !bytes.Equal(updated, data)
-}
-
-func openAIIncompleteResponseHasMessageOutput(response gjson.Result) bool {
-	output := response.Get("output")
-	if !output.IsArray() {
-		return false
-	}
-	hasMessage := false
-	output.ForEach(func(_, item gjson.Result) bool {
-		if strings.TrimSpace(item.Get("type").String()) != "message" {
-			return true
-		}
-		if content := item.Get("content"); content.IsArray() && len(content.Array()) > 0 {
-			hasMessage = true
-			return false
-		}
-		return true
-	})
-	return hasMessage
 }
 
 func responsesStreamEventMayContributeToOutput(eventType string) bool {

@@ -2199,7 +2199,7 @@ func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucce
 	require.Equal(t, 1, result.usage.CacheReadInputTokens)
 }
 
-func TestOpenAIStreamingOAuthIncompleteMaxOutputIsCompletedForClient(t *testing.T) {
+func TestOpenAIStreamingOAuthIncompleteMaxOutputIsPassedThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
@@ -2235,16 +2235,15 @@ func TestOpenAIStreamingOAuthIncompleteMaxOutputIsCompletedForClient(t *testing.
 	require.Equal(t, 983, result.usage.OutputTokens)
 
 	body := rec.Body.String()
-	require.Contains(t, body, "event: response.completed")
-	require.Contains(t, body, `"type":"response.completed"`)
-	require.Contains(t, body, `"status":"completed"`)
-	require.Contains(t, body, `"completed_at":1782729217`)
-	require.NotContains(t, body, "response.incomplete")
-	require.NotContains(t, body, "incomplete_details")
+	require.Contains(t, body, "event: response.incomplete")
+	require.Contains(t, body, `"type":"response.incomplete"`)
+	require.Contains(t, body, `"status":"incomplete"`)
+	require.Contains(t, body, `"incomplete_details":{"reason":"max_output_tokens"}`)
+	require.NotContains(t, body, "event: response.completed")
 	require.Contains(t, body, `"text":"partial"`)
 }
 
-func TestOpenAIStreamingPassthroughOAuthIncompleteMaxOutputIsCompletedForClient(t *testing.T) {
+func TestOpenAIStreamingPassthroughOAuthIncompleteMaxOutputIsPassedThrough(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
 		Gateway: config.GatewayConfig{
@@ -2278,12 +2277,11 @@ func TestOpenAIStreamingPassthroughOAuthIncompleteMaxOutputIsCompletedForClient(
 	require.Equal(t, 983, result.usage.OutputTokens)
 
 	body := rec.Body.String()
-	require.Contains(t, body, "event: response.completed")
-	require.Contains(t, body, `"type":"response.completed"`)
-	require.Contains(t, body, `"status":"completed"`)
-	require.Contains(t, body, `"completed_at":1782729217`)
-	require.NotContains(t, body, "response.incomplete")
-	require.NotContains(t, body, "incomplete_details")
+	require.Contains(t, body, "event: response.incomplete")
+	require.Contains(t, body, `"type":"response.incomplete"`)
+	require.Contains(t, body, `"status":"incomplete"`)
+	require.Contains(t, body, `"incomplete_details":{"reason":"max_output_tokens"}`)
+	require.NotContains(t, body, "event: response.completed")
 	require.Contains(t, body, `"text":"partial"`)
 }
 
