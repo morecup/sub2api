@@ -153,6 +153,15 @@ func TestIsMigrationChecksumCompatible(t *testing.T) {
 		}
 	})
 
+	t.Run("129历史Claude Code模板checksum可兼容", func(t *testing.T) {
+		ok := isMigrationChecksumCompatible(
+			"129_seed_claude_code_template.sql",
+			"10324a1f1c176a5ab6bc24ac01eee8563f66ffabf4c013b8e4e023caf9f26328",
+			"12ca46ecba7b67a3e93997236d31abf1aa27f89fb8cb96b590c1bea262e243c5",
+		)
+		require.True(t, ok)
+	})
+
 	t.Run("119未知checksum不兼容", func(t *testing.T) {
 		ok := isMigrationChecksumCompatible(
 			"119_enforce_payment_orders_out_trade_no_unique.sql",
