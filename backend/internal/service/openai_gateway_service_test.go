@@ -3117,6 +3117,27 @@ func TestHandleErrorResponseCyberPolicyPassthrough(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, mark.UpstreamStatus)
 }
 
+func TestHandleErrorResponsePassesThroughRawUpstreamBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	svc := &OpenAIGatewayService{cfg: &config.Config{}}
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	upstreamBody := `{"error":{"message":"Invalid value: 'max'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', and 'xhigh'.","type":"invalid_request_error","param":"reasoning.effort","code":"invalid_value"}}`
+	resp := &http.Response{
+		StatusCode: http.StatusBadRequest,
+		Header:     http.Header{"Content-Type": []string{"application/json"}, "X-Request-Id": []string{"rid"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamBody)),
+	}
+
+	_, err := svc.handleErrorResponse(context.Background(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Name: "a"}, nil)
+	require.Error(t, err)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.JSONEq(t, upstreamBody, rec.Body.String())
+	require.NotContains(t, rec.Body.String(), "Upstream request failed")
+}
+
 func TestHandleCompatErrorResponseCyberPolicyEarlyReturn(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}

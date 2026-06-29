@@ -62,7 +62,7 @@ func TestGatewayHandleErrorResponse_NoRuleKeepsDefault(t *testing.T) {
 	assert.Equal(t, "Upstream request failed", errField["message"])
 }
 
-func TestOpenAIHandleErrorResponse_NoRuleKeepsDefault(t *testing.T) {
+func TestOpenAIHandleErrorResponse_NoRulePassesThroughRawUpstreamBody(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -78,14 +78,9 @@ func TestOpenAIHandleErrorResponse_NoRuleKeepsDefault(t *testing.T) {
 
 	_, err := svc.handleErrorResponse(context.Background(), resp, c, account, nil)
 	require.Error(t, err)
-	assert.Equal(t, http.StatusBadGateway, rec.Code)
-
-	var payload map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
-	errField, ok := payload["error"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "upstream_error", errField["type"])
-	assert.Equal(t, "Upstream request failed", errField["message"])
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	assert.JSONEq(t, string(respBody), rec.Body.String())
+	assert.NotContains(t, rec.Body.String(), "Upstream request failed")
 }
 
 func TestGeminiWriteGeminiMappedError_NoRuleKeepsDefault(t *testing.T) {

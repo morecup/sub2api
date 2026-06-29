@@ -82,7 +82,7 @@ func (e *OpenAIImagesUpstreamError) clientErrorType() string {
 
 func (e *OpenAIImagesUpstreamError) clientMessage() string {
 	if e == nil {
-		return "Upstream request failed"
+		return "upstream error"
 	}
 	if trimmed := strings.TrimSpace(e.Message); trimmed != "" {
 		return trimmed
@@ -90,7 +90,7 @@ func (e *OpenAIImagesUpstreamError) clientMessage() string {
 	if trimmed := strings.TrimSpace(e.Code); trimmed != "" {
 		return trimmed
 	}
-	return "Upstream request failed"
+	return "upstream error"
 }
 
 // IsOpenAIImagesRetryableUpstreamError reports whether an Images error is an
@@ -746,7 +746,7 @@ func openAIImagesUpstreamErrorFromGJSON(errorObj gjson.Result, upstreamRequestID
 	param := strings.TrimSpace(errorObj.Get("param").String())
 	statusCode := openAIImagesSSEErrorStatus(errType, code)
 	if message == "" {
-		message = "Upstream request failed"
+		message = "upstream error"
 	}
 	return &OpenAIImagesUpstreamError{
 		StatusCode:        statusCode,
@@ -789,7 +789,7 @@ func openAIImagesUpstreamErrorFromHTTP(statusCode int, header http.Header, body 
 	param := strings.TrimSpace(gjson.GetBytes(body, "error.param").String())
 	message := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(body)))
 	if message == "" {
-		message = fmt.Sprintf("Upstream request failed (status %d)", statusCode)
+		message = fmt.Sprintf("upstream error: %d", statusCode)
 	}
 	if errType == "" {
 		errType = openAIImagesErrorTypeForStatus(statusCode)
@@ -851,6 +851,10 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 	}
 
 	// Honor admin-configured error passthrough rules first.
+	passthroughFallbackMessage := upstreamMsg
+	if passthroughFallbackMessage == "" {
+		passthroughFallbackMessage = fmt.Sprintf("upstream error: %d", resp.StatusCode)
+	}
 	if status, errType, errMsg, matched := applyErrorPassthroughRule(
 		c,
 		account.Platform,
@@ -858,7 +862,7 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		body,
 		http.StatusBadGateway,
 		"upstream_error",
-		"Upstream request failed",
+		passthroughFallbackMessage,
 	); matched {
 		upErr := &OpenAIImagesUpstreamError{
 			StatusCode:        status,

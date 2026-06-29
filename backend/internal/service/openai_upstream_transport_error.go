@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -18,11 +19,27 @@ import (
 // unscheduled after a durable transport failure (matches tokenRefreshTempUnschedDuration).
 const openAITransportErrorTempUnschedDuration = 10 * time.Minute
 
-// openAITransportFailoverBody is the OpenAI-format error body attached to the
-// failover error for a transport-level failure. Kept identical to the legacy
-// inline 502 body so the client-visible payload is unchanged if failover is
-// ultimately exhausted.
-var openAITransportFailoverBody = []byte(`{"error":{"type":"upstream_error","message":"Upstream request failed"}}`)
+// openAITransportFailoverBodyForMessage is the OpenAI-format error body attached
+// to transport-level failures where no upstream HTTP response exists. The body
+// preserves the real transport error instead of collapsing it to a generic
+// "Upstream request failed" message.
+func openAITransportFailoverBodyForMessage(message string) []byte {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "upstream transport error"
+	}
+	payload := map[string]any{
+		"error": map[string]any{
+			"type":    "upstream_error",
+			"message": message,
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return []byte(`{"error":{"type":"upstream_error","message":"upstream transport error"}}`)
+	}
+	return body
+}
 
 // openAITransportErrorClass describes how to react to a transport-level upstream
 // failure — i.e. the HTTP round-trip never completed (proxy / DNS / TCP / TLS
@@ -130,7 +147,7 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 
 	return &UpstreamFailoverError{
 		StatusCode:   http.StatusBadGateway,
-		ResponseBody: openAITransportFailoverBody,
+		ResponseBody: openAITransportFailoverBodyForMessage(safeErr),
 	}
 }
 

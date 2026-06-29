@@ -161,7 +161,7 @@ func TestOpenAIEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testin
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
 	h := &OpenAIGatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid reasoning effort: max"))
 
 	require.True(t, wrote)
 	require.Equal(t, http.StatusBadGateway, w.Code)
@@ -172,7 +172,7 @@ func TestOpenAIEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testin
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "Upstream request failed", errorObj["message"])
+	assert.Equal(t, "invalid reasoning effort: max", errorObj["message"])
 }
 
 // Writer 已写后 ensureForwardErrorResponse 必须仍然把错误信息以 SSE
@@ -187,7 +187,7 @@ func TestOpenAIEnsureForwardErrorResponse_AppendsSSEAfterWritten(t *testing.T) {
 	c.String(http.StatusTeapot, "already written")
 
 	h := &OpenAIGatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid reasoning effort: max"))
 
 	require.True(t, wrote, "must attempt to communicate the failure to the client via SSE")
 	// 状态码改不了（headers 已 flush），但 body 应该追加 SSE 错误事件。
@@ -208,7 +208,7 @@ func TestOpenAIEnsureForwardErrorResponse_ResponsesRouteAfterWrittenEmitsRespons
 	_, _ = c.Writer.WriteString(":\n\n")
 
 	h := &OpenAIGatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid reasoning effort: max"))
 
 	require.True(t, wrote)
 	body := w.Body.String()
@@ -216,7 +216,27 @@ func TestOpenAIEnsureForwardErrorResponse_ResponsesRouteAfterWrittenEmitsRespons
 	assert.Contains(t, body, "event: response.failed\n", "appended a Responses terminal event")
 	assert.Contains(t, body, `"type":"response.failed"`)
 	assert.Contains(t, body, `"code":"upstream_error"`)
-	assert.Contains(t, body, "Upstream request failed")
+	assert.Contains(t, body, "invalid reasoning effort: max")
+}
+
+func TestOpenAIHandleFailoverExhausted_PassesThroughRawUpstreamBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, EndpointResponses, nil)
+
+	rawBody := `{"error":{"message":"Invalid value: 'max'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', and 'xhigh'.","type":"invalid_request_error","param":"reasoning.effort","code":"invalid_value"}}`
+	h := &OpenAIGatewayHandler{}
+	h.handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:      http.StatusBadRequest,
+		ResponseBody:    []byte(rawBody),
+		ResponseHeaders: http.Header{"Content-Type": []string{"application/json; charset=utf-8"}},
+	}, false)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.JSONEq(t, rawBody, w.Body.String())
+	require.Contains(t, w.Header().Get("Content-Type"), "application/json")
+	require.NotContains(t, w.Body.String(), "Upstream request failed")
 }
 
 func TestShouldLogOpenAIForwardFailureAsWarn(t *testing.T) {
@@ -274,7 +294,7 @@ func TestOpenAIRecoverResponsesPanic_WritesFallbackResponse(t *testing.T) {
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "Upstream request failed", errorObj["message"])
+	assert.Equal(t, "panic recovered: test panic", errorObj["message"])
 }
 
 func TestOpenAIRecoverResponsesPanic_NoPanicNoWrite(t *testing.T) {

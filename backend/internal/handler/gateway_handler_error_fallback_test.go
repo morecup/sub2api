@@ -20,7 +20,7 @@ func TestGatewayEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testi
 	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
 
 	h := &GatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid upstream request"))
 
 	require.True(t, wrote)
 	require.Equal(t, http.StatusBadGateway, w.Code)
@@ -32,7 +32,7 @@ func TestGatewayEnsureForwardErrorResponse_WritesFallbackWhenNotWritten(t *testi
 	errorObj, ok := parsed["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "upstream_error", errorObj["type"])
-	assert.Equal(t, "Upstream request failed", errorObj["message"])
+	assert.Equal(t, "invalid upstream request", errorObj["message"])
 }
 
 // Writer 已写后 ensureForwardErrorResponse 必须把错误以 SSE 形式追加，
@@ -45,7 +45,7 @@ func TestGatewayEnsureForwardErrorResponse_AppendsSSEAfterWritten(t *testing.T) 
 	c.String(http.StatusTeapot, "already written")
 
 	h := &GatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid upstream request"))
 
 	require.True(t, wrote)
 	require.Equal(t, http.StatusTeapot, w.Code)
@@ -63,7 +63,7 @@ func TestGatewayEnsureForwardErrorResponse_ResponsesRouteAfterWrittenEmitsRespon
 	_, _ = c.Writer.WriteString(":\n\n")
 
 	h := &GatewayHandler{}
-	wrote := h.ensureForwardErrorResponse(c, false)
+	wrote := h.ensureForwardErrorResponse(c, false, errors.New("invalid upstream request"))
 
 	require.True(t, wrote)
 	body := w.Body.String()
