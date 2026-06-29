@@ -459,6 +459,15 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 				}
+				if h.handleForwardApplicationError(c, err, streamStarted) {
+					reqLog.Warn("gateway.forward_application_error",
+						zap.Int64("account_id", account.ID),
+						zap.String("account_name", account.Name),
+						zap.String("account_platform", account.Platform),
+						zap.Error(err),
+					)
+					return
+				}
 				upstreamErrorAlreadyCommunicated := gatewayForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
 				if !upstreamErrorAlreadyCommunicated {
@@ -878,6 +887,15 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					case FailoverCanceled:
 						return
 					}
+				}
+				if h.handleForwardApplicationError(c, err, streamStarted) {
+					reqLog.Warn("gateway.forward_application_error",
+						zap.Int64("account_id", account.ID),
+						zap.String("account_name", account.Name),
+						zap.String("account_platform", account.Platform),
+						zap.Error(err),
+					)
+					return
 				}
 				upstreamErrorAlreadyCommunicated := gatewayForwardErrorAlreadyCommunicated(c, writerSizeBeforeForward, err)
 				wroteFallback := false
@@ -1633,6 +1651,40 @@ func (h *GatewayHandler) ensureForwardErrorResponse(c *gin.Context, streamStarte
 	}
 	h.handleStreamingAwareError(c, http.StatusBadGateway, "upstream_error", "Upstream request failed", streamStarted)
 	return true
+}
+
+func (h *GatewayHandler) handleForwardApplicationError(c *gin.Context, err error, streamStarted bool) bool {
+	var appErr *pkgerrors.ApplicationError
+	if !errors.As(err, &appErr) {
+		return false
+	}
+	status := int(appErr.Code)
+	if status <= 0 {
+		status = http.StatusInternalServerError
+	}
+	message := strings.TrimSpace(appErr.Message)
+	if message == "" {
+		message = "Request failed"
+	}
+	h.handleStreamingAwareError(c, status, gatewayClaudeErrorTypeForStatus(status), message, streamStarted)
+	return true
+}
+
+func gatewayClaudeErrorTypeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "invalid_request_error"
+	case http.StatusUnauthorized:
+		return "authentication_error"
+	case http.StatusForbidden:
+		return "permission_error"
+	case http.StatusNotFound:
+		return "not_found_error"
+	case http.StatusTooManyRequests:
+		return "rate_limit_error"
+	default:
+		return "api_error"
+	}
 }
 
 // gatewayForwardErrorAlreadyCommunicated reports whether a Forward implementation

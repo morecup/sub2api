@@ -11,6 +11,23 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <div
+        v-if="missingAnthropicAccountUUID"
+        class="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900/60 dark:bg-red-950/30"
+      >
+        <div class="flex items-start gap-2">
+          <Icon name="exclamationTriangle" size="sm" class="mt-0.5 flex-shrink-0 text-red-600 dark:text-red-300" :stroke-width="2" />
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-red-800 dark:text-red-200">
+              {{ t('admin.accounts.missingAccountUUID') }}
+            </p>
+            <p class="mt-1 text-xs leading-5 text-red-700 dark:text-red-300">
+              {{ t('admin.accounts.missingAccountUUIDHint') }}
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div>
         <label class="input-label">{{ t('common.name') }}</label>
         <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
@@ -2503,6 +2520,7 @@ import {
   applyInterceptWarmup
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
+import { isAnthropicOAuthMissingAccountUUID } from '@/utils/accountDiagnostics'
 import { createStableObjectKeyResolver } from '@/utils/stableObjectKey'
 import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
@@ -2883,6 +2901,7 @@ const normalizeOpenAIResponsesMode = (mode: unknown): OpenAIResponsesMode => {
 const isOpenAIModelRestrictionDisabled = computed(() =>
   props.account?.platform === 'openai' && openaiPassthroughEnabled.value
 )
+const missingAnthropicAccountUUID = computed(() => isAnthropicOAuthMissingAccountUUID(props.account))
 const openAIResponsesStatusKey = computed(() => {
   if (openAIResponsesMode.value === 'force_responses') {
     return 'admin.accounts.openai.responsesStatusForcedResponses'

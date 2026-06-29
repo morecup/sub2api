@@ -2855,9 +2855,9 @@ export default {
       createFirstMonitor: 'Create your first monitor to track channel availability',
       advanced: {
         section: 'Advanced (optional)',
-        sectionHint: 'Customize request headers and body to bypass upstream client-detection (e.g. "only Claude Code clients allowed").',
+        sectionHint: 'Customize request headers and body to match upstream client-identification expectations (e.g. "only Claude Code clients allowed").',
         headers: 'Custom request headers',
-        headersPlaceholder: 'User-Agent: claude-cli/1.0.83 (external, cli)\nx-app: cli\nanthropic-beta: claude-code-20250219',
+        headersPlaceholder: 'User-Agent: claude-cli/2.1.191 (external, cli)\nx-app: cli\nanthropic-version: 2023-06-01\nanthropic-dangerous-direct-browser-access: true\nX-Stainless-Arch: x64\nX-Stainless-Lang: js\nX-Stainless-OS: Windows\nX-Stainless-Package-Version: 0.94.0\nX-Stainless-Retry-Count: 0\nX-Stainless-Runtime: node\nX-Stainless-Runtime-Version: v26.3.0\nX-Stainless-Timeout: 600\nanthropic-beta: claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24',
         headerNamePlaceholder: 'Header name',
         headerValuePlaceholder: 'Value',
         headerAddRow: 'Add header',
@@ -2909,7 +2909,7 @@ export default {
         headersSummary: '{n} custom header(s)',
         form: {
           name: 'Template name',
-          namePlaceholder: 'e.g. Claude Code mimicry',
+          namePlaceholder: 'e.g. Claude Code TTY',
           description: 'Description',
           descriptionPlaceholder: 'Optional: what this template is for, capture date, etc.'
         }
@@ -3107,6 +3107,9 @@ export default {
       notes: 'Notes',
       notesPlaceholder: 'Enter notes',
       notesHint: 'Notes are optional',
+      missingAccountUUID: 'Missing account_uuid',
+      missingAccountUUIDHint:
+        'This Anthropic OAuth/Setup Token account is missing account_uuid, so Claude Code OAuth compatibility requests will fail. Re-authorize the account or fill the real account_uuid in account Extra.',
       allPlatforms: 'All Platforms',
       allTypes: 'All Types',
       allStatus: 'All Status',
@@ -5819,8 +5822,8 @@ export default {
         fingerprintUnificationHint: 'Unify X-Stainless-* headers across users sharing the same OAuth account. Disabling passes through each client\'s original headers.',
         metadataPassthrough: 'Metadata Passthrough',
         metadataPassthroughHint: 'Pass through client\'s original metadata.user_id without rewriting. May improve upstream cache hit rates.',
-        cchSigning: 'CCH Signing',
-        cchSigningHint: 'Sign the billing header in forwarded requests with CCH hash. When disabled, the placeholder is preserved.',
+        cchSigning: 'CCH Compatibility',
+        cchSigningHint: 'Compatibility switch kept for older configs. The server now patches CCH with the claude.exe native send-layer algorithm.',
         claudeOAuthSystemPromptInjection: 'Claude OAuth System Blocks',
         claudeOAuthSystemPromptInjectionHint: 'Inject Claude Code-like system blocks for Claude OAuth requests from non-Claude-Code clients. Enabled by default.',
         claudeOAuthSystemPrompt: 'Claude OAuth Expansion Prompt',

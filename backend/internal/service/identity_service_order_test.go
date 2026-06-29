@@ -47,6 +47,42 @@ func TestIdentityService_RewriteUserID_PreservesTopLevelFieldOrder(t *testing.T)
 	require.Contains(t, resultStr, `"metadata":{"user_id":"`)
 }
 
+func TestIdentityService_RewriteUserID_RejectsMissingAccountUUIDEvenIfRequestHasOne(t *testing.T) {
+	cache := &identityCacheStub{}
+	svc := NewIdentityService(cache)
+
+	originalUserID := FormatMetadataUserID(
+		"d61f76d0730d2b920763648949bad5c79742155c27037fc77ac3f9805cb90169",
+		"orig-acc-uuid",
+		"7578cf37-aaca-46e4-a45c-71285d9dbb83",
+		"2.1.78",
+	)
+	body := []byte(`{"messages":[],"metadata":{"user_id":` + strconvQuote(originalUserID) + `}}`)
+
+	result, err := svc.RewriteUserID(body, 123, "", "client-xyz", "claude-cli/2.1.78 (external, cli)")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "account_uuid required")
+	require.Equal(t, string(body), string(result))
+}
+
+func TestIdentityService_RewriteUserID_SkipsWhenAccountUUIDUnavailable(t *testing.T) {
+	cache := &identityCacheStub{}
+	svc := NewIdentityService(cache)
+
+	originalUserID := FormatMetadataUserID(
+		"d61f76d0730d2b920763648949bad5c79742155c27037fc77ac3f9805cb90169",
+		"",
+		"7578cf37-aaca-46e4-a45c-71285d9dbb83",
+		"2.1.78",
+	)
+	body := []byte(`{"messages":[],"metadata":{"user_id":` + strconvQuote(originalUserID) + `}}`)
+
+	result, err := svc.RewriteUserID(body, 123, "", "client-xyz", "claude-cli/2.1.78 (external, cli)")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "account_uuid required")
+	require.Equal(t, string(body), string(result))
+}
+
 func TestIdentityService_RewriteUserIDWithMasking_PreservesTopLevelFieldOrder(t *testing.T) {
 	cache := &identityCacheStub{maskedSessionID: "11111111-2222-4333-8444-555555555555"}
 	svc := NewIdentityService(cache)

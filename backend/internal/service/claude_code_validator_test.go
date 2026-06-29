@@ -222,10 +222,8 @@ func TestClaudeCodeValidator_BillingBlockStillRequiresClaudeCodeUA(t *testing.T)
 	require.False(t, ok)
 }
 
-// 新版 Claude Code CLI 已取消 cch=... 签名字段，billing block 形如
-// `x-anthropic-billing-header: cc_version=...; cc_entrypoint=cli;`（无 cch）。
-// 检测依赖前缀 + cc_entrypoint=cli，不依赖 cch，故无身份 prose 的子请求仍应被识别。
-// 这同时覆盖了本仓 mimicry 注入的新格式 block（见 buildBillingAttributionText）。
+// 兼容旧/缺省 billing block：检测依赖前缀 + cc_entrypoint=cli，不依赖 cch，
+// 因此无身份 prose 的子请求仍应被识别。
 func TestClaudeCodeValidator_BillingBlockRecognizedWithoutCCH(t *testing.T) {
 	monitorPrompt, err := os.ReadFile("testdata/security_monitor_system_prompt.txt")
 	require.NoError(t, err)
@@ -244,7 +242,7 @@ func TestClaudeCodeValidator_BillingBlockRecognizedWithoutCCH(t *testing.T) {
 		"system": []any{
 			map[string]any{
 				"type": "text",
-				// 注意：无 cch 段，对齐新版 CLI 与本仓新的注入格式。
+				// 注意：无 cch 段，覆盖兼容旧/缺省格式。
 				"text": "x-anthropic-billing-header: cc_version=2.1.162.884; cc_entrypoint=cli;",
 			},
 			map[string]any{
@@ -259,7 +257,7 @@ func TestClaudeCodeValidator_BillingBlockRecognizedWithoutCCH(t *testing.T) {
 	require.True(t, ok, "无 cch 的新版 billing block 仍应被识别为 Claude Code")
 }
 
-// 安全回归：去掉 cch 后检测并未放松——非 claude-cli UA 即便携带无 cch 的 billing block
+// 安全回归：缺少 cch 时检测并未放松——非 claude-cli UA 即便携带无 cch 的 billing block
 // 仍在 Step 1 被拒，ClaudeCodeOnly group 不会因此被仿冒绕过。
 func TestClaudeCodeValidator_NoCCHBlockStillRequiresClaudeCodeUA(t *testing.T) {
 	validator := NewClaudeCodeValidator()

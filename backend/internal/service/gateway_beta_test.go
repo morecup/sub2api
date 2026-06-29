@@ -1,6 +1,9 @@
 package service
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
@@ -124,13 +127,128 @@ func TestMergeAnthropicBetaDropping_DroppedBetas(t *testing.T) {
 	require.Contains(t, got, "fast-mode-2026-02-01")
 }
 
-func TestFullClaudeCodeMimicryBetas_DoesNotDefaultRedactThinking(t *testing.T) {
+func TestFullClaudeCodeMimicryBetas_MatchesTTYMainBetas(t *testing.T) {
 	required := claude.FullClaudeCodeMimicryBetas()
 
-	require.NotContains(t, required, claude.BetaRedactThinking)
-	require.Contains(t, required, claude.BetaClaudeCode)
-	require.Contains(t, required, claude.BetaOAuth)
-	require.Contains(t, required, claude.BetaInterleavedThinking)
+	require.Equal(t, []string{
+		claude.BetaClaudeCode,
+		claude.BetaInterleavedThinking,
+		claude.BetaRedactThinking,
+		claude.BetaThinkingTokenCount,
+		claude.BetaContextManagement,
+		claude.BetaPromptCachingScope,
+		claude.BetaAdvancedToolUse,
+		claude.BetaEffort,
+	}, required)
+}
+
+func TestClaudeCodeMainBetasForModel_MatchesTTYBranches(t *testing.T) {
+	require.Equal(t, claude.HaikuBetaHeader, claude.ClaudeCodeMainBetaHeaderForModel("claude-haiku-4-5"))
+
+	sonnet := claude.ClaudeCodeMainBetaHeaderForModel("claude-sonnet-4-6")
+	require.Equal(t, claude.DefaultBetaHeader, sonnet)
+	require.NotContains(t, sonnet, claude.BetaOAuth)
+	require.NotContains(t, sonnet, claude.BetaMidConversation)
+
+	opus48 := claude.ClaudeCodeMainBetaHeaderForModel("claude-opus-4-8")
+	require.Contains(t, opus48, claude.BetaMidConversation)
+	require.Equal(t,
+		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,advanced-tool-use-2025-11-20,effort-2025-11-24",
+		opus48,
+	)
+}
+
+func TestClaudeCodeTitleBetas_MatchesTTYTitleQuery(t *testing.T) {
+	require.Equal(t,
+		"interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,structured-outputs-2025-12-15",
+		claude.TitleBetaHeader,
+	)
+	require.Equal(t, claude.TitleBetaHeader, strings.Join(claude.ClaudeCodeTitleBetas(), ","))
+}
+
+func TestDefaultHeaders_MatchTTYFingerprint(t *testing.T) {
+	require.Equal(t, "claude-cli/2.1.191 (external, cli)", claude.DefaultHeaders["User-Agent"])
+	require.Equal(t, "cli", claude.DefaultHeaders["X-App"])
+	require.Equal(t, "js", claude.DefaultHeaders["X-Stainless-Lang"])
+	require.Equal(t, "0.94.0", claude.DefaultHeaders["X-Stainless-Package-Version"])
+	require.Equal(t, "Windows", claude.DefaultHeaders["X-Stainless-OS"])
+	require.Equal(t, "x64", claude.DefaultHeaders["X-Stainless-Arch"])
+	require.Equal(t, "node", claude.DefaultHeaders["X-Stainless-Runtime"])
+	require.Equal(t, "v26.3.0", claude.DefaultHeaders["X-Stainless-Runtime-Version"])
+	require.Equal(t, "0", claude.DefaultHeaders["X-Stainless-Retry-Count"])
+	require.Equal(t, "600", claude.DefaultHeaders["X-Stainless-Timeout"])
+	require.Equal(t, "true", claude.DefaultHeaders["Anthropic-Dangerous-Direct-Browser-Access"])
+}
+
+func TestClaudeCodeBodyDrivenBetaTokens_DerivesCapabilityTokens(t *testing.T) {
+	body := []byte(`{"context_management":{"edits":[]},"output_config":{"effort":"high","format":{"type":"json_schema"}},"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.191.8d2; cc_entrypoint=cli; cch=00000;"},{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."},{"type":"text","text":"s","cache_control":{"type":"ephemeral","scope":"global"}}],"max_tokens":64000}`)
+
+	got := strings.Join(claudeCodeBodyDrivenBetaTokens("claude-opus-4-8", body), ",")
+
+	require.Contains(t, got, claude.BetaContextManagement)
+	require.Contains(t, got, claude.BetaPromptCachingScope)
+	require.Contains(t, got, claude.BetaMidConversation)
+	require.Contains(t, got, claude.BetaEffort)
+	require.Contains(t, got, claude.BetaStructuredOutputs)
+	require.NotContains(t, got, claude.BetaOAuth)
+}
+
+func TestClaudeCodeBodyDrivenBetaTokens_DerivesStructuredOutputFromLegacyOutputFormat(t *testing.T) {
+	body := []byte(`{"output_format":{"type":"json_schema","schema":{"type":"object"}}}`)
+
+	got := strings.Join(claudeCodeBodyDrivenBetaTokens("claude-sonnet-4-6", body), ",")
+
+	require.Contains(t, got, claude.BetaStructuredOutputs)
+}
+
+func TestClaudeCodeBodyDrivenBetaTokens_OmitsContextManagementWithoutBodyField(t *testing.T) {
+	body := []byte(`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.191.8d2; cc_entrypoint=cli; cch=00000;"},{"type":"text","text":"Classify this side query."}],"messages":[],"max_tokens":256,"thinking":{"type":"disabled"}}`)
+
+	got := strings.Join(claudeCodeBodyDrivenBetaTokens("claude-sonnet-4-6", body), ",")
+
+	require.Contains(t, got, claude.BetaClaudeCode)
+	require.False(t, anthropicBetaTokensContains(got, claude.BetaContextManagement))
+	require.False(t, anthropicBetaTokensContains(got, claude.BetaPromptCachingScope))
+	require.False(t, anthropicBetaTokensContains(got, claude.BetaEffort))
+}
+
+func TestClaudeCodeBodyDrivenBetaTokens_GenericBodyDoesNotInventClaudeCode(t *testing.T) {
+	got := strings.Join(claudeCodeBodyDrivenBetaTokens("claude-sonnet-4-6", []byte(`{"messages":[]}`)), ",")
+
+	require.Empty(t, got)
+}
+
+func TestClaudeCodeBodyDrivenBetaTokens_MergesBodyBetas(t *testing.T) {
+	body := []byte(`{"betas":["fast-mode-2026-02-01"],"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.191.8d2; cc_entrypoint=cli; cch=00000;"},{"type":"text","text":"Classify this side query."}],"messages":[],"max_tokens":256}`)
+
+	got := strings.Join(claudeCodeBodyDrivenBetaTokens("claude-sonnet-4-6", body), ",")
+
+	require.Contains(t, got, claude.BetaFastMode)
+	require.Contains(t, got, claude.BetaClaudeCode)
+}
+
+func TestApplyClaudeCodeMimicHeaders_DoesNotInventHelperMethod(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	applyClaudeCodeMimicHeaders(req)
+
+	require.Equal(t, "application/json", getHeaderRaw(req.Header, "Accept"))
+	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(req.Header, "User-Agent"))
+	require.Equal(t, "Windows", getHeaderRaw(req.Header, "X-Stainless-OS"))
+	require.Equal(t, "x64", getHeaderRaw(req.Header, "X-Stainless-Arch"))
+	require.Equal(t, "v26.3.0", getHeaderRaw(req.Header, "X-Stainless-Runtime-Version"))
+	require.Empty(t, getHeaderRaw(req.Header, "x-stainless-helper-method"))
+	require.NotEmpty(t, getHeaderRaw(req.Header, "x-client-request-id"))
+}
+
+func TestSyncClaudeCodeSessionIDHeader_UsesMetadataJSON(t *testing.T) {
+	const sessionID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	body := []byte(`{"metadata":{"user_id":"{\"device_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"account_uuid\":\"\",\"session_id\":\"` + sessionID + `\"}"}}`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	syncClaudeCodeSessionIDHeader(req, body, true)
+
+	require.Equal(t, sessionID, getHeaderRaw(req.Header, "X-Claude-Code-Session-Id"))
 }
 
 func TestMergeAnthropicBetaDropping_PreservesIncomingRedactThinking(t *testing.T) {

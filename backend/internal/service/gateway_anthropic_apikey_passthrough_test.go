@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,6 +28,19 @@ type anthropicHTTPUpstreamRecorder struct {
 	lastBody []byte
 	resp     *http.Response
 	err      error
+}
+
+type claudeTTYRawCaptureFile struct {
+	ModelUnderTest string                `json:"model_under_test"`
+	Captures       []claudeTTYRawCapture `json:"captures"`
+}
+
+type claudeTTYRawCapture struct {
+	RequestLine    string     `json:"requestline"`
+	Method         string     `json:"method"`
+	Path           string     `json:"path"`
+	HeadersOrdered [][]string `json:"headers_ordered"`
+	BodyText       string     `json:"body_text"`
 }
 
 func newAnthropicAPIKeyAccountForTest() *Account {
@@ -738,10 +753,14 @@ func TestGatewayService_AnthropicOAuth_NotAffectedByAPIKeyPassthroughToggle(t *t
 
 	require.False(t, account.IsAnthropicAPIKeyPassthroughEnabled())
 
-	req, _, err := svc.buildUpstreamRequest(context.Background(), c, account, []byte(`{"model":"claude-3-7-sonnet-20250219"}`), "oauth-token", "oauth", "claude-3-7-sonnet-20250219", true, false)
+	req, _, err := svc.buildUpstreamRequest(context.Background(), c, account, []byte(`{"model":"claude-3-7-sonnet-20250219"}`), "oauth-token", "oauth", "claude-3-7-sonnet-20250219", true, true)
 	require.NoError(t, err)
 	require.Equal(t, "Bearer oauth-token", getHeaderRaw(req.Header, "authorization"))
-	require.Contains(t, getHeaderRaw(req.Header, "anthropic-beta"), claude.BetaOAuth, "OAuth 链路仍应按原逻辑补齐 oauth beta")
+	outBeta := getHeaderRaw(req.Header, "anthropic-beta")
+	require.NotContains(t, outBeta, claude.BetaOAuth, "TTY 默认 main beta 不携带 oauth beta")
+	require.Contains(t, outBeta, claude.BetaRedactThinking)
+	require.Contains(t, outBeta, claude.BetaThinkingTokenCount)
+	require.Contains(t, outBeta, claude.BetaAdvancedToolUse)
 }
 
 func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(t *testing.T) {
@@ -803,6 +822,7 @@ func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(
 				Credentials: map[string]any{
 					"access_token": "oauth-token",
 				},
+				Extra:       map[string]any{"account_uuid": "acc-uuid"},
 				Status:      StatusActive,
 				Schedulable: true,
 			}
@@ -812,13 +832,17 @@ func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(
 			require.NotNil(t, result)
 			require.NotNil(t, upstream.lastReq)
 			require.Equal(t, "Bearer oauth-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
-			require.Contains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), claude.BetaOAuth)
+			outBeta := getHeaderRaw(upstream.lastReq.Header, "anthropic-beta")
+			require.NotContains(t, outBeta, claude.BetaOAuth)
+			require.Contains(t, outBeta, claude.BetaRedactThinking)
+			require.Contains(t, outBeta, claude.BetaThinkingTokenCount)
+			require.Contains(t, outBeta, claude.BetaAdvancedToolUse)
 
 			system := gjson.GetBytes(upstream.lastBody, "system")
 			require.True(t, system.Exists())
 			require.True(t, system.IsArray(), "system should be an array")
 			arr := system.Array()
-			require.Len(t, arr, 3, "system array should have billing block + cc prompt block + expansion block")
+			require.Len(t, arr, 4, "system array should have billing block + cc prompt block + expansion block + dynamic block")
 
 			require.Contains(t, arr[0].Get("text").String(), "x-anthropic-billing-header:")
 			require.Contains(t, arr[0].Get("text").String(), "cc_version=")
@@ -828,6 +852,17 @@ func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(
 
 			require.Equal(t, claudeCodeSystemPromptExpansion, arr[2].Get("text").String())
 			require.Equal(t, "ephemeral", arr[2].Get("cache_control.type").String())
+			require.Equal(t, "global", arr[2].Get("cache_control.scope").String())
+			dynamicText := arr[3].Get("text").String()
+			require.Contains(t, dynamicText, "# Text output (does not apply to tool calls)")
+			require.Contains(t, dynamicText, "# Environment")
+			require.NotContains(t, dynamicText, "active Claude Code CLI session context")
+			require.NotContains(t, dynamicText, "gitStatus:")
+			require.NotContains(t, dynamicText, "Git user:")
+			require.NotContains(t, dynamicText, "\nStatus:")
+			require.NotContains(t, dynamicText, "Recent commits:")
+			require.NotContains(t, dynamicText, "unavailable")
+			require.Equal(t, "ephemeral", arr[3].Get("cache_control.type").String())
 
 			// 原始 system prompt 应迁移至 messages 中
 			messages := gjson.GetBytes(upstream.lastBody, "messages")
@@ -839,7 +874,94 @@ func TestGatewayService_AnthropicOAuth_ForwardPreservesBillingHeaderSystemBlock(
 	}
 }
 
-func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *testing.T) {
+func TestGatewayService_AnthropicOAuth_ForwardKeepsClaudeCodeBillingFamilySystemBlocks(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	body := `{"model":"claude-sonnet-4-6","system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.22.old; cc_entrypoint=sdk-cli; cch=00000; injected=bad; cc_workload=cron_job-1; cc_is_subagent=true;","cache_control":{"type":"ephemeral"},"extra":"bad"},{"type":"text","text":"identity stays"},{"type":"text","text":"static stays","cache_control":{"type":"ephemeral","scope":"global"}},{"type":"text","text":"dynamic stays","cache_control":{"type":"ephemeral"}}],"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}],"max_tokens":64000,"thinking":{"type":"adaptive"},"context_management":{"edits":[]}}`
+	parsed, err := ParseGatewayRequest(NewRequestBodyRef([]byte(body)), PlatformAnthropic)
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"x-request-id": []string{"rid-oauth-billing-family"},
+			},
+			Body: io.NopCloser(strings.NewReader(`{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":12,"output_tokens":7}}`)),
+		},
+	}
+	cfg := &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}
+	svc := &GatewayService{
+		cfg:                  cfg,
+		responseHeaderFilter: compileResponseHeaderFilter(cfg),
+		httpUpstream:         upstream,
+		rateLimitService:     &RateLimitService{},
+		deferredService:      &DeferredService{},
+	}
+	account := &Account{
+		ID:          302,
+		Name:        "anthropic-oauth-billing-family",
+		Platform:    PlatformAnthropic,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token": "oauth-token",
+		},
+		Extra:       map[string]any{"account_uuid": "acc-uuid"},
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq)
+
+	system := gjson.GetBytes(upstream.lastBody, "system")
+	require.True(t, system.IsArray())
+	arr := system.Array()
+	require.Len(t, arr, 4)
+	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.191.")
+	require.NotContains(t, arr[0].Get("text").String(), "cc_version=2.1.22.old")
+	require.Contains(t, arr[0].Get("text").String(), "cc_entrypoint=cli")
+	require.NotContains(t, arr[0].Get("text").String(), "cc_entrypoint=sdk-cli")
+	require.NotContains(t, arr[0].Get("text").String(), "injected=bad")
+	require.NotContains(t, arr[0].Get("text").String(), "cch=00000;")
+	cchAt := strings.Index(string(upstream.lastBody), "cch=")
+	require.NotEqual(t, -1, cchAt)
+	wireCCH := string(upstream.lastBody[cchAt+len("cch=") : cchAt+len("cch=")+5])
+	placeholderBody := append([]byte(nil), upstream.lastBody...)
+	copy(placeholderBody[cchAt+len("cch="):cchAt+len("cch=")+5], []byte("00000"))
+	expectedCCH, _, ok := computeClaudeCodeCCH(placeholderBody)
+	require.True(t, ok)
+	require.Equal(t, expectedCCH, wireCCH)
+	require.Contains(t, arr[0].Get("text").String(), "cc_workload=cron_job-1;")
+	require.Contains(t, arr[0].Get("text").String(), "cc_is_subagent=true;")
+	require.False(t, arr[0].Get("cache_control").Exists())
+	require.False(t, arr[0].Get("extra").Exists())
+	require.Equal(t, "identity stays", arr[1].Get("text").String())
+	require.Equal(t, "static stays", arr[2].Get("text").String())
+	require.Equal(t, "global", arr[2].Get("cache_control.scope").String())
+	require.Equal(t, "dynamic stays", arr[3].Get("text").String())
+
+	messages := gjson.GetBytes(upstream.lastBody, "messages").Array()
+	require.Len(t, messages, 1)
+	require.Equal(t, "hello", messages[0].Get("content.0.text").String())
+
+	outBeta := getHeaderRaw(upstream.lastReq.Header, "anthropic-beta")
+	require.Contains(t, outBeta, claude.BetaContextManagement)
+	require.Contains(t, outBeta, claude.BetaPromptCachingScope)
+	require.Contains(t, outBeta, claude.BetaRedactThinking)
+	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+	require.NotEmpty(t, getHeaderRaw(upstream.lastReq.Header, "x-client-request-id"))
+}
+
+func TestGatewayService_AnthropicOAuth_SystemPromptRewriteIsForcedEvenWhenInjectionDisabled(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	resetGatewayForwardingSettingsCacheForTest(t)
 
@@ -888,6 +1010,7 @@ func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *tes
 		Credentials: map[string]any{
 			"access_token": "oauth-token",
 		},
+		Extra:       map[string]any{"account_uuid": "acc-uuid"},
 		Status:      StatusActive,
 		Schedulable: true,
 	}
@@ -897,10 +1020,415 @@ func TestGatewayService_AnthropicOAuth_SystemPromptInjectionCanBeDisabled(t *tes
 	require.NotNil(t, result)
 
 	system := gjson.GetBytes(upstream.lastBody, "system")
-	require.True(t, system.Exists())
-	require.Equal(t, "Original system prompt", system.String())
-	require.NotContains(t, string(upstream.lastBody), "x-anthropic-billing-header:")
-	require.NotContains(t, string(upstream.lastBody), "[System Instructions]")
+	require.True(t, system.IsArray())
+	require.Contains(t, system.Array()[0].Get("text").String(), "x-anthropic-billing-header:")
+	require.Contains(t, system.Array()[0].Get("text").String(), "cc_entrypoint=cli")
+	messages := gjson.GetBytes(upstream.lastBody, "messages").Array()
+	require.NotEmpty(t, messages)
+	require.Contains(t, messages[0].Get("content.0.text").String(), "[System Instructions]\nOriginal system prompt")
+}
+
+func TestGatewayService_AnthropicOAuth_NonClaudeCodeIngressTTYLikeWireAndResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resetGatewayForwardingSettingsCacheForTest(t)
+
+	body := []byte(`{"model":"claude-sonnet-4-6","system":"Project instructions for the proxied caller.","messages":[{"role":"user","content":[{"type":"text","text":"Please answer with pong."}]}],"tools":[{"name":"lookup_project","description":"Look up project details","input_schema":{"type":"object","properties":{"query":{"type":"string"}},"required":["query"]}}],"tool_choice":{"type":"auto"},"max_tokens":1234,"temperature":0.2,"context_management":{"edits":[]},"betas":["caller-beta-should-move-to-header"],"extra_ignored":"drop me"}`)
+	parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), PlatformAnthropic)
+	require.NoError(t, err)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
+	c.Request.Header.Set("User-Agent", "untrusted-client/0.1")
+	c.Request.Header.Set("Anthropic-Beta", "untrusted-header-beta")
+
+	upstreamBody := `{"id":"msg_mock","type":"message","role":"assistant","model":"claude-sonnet-4-6","content":[{"type":"text","text":"pong"}],"usage":{"input_tokens":21,"output_tokens":3}}`
+	upstream := &anthropicHTTPUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header: http.Header{
+				"Content-Type": []string{"application/json"},
+				"X-Request-Id": []string{"rid-tty-like"},
+			},
+			Body: io.NopCloser(strings.NewReader(upstreamBody)),
+		},
+	}
+
+	cfg := &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}
+	svc := &GatewayService{
+		cfg:                  cfg,
+		responseHeaderFilter: compileResponseHeaderFilter(cfg),
+		httpUpstream:         upstream,
+		rateLimitService:     &RateLimitService{},
+		deferredService:      &DeferredService{},
+		identityService:      NewIdentityService(&identityCacheStub{}),
+	}
+	account := &Account{
+		ID:          303,
+		Name:        "anthropic-oauth-tty-like",
+		Platform:    PlatformAnthropic,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token"},
+		Extra: map[string]any{
+			"account_uuid":   "acc-uuid",
+			"claude_user_id": "clientid123",
+		},
+		Status:      StatusActive,
+		Schedulable: true,
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, parsed)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "rid-tty-like", result.RequestID)
+	require.Equal(t, 21, result.Usage.InputTokens)
+	require.Equal(t, 3, result.Usage.OutputTokens)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.JSONEq(t, upstreamBody, rec.Body.String())
+
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "/v1/messages", upstream.lastReq.URL.Path)
+	require.Equal(t, "beta=true", upstream.lastReq.URL.RawQuery)
+	require.Equal(t, "Bearer oauth-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
+	require.Equal(t, "application/json", getHeaderRaw(upstream.lastReq.Header, "content-type"))
+	require.Equal(t, "2023-06-01", getHeaderRaw(upstream.lastReq.Header, "anthropic-version"))
+	require.Equal(t, "application/json", getHeaderRaw(upstream.lastReq.Header, "Accept"))
+	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+	require.Equal(t, "cli", getHeaderRaw(upstream.lastReq.Header, "X-App"))
+	require.Equal(t, "js", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Lang"))
+	require.Equal(t, "0.94.0", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Package-Version"))
+	require.Equal(t, "Windows", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
+	require.Equal(t, "x64", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Arch"))
+	require.Equal(t, "node", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime"))
+	require.Equal(t, "v26.3.0", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime-Version"))
+	require.NotEmpty(t, getHeaderRaw(upstream.lastReq.Header, "x-client-request-id"))
+	require.NotContains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), "untrusted-header-beta")
+	require.Contains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), claude.BetaClaudeCode)
+	require.Contains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), claude.BetaContextManagement)
+	require.Contains(t, getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"), claude.BetaPromptCachingScope)
+
+	wire := upstream.lastBody
+	require.False(t, gjson.GetBytes(wire, "betas").Exists())
+	require.False(t, gjson.GetBytes(wire, "extra_ignored").Exists())
+	require.Equal(t, "lookup_project", gjson.GetBytes(wire, "tools.0.name").String())
+	require.Equal(t, "auto", gjson.GetBytes(wire, "tool_choice.type").String())
+	require.True(t, gjson.GetBytes(wire, "metadata.user_id").Exists())
+	metadata := ParseMetadataUserID(gjson.GetBytes(wire, "metadata.user_id").String())
+	require.NotNil(t, metadata)
+	require.Equal(t, "acc-uuid", metadata.AccountUUID)
+
+	system := gjson.GetBytes(wire, "system")
+	require.True(t, system.IsArray())
+	arr := system.Array()
+	require.Len(t, arr, 4)
+	require.Contains(t, arr[0].Get("text").String(), "x-anthropic-billing-header:")
+	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.191.")
+	require.Contains(t, arr[0].Get("text").String(), "cc_entrypoint=cli")
+	require.NotContains(t, arr[0].Get("text").String(), "cch=00000;")
+	require.False(t, arr[0].Get("cache_control").Exists())
+	require.Equal(t, claudeCodeSystemPrompt, arr[1].Get("text").String())
+	require.False(t, arr[1].Get("cache_control").Exists())
+	require.Equal(t, claudeCodeSystemPromptExpansion, arr[2].Get("text").String())
+	require.Equal(t, "ephemeral", arr[2].Get("cache_control.type").String())
+	require.Equal(t, "global", arr[2].Get("cache_control.scope").String())
+	dynamicText := arr[3].Get("text").String()
+	require.Contains(t, dynamicText, "# Text output (does not apply to tool calls)")
+	require.Contains(t, dynamicText, "# Environment")
+	require.Contains(t, dynamicText, "# Context management")
+	require.NotContains(t, dynamicText, "active Claude Code CLI session context")
+	require.NotContains(t, dynamicText, "gitStatus:")
+	require.NotContains(t, dynamicText, "Git user:")
+	require.NotContains(t, dynamicText, "\nStatus:")
+	require.NotContains(t, dynamicText, "Recent commits:")
+	require.NotContains(t, dynamicText, "unavailable")
+	require.Equal(t, "ephemeral", arr[3].Get("cache_control.type").String())
+	require.False(t, arr[3].Get("cache_control.scope").Exists())
+
+	messages := gjson.GetBytes(wire, "messages").Array()
+	require.GreaterOrEqual(t, len(messages), 3)
+	require.Equal(t, "user", messages[0].Get("role").String())
+	require.Contains(t, messages[0].Get("content.0.text").String(), "[System Instructions]\nProject instructions for the proxied caller.")
+	require.Equal(t, "assistant", messages[1].Get("role").String())
+	require.Equal(t, "Understood. I will follow these instructions.", messages[1].Get("content.0.text").String())
+	require.Equal(t, "Please answer with pong.", messages[2].Get("content.0.text").String())
+
+	cchAt := strings.Index(string(wire), "cch=")
+	require.NotEqual(t, -1, cchAt)
+	wireCCH := string(wire[cchAt+len("cch=") : cchAt+len("cch=")+5])
+	placeholderBody := append([]byte(nil), wire...)
+	copy(placeholderBody[cchAt+len("cch="):cchAt+len("cch=")+5], []byte("00000"))
+	expectedCCH, _, ok := computeClaudeCodeCCH(placeholderBody)
+	require.True(t, ok)
+	require.Equal(t, expectedCCH, wireCCH)
+}
+
+func TestGatewayService_AnthropicOAuth_ReplaysCanonicalTTYCaptures(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	resetGatewayForwardingSettingsCacheForTest(t)
+
+	files := canonicalTTYCaptureFilesForTest(t)
+	const replayDeviceID = "5d527641e6225e53459c7d2feebd8c9b1464458ce6ca795c87c9712ac21eb694"
+	const replayAccountUUID = "acc-uuid"
+
+	for _, file := range files {
+		raw, err := os.ReadFile(file)
+		require.NoError(t, err)
+		var bundle claudeTTYRawCaptureFile
+		require.NoError(t, json.Unmarshal(raw, &bundle))
+		require.NotEmpty(t, bundle.ModelUnderTest)
+		require.NotEmpty(t, bundle.Captures)
+
+		for idx, cap := range bundle.Captures {
+			body := []byte(cap.BodyText)
+			phase := "main"
+			if claudeTTYCaptureIsTitle(body) {
+				phase = "title"
+			}
+			name := bundle.ModelUnderTest + "/" + phase
+			if idx > 1 {
+				name = name + "/" + cap.RequestLine
+			}
+
+			t.Run(name, func(t *testing.T) {
+				parsed, err := ParseGatewayRequest(NewRequestBodyRef(body), PlatformAnthropic)
+				require.NoError(t, err)
+
+				rec := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(rec)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages?beta=true", bytes.NewReader(body))
+				for _, pair := range cap.HeadersOrdered {
+					if len(pair) != 2 {
+						continue
+					}
+					key := pair[0]
+					switch strings.ToLower(key) {
+					case "host", "content-length", "connection":
+						continue
+					default:
+						c.Request.Header.Set(key, pair[1])
+					}
+				}
+
+				upstreamSSE := strings.Join([]string{
+					`data: {"type":"message_start","message":{"usage":{"input_tokens":9,"cached_tokens":2}}}`,
+					"",
+					`data: {"type":"message_delta","usage":{"output_tokens":3}}`,
+					"",
+					"event: message_stop",
+					`data: {"type":"message_stop"}`,
+					"",
+					"data: [DONE]",
+					"",
+				}, "\n")
+				upstream := &anthropicHTTPUpstreamRecorder{
+					resp: &http.Response{
+						StatusCode: http.StatusOK,
+						Header: http.Header{
+							"Content-Type": []string{"text/event-stream"},
+							"x-request-id": []string{"rid-tty-replay"},
+						},
+						Body: io.NopCloser(strings.NewReader(upstreamSSE)),
+					},
+				}
+
+				cfg := &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}
+				svc := &GatewayService{
+					cfg:                  cfg,
+					responseHeaderFilter: compileResponseHeaderFilter(cfg),
+					httpUpstream:         upstream,
+					rateLimitService:     &RateLimitService{},
+					deferredService:      &DeferredService{},
+					identityService: NewIdentityService(&claudeTTYReplayIdentityCache{
+						fingerprint: &Fingerprint{
+							ClientID:                replayDeviceID,
+							UserAgent:               claude.DefaultHeaders["User-Agent"],
+							StainlessLang:           claude.DefaultHeaders["X-Stainless-Lang"],
+							StainlessPackageVersion: claude.DefaultHeaders["X-Stainless-Package-Version"],
+							StainlessOS:             claude.DefaultHeaders["X-Stainless-OS"],
+							StainlessArch:           claude.DefaultHeaders["X-Stainless-Arch"],
+							StainlessRuntime:        claude.DefaultHeaders["X-Stainless-Runtime"],
+							StainlessRuntimeVersion: claude.DefaultHeaders["X-Stainless-Runtime-Version"],
+							UpdatedAt:               time.Now().Unix(),
+						},
+					}),
+				}
+				account := &Account{
+					ID:          304,
+					Name:        "anthropic-oauth-tty-replay",
+					Platform:    PlatformAnthropic,
+					Type:        AccountTypeOAuth,
+					Concurrency: 1,
+					Credentials: map[string]any{"access_token": "oauth-token"},
+					Extra: map[string]any{
+						"account_uuid": replayAccountUUID,
+					},
+					Status:      StatusActive,
+					Schedulable: true,
+				}
+
+				result, err := svc.Forward(context.Background(), c, account, parsed)
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.NotNil(t, upstream.lastReq)
+				require.NotEmpty(t, upstream.lastBody)
+
+				captureHeaders := claudeTTYCaptureHeaderMap(cap.HeadersOrdered)
+				require.Equal(t, "/v1/messages", upstream.lastReq.URL.Path)
+				require.Equal(t, "beta=true", upstream.lastReq.URL.RawQuery)
+				require.Equal(t, "Bearer oauth-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
+				require.Equal(t, captureHeaders["Accept"], getHeaderRaw(upstream.lastReq.Header, "Accept"))
+				require.Equal(t, captureHeaders["Content-Type"], getHeaderRaw(upstream.lastReq.Header, "Content-Type"))
+				require.Equal(t, captureHeaders["User-Agent"], getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+				require.Equal(t, captureHeaders["X-Stainless-Arch"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Arch"))
+				require.Equal(t, captureHeaders["X-Stainless-Lang"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Lang"))
+				require.Equal(t, captureHeaders["X-Stainless-OS"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
+				require.Equal(t, captureHeaders["X-Stainless-Package-Version"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Package-Version"))
+				require.Equal(t, captureHeaders["X-Stainless-Retry-Count"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Retry-Count"))
+				require.Equal(t, captureHeaders["X-Stainless-Runtime"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime"))
+				require.Equal(t, captureHeaders["X-Stainless-Runtime-Version"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime-Version"))
+				require.Equal(t, captureHeaders["X-Stainless-Timeout"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Timeout"))
+				require.Equal(t, captureHeaders["anthropic-dangerous-direct-browser-access"], getHeaderRaw(upstream.lastReq.Header, "anthropic-dangerous-direct-browser-access"))
+				require.Equal(t, captureHeaders["anthropic-version"], getHeaderRaw(upstream.lastReq.Header, "anthropic-version"))
+				require.Equal(t, captureHeaders["x-app"], getHeaderRaw(upstream.lastReq.Header, "x-app"))
+				require.Equal(t, captureHeaders["anthropic-beta"], getHeaderRaw(upstream.lastReq.Header, "anthropic-beta"))
+				require.NotEmpty(t, getHeaderRaw(upstream.lastReq.Header, "x-client-request-id"))
+
+				wire := upstream.lastBody
+				require.Equal(t, claudeTTYTopLevelKeyOrder(t, body), claudeTTYTopLevelKeyOrder(t, wire))
+				require.Equal(t, gjson.GetBytes(body, "model").Raw, gjson.GetBytes(wire, "model").Raw)
+				require.Equal(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(wire, "messages").Raw)
+				require.Equal(t, gjson.GetBytes(body, "tools").Raw, gjson.GetBytes(wire, "tools").Raw)
+				require.Equal(t, gjson.GetBytes(body, "max_tokens").Raw, gjson.GetBytes(wire, "max_tokens").Raw)
+				require.Equal(t, gjson.GetBytes(body, "thinking").Raw, gjson.GetBytes(wire, "thinking").Raw)
+				require.Equal(t, gjson.GetBytes(body, "temperature").Raw, gjson.GetBytes(wire, "temperature").Raw)
+				require.Equal(t, gjson.GetBytes(body, "context_management").Raw, gjson.GetBytes(wire, "context_management").Raw)
+				require.Equal(t, gjson.GetBytes(body, "output_config").Raw, gjson.GetBytes(wire, "output_config").Raw)
+				require.Equal(t, gjson.GetBytes(body, "stream").Raw, gjson.GetBytes(wire, "stream").Raw)
+
+				inSystem := gjson.GetBytes(body, "system")
+				outSystem := gjson.GetBytes(wire, "system")
+				require.True(t, inSystem.IsArray())
+				require.True(t, outSystem.IsArray())
+				inBlocks := inSystem.Array()
+				outBlocks := outSystem.Array()
+				require.Len(t, outBlocks, len(inBlocks))
+				for i := 1; i < len(inBlocks); i++ {
+					require.Equal(t, inBlocks[i].Raw, outBlocks[i].Raw, "system[%d] should be preserved from captured Claude Code body", i)
+				}
+				require.Contains(t, outBlocks[0].Get("text").String(), "x-anthropic-billing-header:")
+				require.Contains(t, outBlocks[0].Get("text").String(), "cc_version=2.1.191.")
+				require.Contains(t, outBlocks[0].Get("text").String(), "cc_entrypoint=cli")
+				require.False(t, outBlocks[0].Get("cache_control").Exists())
+				requireClaudeCodeCCHSelfConsistent(t, wire)
+
+				metadata := ParseMetadataUserID(gjson.GetBytes(wire, "metadata.user_id").String())
+				require.NotNil(t, metadata)
+				require.Equal(t, replayDeviceID, metadata.DeviceID)
+				require.Equal(t, replayAccountUUID, metadata.AccountUUID)
+				require.NotEmpty(t, metadata.SessionID)
+				require.Equal(t, metadata.SessionID, getHeaderRaw(upstream.lastReq.Header, "X-Claude-Code-Session-Id"))
+			})
+		}
+	}
+}
+
+type claudeTTYReplayIdentityCache struct {
+	fingerprint     *Fingerprint
+	maskedSessionID string
+}
+
+func (c *claudeTTYReplayIdentityCache) GetFingerprint(_ context.Context, _ int64) (*Fingerprint, error) {
+	if c.fingerprint == nil {
+		return nil, nil
+	}
+	clone := *c.fingerprint
+	return &clone, nil
+}
+
+func (c *claudeTTYReplayIdentityCache) SetFingerprint(_ context.Context, _ int64, fp *Fingerprint) error {
+	if fp == nil {
+		c.fingerprint = nil
+		return nil
+	}
+	clone := *fp
+	c.fingerprint = &clone
+	return nil
+}
+
+func (c *claudeTTYReplayIdentityCache) GetMaskedSessionID(_ context.Context, _ int64) (string, error) {
+	return c.maskedSessionID, nil
+}
+
+func (c *claudeTTYReplayIdentityCache) SetMaskedSessionID(_ context.Context, _ int64, sessionID string) error {
+	c.maskedSessionID = sessionID
+	return nil
+}
+
+func canonicalTTYCaptureFilesForTest(t *testing.T) []string {
+	t.Helper()
+	root := strings.TrimSpace(os.Getenv("SUB2API_CLAUDE_CODE_CAPTURE_DIR"))
+	if root == "" {
+		root = `C:\Users\Administrator\AppData\Local\Temp\claude-exe-analysis\captures`
+	}
+	pattern := filepath.Join(root, "claude_2.1.191_tty_reuse_config_20260627-133510_claude_*.json")
+	files, err := filepath.Glob(pattern)
+	require.NoError(t, err)
+	if len(files) == 0 {
+		t.Skipf("canonical Claude Code TTY capture files not found: %s", pattern)
+	}
+	return files
+}
+
+func claudeTTYCaptureIsTitle(body []byte) bool {
+	return gjson.GetBytes(body, "output_config.format.schema.properties.title").Exists()
+}
+
+func claudeTTYCaptureHeaderMap(headers [][]string) map[string]string {
+	out := make(map[string]string, len(headers))
+	for _, pair := range headers {
+		if len(pair) != 2 {
+			continue
+		}
+		out[pair[0]] = pair[1]
+	}
+	return out
+}
+
+func claudeTTYTopLevelKeyOrder(t *testing.T, body []byte) []string {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(body))
+	tok, err := dec.Token()
+	require.NoError(t, err)
+	require.Equal(t, json.Delim('{'), tok)
+
+	var keys []string
+	for dec.More() {
+		tok, err := dec.Token()
+		require.NoError(t, err)
+		key, ok := tok.(string)
+		require.True(t, ok)
+		keys = append(keys, key)
+
+		var skip any
+		require.NoError(t, dec.Decode(&skip))
+	}
+	tok, err = dec.Token()
+	require.NoError(t, err)
+	require.Equal(t, json.Delim('}'), tok)
+	return keys
+}
+
+func requireClaudeCodeCCHSelfConsistent(t *testing.T, body []byte) {
+	t.Helper()
+	cchAt := strings.Index(string(body), "cch=")
+	require.NotEqual(t, -1, cchAt)
+	wireCCH := string(body[cchAt+len("cch=") : cchAt+len("cch=")+5])
+	placeholderBody := append([]byte(nil), body...)
+	copy(placeholderBody[cchAt+len("cch="):cchAt+len("cch=")+5], []byte("00000"))
+	expectedCCH, _, ok := computeClaudeCodeCCH(placeholderBody)
+	require.True(t, ok)
+	require.Equal(t, expectedCCH, wireCCH)
 }
 
 func TestGatewayService_AnthropicAPIKeyPassthrough_StreamingStillCollectsUsageAfterClientDisconnect(t *testing.T) {

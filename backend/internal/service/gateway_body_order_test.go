@@ -119,13 +119,50 @@ func TestNormalizeClaudeOAuthRequestBody_PreservesTopLevelFieldOrder(t *testing.
 	resultStr := string(result)
 
 	require.Equal(t, claude.NormalizeModelID("claude-3-5-sonnet-latest"), modelID)
-	assertJSONTokenOrder(t, resultStr, `"alpha"`, `"model"`, `"temperature"`, `"system"`, `"messages"`, `"omega"`, `"tools"`, `"metadata"`, `"max_tokens"`)
+	assertJSONTokenOrder(t, resultStr, `"alpha"`, `"model"`, `"temperature"`, `"system"`, `"messages"`, `"tool_choice"`, `"omega"`, `"metadata"`)
 	require.Contains(t, resultStr, `"temperature":0.2`)
-	require.NotContains(t, resultStr, `"tool_choice"`)
+	require.Contains(t, resultStr, `"tool_choice":{"type":"auto"}`)
 	require.Contains(t, resultStr, `"system":"`+claudeCodeSystemPrompt+`"`)
-	require.Contains(t, resultStr, `"tools":[]`)
 	require.Contains(t, resultStr, `"metadata":{"user_id":"user-1"}`)
-	require.Contains(t, resultStr, `"max_tokens":128000`)
+	require.NotContains(t, resultStr, `"tools"`)
+	require.NotContains(t, resultStr, `"max_tokens"`)
+}
+
+func TestNormalizeClaudeOAuthRequestBody_DoesNotInventTemperature(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-4-6","messages":[]}`)
+
+	result, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{})
+
+	require.False(t, gjson.GetBytes(result, "temperature").Exists())
+}
+
+func TestNormalizeClaudeOAuthRequestBody_RemovesTopLevelBetas(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-4-6","messages":[],"betas":["context-management-2025-06-27"],"anthropic_beta":["foo"],"stream":true}`)
+
+	result, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{})
+
+	require.False(t, gjson.GetBytes(result, "betas").Exists())
+	require.False(t, gjson.GetBytes(result, "anthropic_beta").Exists())
+	require.True(t, gjson.GetBytes(result, "stream").Bool())
+}
+
+func TestNormalizeClaudeOAuthRequestBody_FilterTopLevelFieldsAndOverwriteMetadata(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-4-6","unknown":1,"metadata":{"user_id":"caller","trace":"x"},"messages":[],"tools":[],"tool_choice":{"type":"auto"},"context_hint":{"foo":"bar"},"output_format":{"type":"json_schema","schema":{"type":"object"}},"output_config":{"effort":"high"}}`)
+
+	result, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{
+		injectMetadata:       true,
+		metadataUserID:       "account-user",
+		filterTopLevelFields: true,
+	})
+
+	require.False(t, gjson.GetBytes(result, "unknown").Exists())
+	require.Equal(t, "account-user", gjson.GetBytes(result, "metadata.user_id").String())
+	require.False(t, gjson.GetBytes(result, "metadata.trace").Exists())
+	require.True(t, gjson.GetBytes(result, "tools").IsArray())
+	require.True(t, gjson.GetBytes(result, "tool_choice").Exists())
+	require.Equal(t, "bar", gjson.GetBytes(result, "context_hint.foo").String())
+	require.Equal(t, "json_schema", gjson.GetBytes(result, "output_format.type").String())
+	require.Equal(t, "high", gjson.GetBytes(result, "output_config.effort").String())
 }
 
 func TestInjectClaudeCodePrompt_PreservesFieldOrder(t *testing.T) {

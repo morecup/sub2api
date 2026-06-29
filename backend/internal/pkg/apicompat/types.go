@@ -114,10 +114,10 @@ type AnthropicTool struct {
 }
 
 // AnthropicCacheControl 对应 Anthropic API 的 cache_control 字段。
-// ttl 默认由调用方决定；本项目策略见 claude.DefaultCacheControlTTL。
+// ttl 由调用方显式决定；Claude Code TTY 普通 ephemeral 通常不写 ttl。
 type AnthropicCacheControl struct {
 	Type string `json:"type"`          // "ephemeral"
-	TTL  string `json:"ttl,omitempty"` // "5m" / "1h" / 省略=默认 5m（由 Anthropic 判定）
+	TTL  string `json:"ttl,omitempty"` // "1h" / 省略=普通 ephemeral
 }
 
 // AnthropicResponse is the non-streaming response from POST /v1/messages.

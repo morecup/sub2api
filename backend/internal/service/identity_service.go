@@ -30,10 +30,10 @@ var defaultFingerprint = Fingerprint{
 	UserAgent:               "claude-cli/" + claude.CLICurrentVersion + " (external, cli)",
 	StainlessLang:           "js",
 	StainlessPackageVersion: "0.94.0",
-	StainlessOS:             "Linux",
-	StainlessArch:           "arm64",
+	StainlessOS:             "Windows",
+	StainlessArch:           "x64",
 	StainlessRuntime:        "node",
-	StainlessRuntimeVersion: "v24.3.0",
+	StainlessRuntimeVersion: "v26.3.0",
 }
 
 // Fingerprint represents account fingerprint data
@@ -214,7 +214,7 @@ func (s *IdentityService) ApplyFingerprint(req *http.Request, fp *Fingerprint) {
 // 重要：此函数使用 json.RawMessage 保留其他字段的原始字节，
 // 避免重新序列化导致 thinking 块等内容被修改。
 func (s *IdentityService) RewriteUserID(body []byte, accountID int64, accountUUID, cachedClientID, fingerprintUA string) ([]byte, error) {
-	if len(body) == 0 || accountUUID == "" || cachedClientID == "" {
+	if len(body) == 0 || cachedClientID == "" {
 		return body, nil
 	}
 
@@ -242,6 +242,10 @@ func (s *IdentityService) RewriteUserID(body []byte, accountID int64, accountUUI
 	}
 
 	sessionTail := parsed.SessionID // 原始session UUID
+	effectiveAccountUUID := strings.TrimSpace(accountUUID)
+	if effectiveAccountUUID == "" {
+		return body, fmt.Errorf("account_uuid required for metadata.user_id rewrite")
+	}
 
 	// 生成新的session hash: SHA256(accountID::sessionTail) -> UUID格式
 	seed := fmt.Sprintf("%d::%s", accountID, sessionTail)
@@ -249,7 +253,10 @@ func (s *IdentityService) RewriteUserID(body []byte, accountID int64, accountUUI
 
 	// 根据客户端版本选择输出格式
 	version := ExtractCLIVersion(fingerprintUA)
-	newUserID := FormatMetadataUserID(cachedClientID, accountUUID, newSessionHash, version)
+	if version == "" {
+		version = claude.CLICurrentVersion
+	}
+	newUserID := FormatMetadataUserID(cachedClientID, effectiveAccountUUID, newSessionHash, version)
 	if newUserID == userID {
 		return body, nil
 	}
@@ -322,6 +329,9 @@ func (s *IdentityService) RewriteUserIDWithMasking(ctx context.Context, body []b
 
 	// 用 FormatMetadataUserID 重建（保持与 RewriteUserID 相同的格式）
 	version := ExtractCLIVersion(fingerprintUA)
+	if version == "" {
+		version = claude.CLICurrentVersion
+	}
 	newUserID := FormatMetadataUserID(uidParsed.DeviceID, uidParsed.AccountUUID, maskedSessionID, version)
 
 	slog.Debug("session_id_masking_applied",

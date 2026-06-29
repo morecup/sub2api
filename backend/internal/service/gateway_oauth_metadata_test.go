@@ -1,13 +1,18 @@
 package service
 
 import (
-	"regexp"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/config"
+	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
-func TestBuildOAuthMetadataUserID_FallbackWithoutAccountUUID(t *testing.T) {
+func TestBuildOAuthMetadataUserID_RequiresAccountUUID(t *testing.T) {
 	svc := &GatewayService{}
 
 	parsed := &ParsedRequest{
@@ -22,14 +27,10 @@ func TestBuildOAuthMetadataUserID_FallbackWithoutAccountUUID(t *testing.T) {
 		Extra: map[string]any{}, // intentionally missing account_uuid / claude_user_id
 	}
 
-	fp := &Fingerprint{ClientID: "deadbeef"} // should be used as user id in legacy format
+	fp := &Fingerprint{ClientID: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"}
 
 	got := svc.buildOAuthMetadataUserID(parsed, account, fp)
-	require.NotEmpty(t, got)
-
-	// Legacy format: user_{client}_account__session_{uuid}
-	re := regexp.MustCompile(`^user_[a-zA-Z0-9]+_account__session_[a-f0-9-]{36}$`)
-	require.True(t, re.MatchString(got), "unexpected user_id format: %s", got)
+	require.Empty(t, got)
 }
 
 func TestBuildOAuthMetadataUserID_UsesAccountUUIDWhenPresent(t *testing.T) {
@@ -54,9 +55,45 @@ func TestBuildOAuthMetadataUserID_UsesAccountUUIDWhenPresent(t *testing.T) {
 	got := svc.buildOAuthMetadataUserID(parsed, account, nil)
 	require.NotEmpty(t, got)
 
-	// New format: user_{client}_account_{account_uuid}_session_{uuid}
-	re := regexp.MustCompile(`^user_clientid123_account_acc-uuid_session_[a-f0-9-]{36}$`)
-	require.True(t, re.MatchString(got), "unexpected user_id format: %s", got)
+	parsedUserID := ParseMetadataUserID(got)
+	require.NotNil(t, parsedUserID, "unexpected user_id format: %s", got)
+	require.True(t, parsedUserID.IsNewFormat)
+	require.Equal(t, "clientid123", parsedUserID.DeviceID)
+	require.Equal(t, "acc-uuid", parsedUserID.AccountUUID)
+	require.Len(t, parsedUserID.SessionID, 36)
+}
+
+func TestBuildUpstreamRequest_OAuthMissingAccountUUIDErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+
+	account := &Account{
+		ID:          123,
+		Platform:    PlatformAnthropic,
+		Type:        AccountTypeOAuth,
+		Credentials: map[string]any{"access_token": "oauth-tok"},
+		Status:      StatusActive,
+		Schedulable: true,
+		Extra:       map[string]any{},
+	}
+	body := []byte(`{"model":"claude-sonnet-4-6","messages":[{"role":"user","content":"hi"}]}`)
+	svc := &GatewayService{
+		cfg:             &config.Config{},
+		identityService: NewIdentityService(&identityCacheStub{}),
+	}
+
+	req, _, err := svc.buildUpstreamRequest(
+		context.Background(), c, account, body,
+		"oauth-tok", "oauth", "claude-sonnet-4-6", false, true,
+	)
+
+	require.Error(t, err)
+	require.Nil(t, req)
+	require.Contains(t, err.Error(), "missing account_uuid")
+	require.True(t, infraerrors.IsBadRequest(err))
+	require.Equal(t, "CLAUDE_OAUTH_ACCOUNT_UUID_MISSING", infraerrors.Reason(err))
 }
 
 // TestBuildOAuthMetadataUserID_SessionIDStableAcrossTurns 验证伪装路径合成的
@@ -66,7 +103,7 @@ func TestBuildOAuthMetadataUserID_UsesAccountUUIDWhenPresent(t *testing.T) {
 func TestBuildOAuthMetadataUserID_SessionIDStableAcrossTurns(t *testing.T) {
 	svc := &GatewayService{}
 	account := &Account{ID: 777, Type: AccountTypeOAuth, Extra: map[string]any{"account_uuid": "acc-uuid"}}
-	fp := &Fingerprint{ClientID: "clientid777", UserAgent: "claude-cli/2.1.161 (external, cli)"}
+	fp := &Fingerprint{ClientID: "clientid777", UserAgent: "claude-cli/2.1.191 (external, cli)"}
 
 	mustParse := func(body string) *ParsedRequest {
 		parsed, err := ParseGatewayRequest(NewRequestBodyRef([]byte(body)), PlatformAnthropic)

@@ -131,6 +131,9 @@ docs/*
 !docs/PAYMENT.md
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
+!docs/CLAUDE_CODE_REQUEST_PROFILES.md
+!docs/CLAUDE_CODE_BODY_PROFILE_HEADER_POLICY.md
+!docs/CLAUDE_DESKTOP_PATHS.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

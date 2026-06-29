@@ -11,7 +11,16 @@ import (
 
 // ccVersionInBillingRe matches the semver part of cc_version (X.Y.Z), preserving
 // the trailing message-derived suffix (e.g. ".c02") if present.
-var ccVersionInBillingRe = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+`)
+var (
+	ccVersionInBillingRe             = regexp.MustCompile(`cc_version=\d+\.\d+\.\d+`)
+	claudeCodeBillingWorkloadValueRe = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+)
+
+type claudeCodeBillingAttributionOptions struct {
+	Entrypoint string
+	Workload   string
+	IsSubagent bool
+}
 
 // syncBillingHeaderVersion rewrites cc_version in x-anthropic-billing-header
 // system text blocks to match the version extracted from userAgent.
@@ -44,5 +53,93 @@ func syncBillingHeaderVersion(body []byte, userAgent string) []byte {
 		return true
 	})
 
+	return body
+}
+
+func parseClaudeCodeBillingAttributionText(text string) (entrypoint string, hasCCH bool, ok bool) {
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, claudeCodeBillingHeaderPrefix) {
+		return "", false, false
+	}
+	if !strings.Contains(trimmed, "cc_version=") || !strings.Contains(trimmed, claudeCodeEntrypointMarker) {
+		return "", false, false
+	}
+
+	rest := trimmed[strings.Index(trimmed, claudeCodeEntrypointMarker)+len(claudeCodeEntrypointMarker):]
+	end := strings.IndexAny(rest, "; \t\r\n")
+	if end >= 0 {
+		rest = rest[:end]
+	}
+	entrypoint = strings.TrimSpace(rest)
+	return entrypoint, strings.Contains(trimmed, "cch="), entrypoint != ""
+}
+
+func extractClaudeCodeBillingAttributionOptions(text string) claudeCodeBillingAttributionOptions {
+	opts := claudeCodeBillingAttributionOptions{}
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, claudeCodeBillingHeaderPrefix) {
+		return opts
+	}
+	for _, part := range strings.Split(trimmed, ";") {
+		field := strings.TrimSpace(part)
+		if strings.HasPrefix(field, "cc_workload=") {
+			workload := strings.TrimPrefix(field, "cc_workload=")
+			if claudeCodeBillingWorkloadValueRe.MatchString(workload) {
+				opts.Workload = workload
+			}
+			continue
+		}
+		if field == "cc_is_subagent=true" {
+			opts.IsSubagent = true
+		}
+	}
+	return opts
+}
+
+func normalizeClaudeCodeBillingEntrypoint(_ string) string {
+	return "cli"
+}
+
+func refreshClaudeCodeBillingAttribution(body []byte, cliVersion string) []byte {
+	cliVersion = strings.TrimSpace(cliVersion)
+	if cliVersion == "" {
+		return body
+	}
+
+	system := gjson.GetBytes(body, "system")
+	if !system.IsArray() {
+		return body
+	}
+	items := system.Array()
+	if len(items) == 0 {
+		return body
+	}
+	text := items[0].Get("text")
+	if !text.Exists() || text.Type != gjson.String {
+		return body
+	}
+	current := text.String()
+	entrypoint, _, ok := parseClaudeCodeBillingAttributionText(current)
+	if !ok {
+		return body
+	}
+
+	opts := extractClaudeCodeBillingAttributionOptions(current)
+	opts.Entrypoint = normalizeClaudeCodeBillingEntrypoint(entrypoint)
+	nextText, err := buildBillingAttributionTextWithOptions(
+		body,
+		cliVersion,
+		opts,
+	)
+	if err != nil {
+		return body
+	}
+	nextBlock, err := marshalAnthropicSystemTextBlock(nextText, false)
+	if err != nil {
+		return body
+	}
+	if updated, ok := setJSONRawBytes(body, "system.0", nextBlock); ok {
+		return updated
+	}
 	return body
 }

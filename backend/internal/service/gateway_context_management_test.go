@@ -34,7 +34,7 @@ import (
 //   1) sanitizeAnthropicBodyForBetaTokens 纯函数
 //   2) anthropicBetaTokensContains 解析辅助函数
 //   3) computeFinalAnthropicBeta / computeFinalCountTokensAnthropicBeta 各路径
-//   4) normalizeClaudeOAuthRequestBody 的 context_management 补齐行为（不再按 model 短路）
+//   4) normalizeClaudeOAuthRequestBody 的 Claude Code mimic 默认 body 字段
 
 // ============================================================================
 // anthropicBetaTokensContains
@@ -138,21 +138,24 @@ func newTestGatewayServiceForBeta(injectBetaForAPIKey bool) *GatewayService {
 
 func TestComputeFinalAnthropicBeta_OAuthMimic_NonHaiku_IncludesContextManagement(t *testing.T) {
 	s := newTestGatewayServiceForBeta(false)
-	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-sonnet-4-6", http.Header{}, []byte(`{}`), nil)
+	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-sonnet-4-6", http.Header{}, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"OAuth mimic non-haiku 必须注入完整 CC mimicry beta，含 context-management-2025-06-27")
-	require.True(t, anthropicBetaTokensContains(final, claude.BetaOAuth))
+		"OAuth mimic non-haiku 应根据 body.context_management 注入 context-management-2025-06-27")
+	require.False(t, anthropicBetaTokensContains(final, claude.BetaOAuth),
+		"TTY main 抓包中 OAuth 请求不携带 oauth beta")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaClaudeCode))
 }
 
-func TestComputeFinalAnthropicBeta_OAuthMimic_Haiku_ExcludesContextManagement(t *testing.T) {
+func TestComputeFinalAnthropicBeta_OAuthMimic_Haiku_MatchesTTYHaikuBetas(t *testing.T) {
 	s := newTestGatewayServiceForBeta(false)
-	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-haiku-4-5", http.Header{}, []byte(`{}`), nil)
+	body := []byte(`{"context_management":{"edits":[]},"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral","scope":"global"}}]}`)
+	final, ok := s.computeFinalAnthropicBeta("oauth", true, "claude-haiku-4-5", http.Header{}, body, nil)
 	require.True(t, ok)
-	require.False(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"OAuth mimic haiku 仅注入 oauth + interleaved-thinking，不含 context-management")
-	require.True(t, anthropicBetaTokensContains(final, claude.BetaOAuth))
+	require.Equal(t, claude.HaikuBetaHeader, final)
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement))
+	require.False(t, anthropicBetaTokensContains(final, claude.BetaOAuth),
+		"TTY Haiku main 抓包中 OAuth 请求不携带 oauth beta")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaInterleavedThinking))
 }
 
@@ -167,26 +170,26 @@ func TestComputeFinalAnthropicBeta_OAuthMimic_IgnoresClientBeta(t *testing.T) {
 		"mimic 路径必须忽略客户端 anthropic-beta header")
 }
 
-func TestComputeFinalAnthropicBeta_OAuthTransparent_NonHaiku_PreservesClientContextManagement(t *testing.T) {
-	// 真 CC 客户端透传：客户端 header 中的 context-management beta 必须保留
+func TestComputeFinalAnthropicBeta_OAuthTransparent_NonHaiku_UsesBodyContextManagement(t *testing.T) {
+	// OAuth 路径不信任客户端 header；body 有 context_management 才注入 beta。
 	s := newTestGatewayServiceForBeta(false)
 	hdr := http.Header{}
-	hdr.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20,context-management-2025-06-27")
-	final, ok := s.computeFinalAnthropicBeta("oauth", false, "claude-sonnet-4-6", hdr, []byte(`{}`), nil)
+	hdr.Set("anthropic-beta", "custom-without-effect")
+	final, ok := s.computeFinalAnthropicBeta("oauth", false, "claude-sonnet-4-6", hdr, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement))
+	require.False(t, anthropicBetaTokensContains(final, "custom-without-effect"))
 }
 
 func TestComputeFinalAnthropicBeta_OAuthTransparent_Haiku_RealCCPreservesContextManagement(t *testing.T) {
-	// haiku 透传 + 客户端带 context-management beta → 必须保留
-	// （能力维度核心场景：避免 model-name 误删客户端透传的功能 beta）
+	// haiku 透传同样按最终 body 判断 context-management beta。
 	s := newTestGatewayServiceForBeta(false)
 	hdr := http.Header{}
-	hdr.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20,context-management-2025-06-27,interleaved-thinking-2025-05-14")
-	final, ok := s.computeFinalAnthropicBeta("oauth", false, "claude-haiku-4-5", hdr, []byte(`{}`), nil)
+	hdr.Set("anthropic-beta", "claude-code-20250219,oauth-2025-04-20")
+	final, ok := s.computeFinalAnthropicBeta("oauth", false, "claude-haiku-4-5", hdr, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"真 CC + haiku + 客户端带 context-management beta → 透传必须保留")
+		"OAuth + haiku + body.context_management → beta 必须保留")
 }
 
 func TestComputeFinalAnthropicBeta_APIKey_PassesClientBetaThroughDropSet(t *testing.T) {
@@ -211,32 +214,27 @@ func TestComputeFinalAnthropicBeta_APIKey_NoClientBetaInjectOff_ShouldNotSet(t *
 // ============================================================================
 
 func TestComputeFinalCountTokensAnthropicBeta_OAuthMimic_AlwaysIncludesContextManagement(t *testing.T) {
-	// count_tokens 路径下 mimic 不按 haiku 排除：始终注入完整 mimicry beta
+	// count_tokens 路径下也按最终 body.context_management 注入 BetaContextManagement。
 	s := newTestGatewayServiceForBeta(false)
-	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", true, "claude-haiku-4-5", http.Header{}, []byte(`{}`), nil)
+	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", true, "claude-haiku-4-5", http.Header{}, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"count_tokens + mimic 即使 haiku 也注入 context-management beta（与 messages 不同）")
+		"count_tokens + body.context_management 注入 context-management beta")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaTokenCounting),
 		"count_tokens 路径必须含 token-counting beta")
 }
 
-// 重构等价性回归：
-// 原 main buildCountTokensRequest 在 count_tokens mimic 分支上不跳过白名单透传
-// （与 messages mimic 不同），incomingBeta 取自客户端透传。重构后必须从 clientHeaders
-// 拿同一个值并 merge，否则会丢失客户端 beta。
-func TestComputeFinalCountTokensAnthropicBeta_OAuthMimic_PreservesClientBeta(t *testing.T) {
+// OAuth count_tokens 与 messages 一样不信任调用方 anthropic-beta header。
+func TestComputeFinalCountTokensAnthropicBeta_OAuthMimic_IgnoresClientBeta(t *testing.T) {
 	s := newTestGatewayServiceForBeta(false)
 	hdr := http.Header{}
 	hdr.Set("anthropic-beta", "custom-experimental-beta,context-1m-2025-08-07")
-	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", true, "claude-haiku-4-5", hdr, []byte(`{}`), nil)
+	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", true, "claude-haiku-4-5", hdr, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
-	require.True(t, anthropicBetaTokensContains(final, "custom-experimental-beta"),
-		"count_tokens mimic 不同于 messages mimic：原代码会保留客户端透传的 beta")
-	require.True(t, anthropicBetaTokensContains(final, "context-1m-2025-08-07"),
-		"客户端透传的其他 beta token 同样需要保留")
+	require.False(t, anthropicBetaTokensContains(final, "custom-experimental-beta"))
+	require.False(t, anthropicBetaTokensContains(final, "context-1m-2025-08-07"))
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"同时 FullClaudeCodeMimicryBetas 不打折扣")
+		"body.context_management 仍然驱动 context-management beta")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaTokenCounting),
 		"同时补齐 token-counting beta")
 }
@@ -256,56 +254,50 @@ func TestComputeFinalAnthropicBeta_OAuthMimic_IgnoresClientBetaExplicit(t *testi
 }
 
 func TestComputeFinalCountTokensAnthropicBeta_OAuthTransparent_NoClientBetaInjectsDefault(t *testing.T) {
-	// 真 CC 客户端透传 + 客户端未传 anthropic-beta → 用 CountTokensBetaHeader 兜底
+	// OAuth 透传 + 客户端未传 anthropic-beta → 用 body/model 推导 beta 并追加 token-counting。
 	s := newTestGatewayServiceForBeta(false)
-	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", false, "claude-haiku-4-5", http.Header{}, []byte(`{}`), nil)
+	body := []byte(`{"context_management":{"edits":[]},"system":[{"type":"text","text":"s","cache_control":{"type":"ephemeral","scope":"global"}}]}`)
+	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", false, "claude-haiku-4-5", http.Header{}, body, nil)
 	require.True(t, ok)
-	require.Equal(t, claude.CountTokensBetaHeader, final)
-	// CountTokensBetaHeader 不含 context-management beta
-	require.False(t, anthropicBetaTokensContains(final, claude.BetaContextManagement))
+	require.Equal(t, claude.HaikuBetaHeader+","+claude.BetaTokenCounting, final)
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement))
+	require.True(t, anthropicBetaTokensContains(final, claude.BetaTokenCounting))
 }
 
 func TestComputeFinalCountTokensAnthropicBeta_OAuthTransparent_AppendsBetaTokenCounting(t *testing.T) {
 	s := newTestGatewayServiceForBeta(false)
 	hdr := http.Header{}
 	hdr.Set("anthropic-beta", "oauth-2025-04-20,context-management-2025-06-27")
-	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", false, "claude-sonnet-4-6", hdr, []byte(`{}`), nil)
+	final, ok := s.computeFinalCountTokensAnthropicBeta("oauth", false, "claude-sonnet-4-6", hdr, []byte(`{"context_management":{"edits":[]}}`), nil)
 	require.True(t, ok)
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaTokenCounting),
 		"客户端未带 token-counting beta 时必须补齐")
 	require.True(t, anthropicBetaTokensContains(final, claude.BetaContextManagement),
-		"客户端带的 context-management beta 必须保留")
+		"body.context_management 必须驱动 context-management beta")
 }
 
 // ============================================================================
-// normalizeClaudeOAuthRequestBody — 回归：context_management 补齐恢复原行为
+// normalizeClaudeOAuthRequestBody — Claude Code mimic 默认 body 字段
 // ============================================================================
-//
-// 重构后该函数不再按 model 名短路：thinking=enabled/adaptive 时补齐 context_management，
-// 与 model 无关。strip 责任移交 sanitizeAnthropicBodyForBetaTokens（在
-// buildUpstreamRequest 层按最终 beta header 执行）。
 
-func TestNormalizeClaudeOAuthRequestBody_InjectsContextManagement_ThinkingEnabled(t *testing.T) {
+func TestNormalizeClaudeOAuthRequestBody_DoesNotInjectContextManagement_ThinkingEnabled(t *testing.T) {
 	body := []byte(`{"model":"claude-sonnet-4-6","thinking":{"type":"enabled","budget_tokens":1000},"messages":[]}`)
 	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{})
-	require.True(t, gjson.GetBytes(out, "context_management").Exists())
-	require.Equal(t, "clear_thinking_20251015",
-		gjson.GetBytes(out, "context_management.edits.0.type").String())
+	require.False(t, gjson.GetBytes(out, "context_management").Exists())
+	require.Equal(t, "enabled", gjson.GetBytes(out, "thinking.type").String())
 }
 
-func TestNormalizeClaudeOAuthRequestBody_InjectsContextManagement_ThinkingAdaptive(t *testing.T) {
+func TestNormalizeClaudeOAuthRequestBody_DoesNotInjectContextManagement_ThinkingAdaptive(t *testing.T) {
 	body := []byte(`{"model":"claude-opus-4-7","thinking":{"type":"adaptive"},"messages":[]}`)
 	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-opus-4-7", claudeOAuthNormalizeOptions{})
-	require.True(t, gjson.GetBytes(out, "context_management").Exists())
+	require.False(t, gjson.GetBytes(out, "context_management").Exists())
+	require.Equal(t, "adaptive", gjson.GetBytes(out, "thinking.type").String())
 }
 
-func TestNormalizeClaudeOAuthRequestBody_HaikuStillInjects_StripDeferredToSanitize(t *testing.T) {
-	// haiku + thinking=enabled：normalize 阶段仍按 CLI mimicry 行为补齐字段；
-	// strip 由 buildUpstreamRequest 层的 sanitize 兜底（如果 final beta 不含 token）。
+func TestNormalizeClaudeOAuthRequestBody_HaikuDoesNotInjectContextManagement(t *testing.T) {
 	body := []byte(`{"model":"claude-haiku-4-5","thinking":{"type":"enabled","budget_tokens":1000},"messages":[]}`)
 	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-haiku-4-5", claudeOAuthNormalizeOptions{})
-	require.True(t, gjson.GetBytes(out, "context_management").Exists(),
-		"normalize 不再按 model 名短路；strip 责任移交 sanitize 层")
+	require.False(t, gjson.GetBytes(out, "context_management").Exists())
 }
 
 func TestNormalizeClaudeOAuthRequestBody_PreservesClientContextManagement(t *testing.T) {
@@ -319,6 +311,16 @@ func TestNormalizeClaudeOAuthRequestBody_PreservesClientContextManagement(t *tes
 func TestNormalizeClaudeOAuthRequestBody_NoThinking_NoInject(t *testing.T) {
 	body := []byte(`{"model":"claude-sonnet-4-6","messages":[]}`)
 	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{})
+	require.False(t, gjson.GetBytes(out, "context_management").Exists())
+}
+
+func TestNormalizeClaudeOAuthRequestBody_DefaultsAreOptIn(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-4-6","thinking":{"type":"enabled","budget_tokens":1000},"messages":[],"tool_choice":{"type":"auto"}}`)
+	out, _ := normalizeClaudeOAuthRequestBody(body, "claude-sonnet-4-6", claudeOAuthNormalizeOptions{})
+	require.False(t, gjson.GetBytes(out, "tools").Exists())
+	require.True(t, gjson.GetBytes(out, "tool_choice").Exists())
+	require.False(t, gjson.GetBytes(out, "max_tokens").Exists())
+	require.False(t, gjson.GetBytes(out, "temperature").Exists())
 	require.False(t, gjson.GetBytes(out, "context_management").Exists())
 }
 
@@ -411,7 +413,7 @@ func TestBuildCountTokensRequestAnthropicAPIKeyPassthrough_StripsContextManageme
 // 这个测试能挡住未来某人忘调 sanitize / 将 sanitize 挪到 CCH 之后 等 regression。
 // ============================================================================
 
-func TestBuildUpstreamRequest_OAuthMimicHaiku_StripsContextManagementEndToEnd(t *testing.T) {
+func TestBuildUpstreamRequest_OAuthMimicHaiku_PreservesContextManagementEndToEnd(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -422,8 +424,8 @@ func TestBuildUpstreamRequest_OAuthMimicHaiku_StripsContextManagementEndToEnd(t 
 		Status:      StatusActive,
 		Schedulable: true,
 	}
-	// haiku + mimic CC → final beta = HaikuBetaHeader（不含 context-management）→
-	// body 必须 strip。
+	// haiku + mimic CC → final beta = TTY HaikuBetaHeader（含 context-management）→
+	// body 必须保留。
 	body := []byte(`{"model":"claude-haiku-4-5","context_management":{"edits":[{"type":"clear_thinking_20251015"}]},"messages":[]}`)
 	svc := &GatewayService{cfg: &config.Config{}}
 	req, _, err := svc.buildUpstreamRequest(
@@ -435,10 +437,10 @@ func TestBuildUpstreamRequest_OAuthMimicHaiku_StripsContextManagementEndToEnd(t 
 	outBody := readUpstreamBodyForTest(t, req)
 	outBeta := getHeaderRaw(req.Header, "anthropic-beta")
 
-	require.False(t, gjson.GetBytes(outBody, "context_management").Exists(),
-		"OAuth mimic + haiku 端到端：outgoing body 不应含 context_management")
-	require.False(t, anthropicBetaTokensContains(outBeta, claude.BetaContextManagement),
-		"对称约束：outgoing anthropic-beta header 也不带 context-management beta")
+	require.True(t, gjson.GetBytes(outBody, "context_management").Exists(),
+		"OAuth mimic + haiku 端到端：TTY Haiku 请求应保留 context_management")
+	require.True(t, anthropicBetaTokensContains(outBeta, claude.BetaContextManagement),
+		"对称约束：outgoing anthropic-beta header 同时含 context-management beta")
 }
 
 func TestBuildUpstreamRequest_OAuthMimicNonHaiku_PreservesContextManagementEndToEnd(t *testing.T) {

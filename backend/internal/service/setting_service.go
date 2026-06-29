@@ -2670,8 +2670,9 @@ func (s *SettingService) IsRewriteMessageCacheControlEnabled(ctx context.Context
 	return s.getGatewayForwardingSettingsCached(ctx).rewriteMessageCacheControl
 }
 
-// GetClaudeOAuthSystemPromptInjectionSettings returns the Claude OAuth mimic
-// system block switch, legacy custom expansion prompt, and configurable blocks JSON.
+// GetClaudeOAuthSystemPromptInjectionSettings returns the legacy Claude OAuth
+// mimic system block switch, custom expansion prompt, and configurable blocks JSON.
+// GatewayService ignores the switch for forced Claude OAuth mimic system rewrites.
 // Empty values mean use the built-in Claude Code default blocks.
 func (s *SettingService) GetClaudeOAuthSystemPromptInjectionSettings(ctx context.Context) (enabled bool, prompt string, blocks string) {
 	result := s.getGatewayForwardingSettingsCached(ctx)

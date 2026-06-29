@@ -438,11 +438,10 @@ const (
 	SettingKeyEnableFingerprintUnification = "enable_fingerprint_unification"
 	// SettingKeyEnableMetadataPassthrough 是否透传客户端原始 metadata.user_id（默认 false）
 	SettingKeyEnableMetadataPassthrough = "enable_metadata_passthrough"
-	// SettingKeyEnableCCHSigning 已废弃（no-op）：新版 Claude Code CLI 已取消 cch 签名字段，
-	// 网关随之不再注入/签名 cch（见 buildBillingAttributionText）。保留该 key 仅为向后兼容，
-	// 开关不再产生任何效果。
+	// SettingKeyEnableCCHSigning 保留为兼容旧配置；CCH 会在最终 body 上按
+	// claude.exe native 发送层算法自动补写。
 	SettingKeyEnableCCHSigning = "enable_cch_signing"
-	// SettingKeyEnableClaudeOAuthSystemPromptInjection 是否对 Claude OAuth mimic 路径注入 Claude Code system blocks（默认 true）
+	// SettingKeyEnableClaudeOAuthSystemPromptInjection 兼容旧配置；Claude OAuth mimic 路径现在强制重建 Claude Code system blocks
 	SettingKeyEnableClaudeOAuthSystemPromptInjection = "enable_claude_oauth_system_prompt_injection"
 	// SettingKeyClaudeOAuthSystemPrompt Claude OAuth mimic 路径注入的通用扩展 system prompt（空值使用内置默认）
 	SettingKeyClaudeOAuthSystemPrompt = "claude_oauth_system_prompt"

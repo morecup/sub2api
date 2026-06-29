@@ -403,13 +403,14 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			err := json.Unmarshal(result, &parsed)
 			require.NoError(t, err)
 
-			// system 应为 array 格式，对齐真实 Claude Code CLI 的 3-block 形态：
+			// system 应为 array 格式，对齐真实 Claude Code CLI 的 4-block 形态：
 			//   [0] billing attribution block (x-anthropic-billing-header: cc_version=...;)
 			//   [1] Claude Code 身份前缀 block (不带 cache_control)
-			//   [2] 工具无关的通用提示词扩充 block (带 cache_control，作为缓存断点)
+			//   [2] 工具无关的通用提示词扩充 block (global cache)
+			//   [3] 动态/session prompt block (普通 ephemeral cache)
 			systemArr, ok := parsed["system"].([]any)
 			require.True(t, ok, "system should be an array, got %T", parsed["system"])
-			require.Len(t, systemArr, 3, "system array should have exactly 3 blocks (billing + cc prompt + expansion)")
+			require.Len(t, systemArr, 4, "system array should have exactly 4 blocks (billing + cc prompt + expansion + dynamic)")
 
 			billingBlock, ok := systemArr[0].(map[string]any)
 			require.True(t, ok)
@@ -417,8 +418,7 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			require.Contains(t, billingBlock["text"], "x-anthropic-billing-header:")
 			require.Contains(t, billingBlock["text"], "cc_version=")
 			require.Contains(t, billingBlock["text"], "cc_entrypoint=cli")
-			// 新版 CLI 已取消 cch=... 签名字段，注入的 billing block 不应再带 cch。
-			require.NotContains(t, billingBlock["text"], "cch=")
+			require.Contains(t, billingBlock["text"], "cch=00000;")
 
 			systemBlock, ok := systemArr[1].(map[string]any)
 			require.True(t, ok)
@@ -434,6 +434,25 @@ func TestRewriteSystemForNonClaudeCode(t *testing.T) {
 			cc, ok := expansionBlock["cache_control"].(map[string]any)
 			require.True(t, ok, "expansion block should have cache_control")
 			require.Equal(t, "ephemeral", cc["type"])
+			require.Equal(t, "global", cc["scope"])
+
+			dynamicBlock, ok := systemArr[3].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "text", dynamicBlock["type"])
+			dynamicText, ok := dynamicBlock["text"].(string)
+			require.True(t, ok)
+			require.Contains(t, dynamicText, "# Text output (does not apply to tool calls)")
+			require.Contains(t, dynamicText, "# Environment")
+			require.NotContains(t, dynamicText, "active Claude Code CLI session context")
+			require.NotContains(t, dynamicText, "gitStatus:")
+			require.NotContains(t, dynamicText, "Git user:")
+			require.NotContains(t, dynamicText, "\nStatus:")
+			require.NotContains(t, dynamicText, "Recent commits:")
+			require.NotContains(t, dynamicText, "unavailable")
+			dynCC, ok := dynamicBlock["cache_control"].(map[string]any)
+			require.True(t, ok, "dynamic block should have cache_control")
+			require.Equal(t, "ephemeral", dynCC["type"])
+			require.NotContains(t, dynCC, "scope")
 
 			// 检查 messages
 			messages, ok := parsed["messages"].([]any)
@@ -477,9 +496,32 @@ func TestRewriteSystemForNonClaudeCodeWithPrompt_UsesCustomExpansionPrompt(t *te
 
 	system := gjson.GetBytes(result, "system")
 	require.True(t, system.IsArray())
-	require.Len(t, system.Array(), 3)
+	require.Len(t, system.Array(), 4)
 	require.Equal(t, customPrompt, system.Array()[2].Get("text").String())
 	require.Equal(t, "ephemeral", system.Array()[2].Get("cache_control.type").String())
+	require.Equal(t, "global", system.Array()[2].Get("cache_control.scope").String())
+	require.Contains(t, system.Array()[3].Get("text").String(), "# Text output (does not apply to tool calls)")
+	require.Contains(t, system.Array()[3].Get("text").String(), "# Environment")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "active Claude Code CLI session context")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "gitStatus:")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "Git user:")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "\nStatus:")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "Recent commits:")
+	require.NotContains(t, system.Array()[3].Get("text").String(), "unavailable")
+	require.Equal(t, "ephemeral", system.Array()[3].Get("cache_control.type").String())
+}
+
+func TestBuildClaudeCodeDynamicSystemPromptOmitsUnknownGitInfo(t *testing.T) {
+	text := buildClaudeCodeDynamicSystemPrompt([]byte(`{"model":"claude-sonnet-4-6"}`))
+
+	require.Contains(t, text, "# Environment")
+	require.NotContains(t, text, "gitStatus:")
+	require.NotContains(t, text, "Current branch:")
+	require.NotContains(t, text, "Git user:")
+	require.NotContains(t, text, "\nStatus:")
+	require.NotContains(t, text, "Recent commits:")
+	require.NotContains(t, text, "unknown")
+	require.NotContains(t, text, "unavailable")
 }
 
 func TestRewriteSystemForNonClaudeCodeWithPromptBlocks_UsesConfiguredBlocks(t *testing.T) {
@@ -501,7 +543,7 @@ func TestRewriteSystemForNonClaudeCodeWithPromptBlocks_UsesConfiguredBlocks(t *t
 	require.Len(t, arr, 3)
 	require.Contains(t, arr[0].Get("text").String(), "prefix "+claude.CLICurrentVersion+".")
 	require.Equal(t, "ephemeral", arr[0].Get("cache_control.type").String())
-	require.Equal(t, claude.DefaultCacheControlTTL, arr[0].Get("cache_control.ttl").String())
+	require.False(t, arr[0].Get("cache_control.ttl").Exists())
 	require.Equal(t, claudeCodeSystemPrompt, arr[1].Get("text").String())
 	require.False(t, arr[1].Get("cache_control").Exists())
 	require.Equal(t, "tail", arr[2].Get("text").String())

@@ -2931,9 +2931,9 @@ export default {
       createFirstMonitor: '创建第一个监控来跟踪渠道可用性',
       advanced: {
         section: '高级（可选）',
-        sectionHint: '自定义请求头和请求体，用于突破上游的客户端识别限制（如仅允许 Claude Code 客户端）。',
+        sectionHint: '自定义请求头和请求体，用于对齐上游客户端识别口径（如仅允许 Claude Code 客户端）。',
         headers: '自定义请求头',
-        headersPlaceholder: 'User-Agent: claude-cli/1.0.83 (external, cli)\nx-app: cli\nanthropic-beta: claude-code-20250219',
+        headersPlaceholder: 'User-Agent: claude-cli/2.1.191 (external, cli)\nx-app: cli\nanthropic-version: 2023-06-01\nanthropic-dangerous-direct-browser-access: true\nX-Stainless-Arch: x64\nX-Stainless-Lang: js\nX-Stainless-OS: Windows\nX-Stainless-Package-Version: 0.94.0\nX-Stainless-Retry-Count: 0\nX-Stainless-Runtime: node\nX-Stainless-Runtime-Version: v26.3.0\nX-Stainless-Timeout: 600\nanthropic-beta: claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24',
         headerNamePlaceholder: 'Header 名',
         headerValuePlaceholder: 'Value',
         headerAddRow: '添加 Header',
@@ -2985,7 +2985,7 @@ export default {
         headersSummary: '{n} 个自定义请求头',
         form: {
           name: '模板名称',
-          namePlaceholder: '例：Claude Code 伪装',
+          namePlaceholder: '例：Claude Code TTY',
           description: '说明',
           descriptionPlaceholder: '可选：说明这个模板的用途和来源（抓包日期等）'
         }
@@ -3184,6 +3184,9 @@ export default {
       notes: '备注',
       notesPlaceholder: '请输入备注',
       notesHint: '备注可选',
+      missingAccountUUID: '缺少 account_uuid',
+      missingAccountUUIDHint:
+        '此 Anthropic OAuth/Setup Token 账号缺少 account_uuid，Claude Code OAuth 兼容请求会失败。请重新授权该账号，或在账号 Extra 中补充真实 account_uuid。',
       // Filter options
       allPlatforms: '全部平台',
       allTypes: '全部类型',
@@ -5973,8 +5976,8 @@ export default {
         fingerprintUnificationHint: '统一共享同一 OAuth 账号的用户的 X-Stainless-* 请求头。关闭后透传客户端原始请求头。',
         metadataPassthrough: 'Metadata 透传',
         metadataPassthroughHint: '透传客户端原始 metadata.user_id，不进行重写。可能提高上游缓存命中率。',
-        cchSigning: 'CCH 签名',
-        cchSigningHint: '对转发请求的 billing header 进行 CCH 哈希签名。关闭时保留原始占位符。',
+        cchSigning: 'CCH 兼容项',
+        cchSigningHint: '兼容开关保留用于旧配置。服务端会按 claude.exe native 发送层算法自动补写 CCH。',
         claudeOAuthSystemPromptInjection: 'Claude OAuth System 注入',
         claudeOAuthSystemPromptInjectionHint: '为非 Claude Code 客户端的 Claude OAuth 请求注入 Claude Code 形态的 system blocks。默认开启。',
         claudeOAuthSystemPrompt: 'Claude OAuth 扩展提示词',
