@@ -2199,6 +2199,94 @@ func TestOpenAIStreamingPassthroughResponseIncompleteWithoutDoneMarkerStillSucce
 	require.Equal(t, 1, result.usage.CacheReadInputTokens)
 }
 
+func TestOpenAIStreamingOAuthIncompleteMaxOutputIsCompletedForClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			StreamDataIntervalTimeout: 0,
+			StreamKeepaliveInterval:   0,
+			MaxLineSize:               defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: cfg, toolCorrector: NewCodexToolCorrector()}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	terminal := `{"type":"response.incomplete","response":{"id":"resp_1","object":"response","created_at":1782729217,"status":"incomplete","completed_at":null,"incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","id":"msg_1","status":"incomplete","content":[{"type":"output_text","text":"partial"}]}],"usage":{"input_tokens":270563,"output_tokens":983}}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			"event: response.output_text.delta",
+			`data: {"type":"response.output_text.delta","delta":"partial","output_index":0,"content_index":0}`,
+			"",
+			"event: response.incomplete",
+			"data: " + terminal,
+			"",
+		}, "\n"))),
+		Header: http.Header{"X-Request-Id": []string{"rid-incomplete-max-output"}},
+	}
+
+	result, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Name: "oauth"}, time.Now(), "gpt-5.5", "gpt-5.5")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 270563, result.usage.InputTokens)
+	require.Equal(t, 983, result.usage.OutputTokens)
+
+	body := rec.Body.String()
+	require.Contains(t, body, "event: response.completed")
+	require.Contains(t, body, `"type":"response.completed"`)
+	require.Contains(t, body, `"status":"completed"`)
+	require.Contains(t, body, `"completed_at":1782729217`)
+	require.NotContains(t, body, "response.incomplete")
+	require.NotContains(t, body, "incomplete_details")
+	require.Contains(t, body, `"text":"partial"`)
+}
+
+func TestOpenAIStreamingPassthroughOAuthIncompleteMaxOutputIsCompletedForClient(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cfg := &config.Config{
+		Gateway: config.GatewayConfig{
+			MaxLineSize: defaultMaxLineSize,
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: cfg}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/", nil)
+
+	terminal := `{"type":"response.incomplete","response":{"id":"resp_1","object":"response","created_at":1782729217,"status":"incomplete","completed_at":null,"incomplete_details":{"reason":"max_output_tokens"},"output":[{"type":"message","id":"msg_1","status":"incomplete","content":[{"type":"output_text","text":"partial"}]}],"usage":{"input_tokens":270563,"output_tokens":983}}}`
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Body: io.NopCloser(strings.NewReader(strings.Join([]string{
+			"event: response.output_text.delta",
+			`data: {"type":"response.output_text.delta","delta":"partial","output_index":0,"content_index":0}`,
+			"",
+			"event: response.incomplete",
+			"data: " + terminal,
+			"",
+		}, "\n"))),
+		Header: http.Header{"X-Request-Id": []string{"rid-pass-incomplete-max-output"}},
+	}
+
+	result, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Name: "oauth"}, time.Now(), "", "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 270563, result.usage.InputTokens)
+	require.Equal(t, 983, result.usage.OutputTokens)
+
+	body := rec.Body.String()
+	require.Contains(t, body, "event: response.completed")
+	require.Contains(t, body, `"type":"response.completed"`)
+	require.Contains(t, body, `"status":"completed"`)
+	require.Contains(t, body, `"completed_at":1782729217`)
+	require.NotContains(t, body, "response.incomplete")
+	require.NotContains(t, body, "incomplete_details")
+	require.Contains(t, body, `"text":"partial"`)
+}
+
 func TestOpenAIStreamingTooLong(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{
