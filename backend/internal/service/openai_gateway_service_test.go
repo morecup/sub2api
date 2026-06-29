@@ -1630,12 +1630,12 @@ func TestOpenAIStreamingErrorEventBeforeOutputServerOverloadedCodeReturnsFailove
 		Header: http.Header{"X-Request-Id": []string{"rid-overloaded-error"}},
 	}
 	account := &Account{
-		ID:          1,
-		Platform:    PlatformOpenAI,
-		Type:        AccountTypeAPIKey,
-		Name:        "acc",
-		Credentials: map[string]any{"pool_mode": true},
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Name:     "acc",
 	}
+	require.False(t, account.IsPoolMode())
 
 	_, err := svc.handleStreamingResponse(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
 	require.Error(t, err)
@@ -1676,12 +1676,12 @@ func TestOpenAIStreamingPassthroughErrorEventBeforeOutputServerOverloadedCodeRet
 		Header: http.Header{"X-Request-Id": []string{"rid-overloaded-error-passthrough"}},
 	}
 	account := &Account{
-		ID:          1,
-		Platform:    PlatformOpenAI,
-		Type:        AccountTypeAPIKey,
-		Name:        "acc",
-		Credentials: map[string]any{"pool_mode": true},
+		ID:       1,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Name:     "acc",
 	}
+	require.False(t, account.IsPoolMode())
 
 	_, err := svc.handleStreamingResponsePassthrough(c.Request.Context(), resp, c, account, time.Now(), "model", "model")
 	require.Error(t, err)

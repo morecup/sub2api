@@ -3984,10 +3984,13 @@ func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
 }
 
 func openAIStreamEventRetryableOnSameAccount(account *Account, statusCode int, payload []byte, message string) bool {
-	return account != nil &&
-		account.IsPoolMode() &&
-		(account.IsPoolModeRetryableStatus(statusCode) ||
-			isOpenAITransientProcessingError(http.StatusBadRequest, message, payload))
+	if account == nil {
+		return false
+	}
+	if isOpenAITransientProcessingError(http.StatusBadRequest, message, payload) {
+		return true
+	}
+	return account.IsPoolMode() && account.IsPoolModeRetryableStatus(statusCode)
 }
 
 func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
