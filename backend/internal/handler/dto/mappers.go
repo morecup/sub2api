@@ -261,11 +261,9 @@ func AccountFromServiceShallow(a *service.Account) *Account {
 		if mode := a.GetUserMsgQueueMode(); mode != "" {
 			out.UserMsgQueueMode = &mode
 		}
-		// TLS指纹伪装开关
-		if a.IsTLSFingerprintEnabled() {
-			enabled := true
-			out.EnableTLSFingerprint = &enabled
-		}
+		// TLS指纹开关：Anthropic OAuth/SetupToken 默认启用，显式 false 也要返回前端。
+		enabled := a.IsTLSFingerprintEnabled()
+		out.EnableTLSFingerprint = &enabled
 		// TLS指纹模板ID
 		if profileID := a.GetTLSFingerprintProfileID(); profileID > 0 {
 			out.TLSFingerprintProfileID = &profileID

@@ -65,3 +65,32 @@ func TestAccountFromServiceShallow_NilCredentialsOmitsStatus(t *testing.T) {
 	require.Nil(t, got.Credentials)
 	require.Nil(t, got.CredentialsStatus)
 }
+
+func TestAccountFromServiceShallow_TLSFingerprintDefaultAndExplicitFalse(t *testing.T) {
+	defaultOn := AccountFromServiceShallow(&service.Account{
+		ID:       1,
+		Name:     "default-on",
+		Platform: service.PlatformAnthropic,
+		Type:     service.AccountTypeOAuth,
+	})
+	require.NotNil(t, defaultOn.EnableTLSFingerprint)
+	require.True(t, *defaultOn.EnableTLSFingerprint)
+
+	explicitOff := AccountFromServiceShallow(&service.Account{
+		ID:       2,
+		Name:     "explicit-off",
+		Platform: service.PlatformAnthropic,
+		Type:     service.AccountTypeOAuth,
+		Extra:    map[string]any{"enable_tls_fingerprint": false},
+	})
+	require.NotNil(t, explicitOff.EnableTLSFingerprint)
+	require.False(t, *explicitOff.EnableTLSFingerprint)
+
+	unsupported := AccountFromServiceShallow(&service.Account{
+		ID:       3,
+		Name:     "api-key",
+		Platform: service.PlatformAnthropic,
+		Type:     service.AccountTypeAPIKey,
+	})
+	require.Nil(t, unsupported.EnableTLSFingerprint)
+}

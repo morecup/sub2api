@@ -40,8 +40,7 @@ func skipIfExternalServiceUnavailable(t *testing.T, err error) {
 
 // TestJA3Fingerprint verifies the JA3/JA4 fingerprint matches expected value.
 // This test uses tls.peet.ws to verify the fingerprint.
-// Expected JA3 hash: 44f88fca027f27bab4bb08d4af15f23e (Node.js 24.x)
-// Expected JA4: t13d1714h1_5b57614c22b0_7baf387fc6ff
+// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.191 Windows main request)
 func TestJA3Fingerprint(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -67,7 +66,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.0.0 Node.js/24.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	skipIfExternalServiceUnavailable(t, err)
@@ -88,7 +87,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	t.Logf("JA3 Hash: %s", fpResp.TLS.JA3Hash)
 	t.Logf("JA4: %s", fpResp.TLS.JA4)
 
-	expectedJA3Hash := "44f88fca027f27bab4bb08d4af15f23e"
+	expectedJA3Hash := BuiltInDefaultJA3Hash
 	if fpResp.TLS.JA3Hash == expectedJA3Hash {
 		t.Logf("✓ JA3 hash matches: %s", expectedJA3Hash)
 	} else {
@@ -114,9 +113,9 @@ func TestAllProfiles(t *testing.T) {
 	// These profiles are from config.yaml gateway.tls_fingerprint.profiles
 	profiles := []TestProfileExpectation{
 		{
-			// Default profile (Node.js 24.x)
+			// Default profile (Claude Code 2.1.191 Windows main request)
 			Profile: &Profile{
-				Name:         "default_node_v24",
+				Name:         "default_claude_code_21191_windows_main",
 				EnableGREASE: false,
 			},
 			JA4CipherHash: "5b57614c22b0",
@@ -200,7 +199,7 @@ func fetchFingerprint(t *testing.T, profile *Profile) *TLSInfo {
 		t.Fatalf("failed to create request: %v", err)
 		return nil
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.0.0 Node.js/20.0.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	skipIfExternalServiceUnavailable(t, err)

@@ -3627,10 +3627,8 @@ function loadQuotaControlSettings(account: Account) {
   // UMQ mode（独立于 RPM 加载，防止编辑无 RPM 账号时丢失已有配置）
   userMsgQueueMode.value = account.user_msg_queue_mode ?? ''
 
-  // Load TLS fingerprint setting
-  if (account.enable_tls_fingerprint === true) {
-    tlsFingerprintEnabled.value = true
-  }
+  // Load TLS fingerprint setting. Missing value means enabled for Anthropic OAuth/SetupToken.
+  tlsFingerprintEnabled.value = account.enable_tls_fingerprint !== false
   tlsFingerprintProfileId.value = account.tls_fingerprint_profile_id ?? null
 
   // Load session ID masking setting
@@ -4163,7 +4161,7 @@ const handleSubmit = async () => {
           delete newExtra.tls_fingerprint_profile_id
         }
       } else {
-        delete newExtra.enable_tls_fingerprint
+        newExtra.enable_tls_fingerprint = false
         delete newExtra.tls_fingerprint_profile_id
       }
 

@@ -29,7 +29,7 @@ type Profile struct {
 	SupportedVersions   []uint16 // Empty uses [TLS1.3, TLS1.2]
 	KeyShareGroups      []uint16 // Empty uses [X25519]
 	PSKModes            []uint16 // Empty uses [psk_dhe_ke]
-	Extensions          []uint16 // Extension type IDs in order; empty uses default Node.js 24.x order
+	Extensions          []uint16 // Extension type IDs in order; empty uses the built-in Claude Code main-request order
 }
 
 // Dialer creates TLS connections with custom fingerprints.
@@ -52,12 +52,28 @@ type SOCKS5ProxyDialer struct {
 	proxyURL *url.URL
 }
 
-// Default TLS fingerprint values captured from Claude Code (Node.js 24.x)
-// Captured via tls-fingerprint-web capture server
-// JA3 Hash: 44f88fca027f27bab4bb08d4af15f23e
-// JA4:      t13d1714h1_5b57614c22b0_7baf387fc6ff
+const (
+	// BuiltInDefaultProfileName identifies the local Claude Code TLS profile used
+	// when an account enables TLS fingerprinting without selecting a custom profile.
+	BuiltInDefaultProfileName = "Built-in Default (Claude Code 2.1.191 Windows main)"
+
+	// BuiltInDefaultJA3Raw and BuiltInDefaultJA3Hash are from:
+	// C:\Users\Administrator\AppData\Local\Temp\claude-exe-analysis\https-capture\claude_https_20260627-104725.tls_summary.json
+	// Probe executable:
+	// C:\Users\Administrator\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe
+	BuiltInDefaultJA3Raw  = "771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49161-49171-49162-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-21,29-23-24,0"
+	BuiltInDefaultJA3Hash = "d871d02cecbde59abbf8f4806134addf"
+)
+
+// BuiltInDefaultProfile returns the local Claude Code main-request TLS profile.
+func BuiltInDefaultProfile() *Profile {
+	return &Profile{Name: BuiltInDefaultProfileName}
+}
+
+// Default TLS fingerprint values captured from Claude Code 2.1.191 on this Windows host.
+// Main /v1/messages connection: ALPN=http/1.1, JA3 Hash: d871d02cecbde59abbf8f4806134addf.
 var (
-	// defaultCipherSuites contains the 17 cipher suites from Node.js 24.x
+	// defaultCipherSuites contains the 17 cipher suites from the captured Claude Code main request.
 	// Order is critical for JA3 fingerprint matching
 	defaultCipherSuites = []uint16{
 		// TLS 1.3 cipher suites
@@ -90,19 +106,19 @@ var (
 		0x0035, // TLS_RSA_WITH_AES_256_CBC_SHA
 	}
 
-	// defaultCurves contains the 3 supported groups from Node.js 24.x
+	// defaultCurves contains the 3 supported groups from the captured Claude Code main request.
 	defaultCurves = []utls.CurveID{
 		utls.X25519,    // 0x001d
 		utls.CurveP256, // 0x0017 (secp256r1)
 		utls.CurveP384, // 0x0018 (secp384r1)
 	}
 
-	// defaultPointFormats contains point formats from Node.js 24.x
+	// defaultPointFormats contains point formats from the captured Claude Code main request.
 	defaultPointFormats = []uint16{
 		0, // uncompressed
 	}
 
-	// defaultSignatureAlgorithms contains the 9 signature algorithms from Node.js 24.x
+	// defaultSignatureAlgorithms contains the 9 signature algorithms from the captured Claude Code main request.
 	defaultSignatureAlgorithms = []utls.SignatureScheme{
 		0x0403, // ecdsa_secp256r1_sha256
 		0x0804, // rsa_pss_rsae_sha256
@@ -307,11 +323,10 @@ func toUTLSCurves(curves []uint16) []utls.CurveID {
 	return result
 }
 
-// defaultExtensionOrder is the Node.js 24.x extension order.
+// defaultExtensionOrder is the captured Claude Code 2.1.191 main-request extension order.
 // Used when Profile.Extensions is empty.
 var defaultExtensionOrder = []uint16{
 	0,     // server_name
-	65037, // encrypted_client_hello
 	23,    // extended_master_secret
 	65281, // renegotiation_info
 	10,    // supported_groups
@@ -324,6 +339,7 @@ var defaultExtensionOrder = []uint16{
 	51,    // key_share
 	45,    // psk_key_exchange_modes
 	43,    // supported_versions
+	21,    // padding
 }
 
 // isGREASEValue checks if a uint16 value matches the TLS GREASE pattern (0x?a?a).
@@ -416,6 +432,8 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 			extensions = append(extensions, &utls.ALPNExtension{AlpnProtocols: alpnProtocols})
 		case 18: // signed_certificate_timestamp
 			extensions = append(extensions, &utls.SCTExtension{})
+		case 21: // padding
+			extensions = append(extensions, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
 		case 23: // extended_master_secret
 			extensions = append(extensions, &utls.ExtendedMasterSecretExtension{})
 		case 35: // session_ticket

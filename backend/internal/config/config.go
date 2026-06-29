@@ -1012,18 +1012,18 @@ type GatewayUsageRecordConfig struct {
 	AutoScaleCooldownSeconds int `mapstructure:"auto_scale_cooldown_seconds"`
 }
 
-// TLSFingerprintConfig TLS指纹伪装配置
-// 用于模拟 Claude CLI (Node.js) 的 TLS 握手特征，避免被识别为非官方客户端
+// TLSFingerprintConfig TLS指纹配置
+// 用于按已采集 profile 构造 TLS 握手特征，便于兼容性验证。
 type TLSFingerprintConfig struct {
 	// Enabled: 是否全局启用TLS指纹功能
 	Enabled bool `mapstructure:"enabled"`
 	// Profiles: 预定义的TLS指纹配置模板
-	// key 为模板名称，如 "claude_cli_v2", "chrome_120" 等
+	// key 为模板名称，如 "claude_code_21191_windows_main", "chrome_120" 等
 	Profiles map[string]TLSProfileConfig `mapstructure:"profiles"`
 }
 
 // TLSProfileConfig 单个TLS指纹模板的配置
-// 所有列表字段为空时使用内置默认值（Claude CLI 2.x / Node.js 20.x）
+// 所有列表字段为空时使用内置默认值（本机 Claude Code 2.1.191 Windows 主请求抓包）
 // 建议通过 TLS 指纹采集工具 (tests/tls-fingerprint-web) 获取完整配置
 type TLSProfileConfig struct {
 	// Name: 模板显示名称

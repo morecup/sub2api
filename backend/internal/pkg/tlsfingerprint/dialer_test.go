@@ -55,8 +55,7 @@ func TestDialerBasicConnection(t *testing.T) {
 
 // TestJA3Fingerprint verifies the JA3/JA4 fingerprint matches expected value.
 // This test uses tls.peet.ws to verify the fingerprint.
-// Expected JA3 hash: 44f88fca027f27bab4bb08d4af15f23e (Node.js 24.x)
-// Expected JA4: t13d1714h1_5b57614c22b0_7baf387fc6ff
+// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.191 Windows main request)
 func TestJA3Fingerprint(t *testing.T) {
 	skipNetworkTest(t)
 
@@ -81,7 +80,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.0.0 Node.js/24.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -107,8 +106,8 @@ func TestJA3Fingerprint(t *testing.T) {
 	t.Logf("PeetPrint: %s", fpResp.TLS.PeetPrint)
 	t.Logf("PeetPrint Hash: %s", fpResp.TLS.PeetPrintHash)
 
-	// Verify JA3 hash matches expected value (Node.js 24.x default)
-	expectedJA3Hash := "44f88fca027f27bab4bb08d4af15f23e"
+	// Verify JA3 hash matches the local Claude Code 2.1.191 main-request capture.
+	expectedJA3Hash := BuiltInDefaultJA3Hash
 	if fpResp.TLS.JA3Hash == expectedJA3Hash {
 		t.Logf("✓ JA3 hash matches expected value: %s", expectedJA3Hash)
 	} else {
@@ -143,8 +142,8 @@ func TestJA3Fingerprint(t *testing.T) {
 		t.Logf("Warning: JA3 does not contain expected TLS 1.3 cipher suites")
 	}
 
-	// Verify extension list (14 extensions, Node.js 24.x order)
-	expectedExtensions := "0-65037-23-65281-10-11-35-16-5-13-18-51-45-43"
+	// Verify extension list (14 extensions, local Claude Code 2.1.191 main-request order)
+	expectedExtensions := "0-23-65281-10-11-35-16-5-13-18-51-45-43-21"
 	if strings.Contains(fpResp.TLS.JA3, expectedExtensions) {
 		t.Logf("✓ JA3 contains expected extension list: %s", expectedExtensions)
 	} else {
@@ -296,11 +295,10 @@ func TestAllProfiles(t *testing.T) {
 
 	profiles := []TestProfileExpectation{
 		{
-			// Default profile (Node.js 24.x)
-			// JA3 Hash: 44f88fca027f27bab4bb08d4af15f23e
-			// JA4: t13d1714h1_5b57614c22b0_7baf387fc6ff
+			// Default profile (Claude Code 2.1.191 Windows main request)
+			// JA3 Hash: d871d02cecbde59abbf8f4806134addf
 			Profile: &Profile{
-				Name:         "default_node_v24",
+				Name:         "default_claude_code_21191_windows_main",
 				EnableGREASE: false,
 			},
 			JA4CipherHash: "5b57614c22b0",
@@ -384,7 +382,7 @@ func fetchFingerprint(t *testing.T, profile *Profile) *TLSInfo {
 		t.Fatalf("failed to create request: %v", err)
 		return nil
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.0.0 Node.js/20.0.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

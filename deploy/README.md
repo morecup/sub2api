@@ -559,16 +559,16 @@ sudo systemctl status redis
 
 ## TLS Fingerprint Configuration
 
-Sub2API supports TLS fingerprint simulation to make requests appear as if they come from the official Claude CLI (Node.js client).
+Sub2API supports TLS fingerprint profiles for constructing upstream TLS handshakes from captured client shapes.
 
 > **💡 Tip:** Visit **[tls.sub2api.org](https://tls.sub2api.org/)** to get TLS fingerprint information for different devices and browsers.
 
 ### Default Behavior
 
-- Built-in `claude_cli_v2` profile simulates Node.js 20.x + OpenSSL 3.x
-- JA3 Hash: `1a28e69016765d92e3b381168d68922c`
-- JA4: `t13d5911h1_a33745022dd6_1f22a2ca17c4`
-- Profile selection: `accountID % profileCount`
+- Built-in default profile follows the local Claude Code 2.1.191 Windows main-request capture
+- JA3 Hash: `d871d02cecbde59abbf8f4806134addf`
+- ALPN: `http/1.1`
+- HTTP/2: not offered by the captured main request
 
 ### Configuration
 
