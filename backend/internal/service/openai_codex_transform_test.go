@@ -1212,6 +1212,21 @@ func TestApplyCodexOAuthTransform_StripsChatGPTInternalUnsupportedFields(t *test
 	}
 }
 
+func TestApplyCodexOAuthTransform_PreservesMaxOutputTokens(t *testing.T) {
+	reqBody := map[string]any{
+		"model":             "gpt-5.5",
+		"max_output_tokens": 64000,
+		"input": []any{
+			map[string]any{"role": "user", "content": "write a long report"},
+		},
+	}
+
+	result := applyCodexOAuthTransform(reqBody, false, false)
+
+	require.True(t, result.Modified)
+	require.Equal(t, 64000, reqBody["max_output_tokens"])
+}
+
 func TestApplyCodexOAuthTransform_ExtractsSystemMessages(t *testing.T) {
 	reqBody := map[string]any{
 		"model": "gpt-5.1",
