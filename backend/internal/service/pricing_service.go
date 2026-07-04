@@ -24,6 +24,7 @@ import (
 var (
 	openAIModelDatePattern     = regexp.MustCompile(`-\d{8}$`)
 	openAIModelBasePattern     = regexp.MustCompile(`^(gpt-\d+(?:\.\d+)?)(?:-|$)`)
+	openAIGPT55PriorityPremium = 2.5
 	openAIGPT54FallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:               2.5e-06, // $2.5 per MTok
 		OutputCostPerToken:              1.5e-05, // $15 per MTok
@@ -34,6 +35,21 @@ var (
 		LiteLLMProvider:                 "openai",
 		Mode:                            "chat",
 		SupportsPromptCaching:           true,
+	}
+	openAIGPT55FallbackPricing = &LiteLLMModelPricing{
+		InputCostPerToken:               5e-06,    // $5 per MTok
+		InputCostPerTokenPriority:       1.25e-05, // $12.5 per MTok
+		OutputCostPerToken:              3e-05,    // $30 per MTok
+		OutputCostPerTokenPriority:      7.5e-05,  // $75 per MTok
+		CacheReadInputTokenCost:         5e-07,    // $0.5 per MTok
+		CacheReadInputTokenCostPriority: 1.25e-06, // $1.25 per MTok
+		LongContextInputTokenThreshold:  272000,
+		LongContextInputCostMultiplier:  2.0,
+		LongContextOutputCostMultiplier: 1.5,
+		LiteLLMProvider:                 "openai",
+		Mode:                            "chat",
+		SupportsPromptCaching:           true,
+		SupportsServiceTier:             true,
 	}
 	openAIGPT54MiniFallbackPricing = &LiteLLMModelPricing{
 		InputCostPerToken:       7.5e-07,
@@ -541,7 +557,7 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 			continue
 		}
 		if pricing, ok := s.pricingData[candidate]; ok {
-			return pricing
+			return withOpenAIGPT55OfficialPriorityPricing(candidate, pricing)
 		}
 	}
 
@@ -550,7 +566,7 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	for _, candidate := range lookupCandidates {
 		normalized := strings.ReplaceAll(candidate, "-4-5-", "-4.5-")
 		if pricing, ok := s.pricingData[normalized]; ok {
-			return pricing
+			return withOpenAIGPT55OfficialPriorityPricing(normalized, pricing)
 		}
 	}
 
@@ -560,7 +576,7 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	for key, pricing := range s.pricingData {
 		keyBase := s.extractBaseName(strings.ToLower(key))
 		if keyBase == baseName {
-			return pricing
+			return withOpenAIGPT55OfficialPriorityPricing(key, pricing)
 		}
 	}
 
@@ -575,6 +591,43 @@ func (s *PricingService) GetModelPricing(modelName string) *LiteLLMModelPricing 
 	}
 
 	return nil
+}
+
+func withOpenAIGPT55OfficialPriorityPricing(model string, pricing *LiteLLMModelPricing) *LiteLLMModelPricing {
+	if pricing == nil || !isOpenAIGPT55FlagshipPricingKey(model) {
+		return pricing
+	}
+
+	clone := *pricing
+	changed := false
+	if expected := clone.InputCostPerToken * openAIGPT55PriorityPremium; expected > 0 && clone.InputCostPerTokenPriority < expected {
+		clone.InputCostPerTokenPriority = expected
+		changed = true
+	}
+	if expected := clone.OutputCostPerToken * openAIGPT55PriorityPremium; expected > 0 && clone.OutputCostPerTokenPriority < expected {
+		clone.OutputCostPerTokenPriority = expected
+		changed = true
+	}
+	if expected := clone.CacheReadInputTokenCost * openAIGPT55PriorityPremium; expected > 0 && clone.CacheReadInputTokenCostPriority < expected {
+		clone.CacheReadInputTokenCostPriority = expected
+		changed = true
+	}
+	if changed {
+		clone.SupportsServiceTier = true
+		return &clone
+	}
+	return pricing
+}
+
+func isOpenAIGPT55FlagshipPricingKey(model string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(model))
+	normalized = strings.TrimPrefix(normalized, "models/")
+	normalized = strings.TrimPrefix(normalized, "openai/")
+	normalized = strings.ReplaceAll(normalized, "gpt5.5", "gpt-5.5")
+	if normalized == "gpt-5.5" {
+		return true
+	}
+	return strings.HasPrefix(normalized, "gpt-5.5-") && !strings.HasPrefix(normalized, "gpt-5.5-pro")
 }
 
 func (s *PricingService) buildModelLookupCandidates(modelLower string) []string {
@@ -767,7 +820,7 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 // 2. gpt-5.2-codex -> gpt-5.2（去掉后缀如 -codex, -mini, -max 等）
 // 3. gpt-5.2-20251222 -> gpt-5.2（去掉日期版本号）
 // 4. gpt-5.3-codex -> gpt-5.2-codex
-// 5. gpt-5.4* -> 业务静态兜底价
+// 5. gpt-5.5* / gpt-5.4* -> 业务静态兜底价
 // 6. 最终回退到 DefaultTestModel (gpt-5.1-codex)
 func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 	if strings.HasPrefix(model, "gpt-5.3-codex-spark") {
@@ -786,7 +839,7 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		if pricing, ok := s.pricingData[variant]; ok {
 			logger.With(zap.String("component", "service.pricing")).
 				Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, variant))
-			return pricing
+			return withOpenAIGPT55OfficialPriorityPricing(variant, pricing)
 		}
 	}
 
@@ -798,11 +851,10 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		}
 	}
 
-	// GPT-5.5 回退到 GPT-5.4 定价
 	if strings.HasPrefix(model, "gpt-5.5") {
 		logger.With(zap.String("component", "service.pricing")).
-			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-5.4(static)"))
-		return openAIGPT54FallbackPricing
+			Info(fmt.Sprintf("[Pricing] OpenAI fallback matched %s -> %s", model, "gpt-5.5(static)"))
+		return openAIGPT55FallbackPricing
 	}
 
 	if strings.HasPrefix(model, "gpt-5.4-mini") {

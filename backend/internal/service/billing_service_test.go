@@ -981,6 +981,22 @@ func TestCalculateCostWithServiceTier_Gpt54MiniPriorityFallsBackToTierMultiplier
 	require.InDelta(t, baseCost.TotalCost*2, priorityCost.TotalCost, 1e-10)
 }
 
+func TestCalculateCostWithServiceTier_Gpt55PriorityUsesOfficialPricing(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheReadTokens: 20}
+
+	baseCost, err := svc.CalculateCost("gpt-5.5", tokens, 1.0)
+	require.NoError(t, err)
+
+	priorityCost, err := svc.CalculateCostWithServiceTier("gpt-5.5", tokens, 1.0, "priority")
+	require.NoError(t, err)
+
+	require.InDelta(t, baseCost.InputCost*2.5, priorityCost.InputCost, 1e-10)
+	require.InDelta(t, baseCost.OutputCost*2.5, priorityCost.OutputCost, 1e-10)
+	require.InDelta(t, baseCost.CacheReadCost*2.5, priorityCost.CacheReadCost, 1e-10)
+	require.InDelta(t, baseCost.TotalCost*2.5, priorityCost.TotalCost, 1e-10)
+}
+
 func TestCalculateCostWithServiceTier_Gpt54NanoFlexAppliesHalfMultiplier(t *testing.T) {
 	svc := newTestBillingService()
 	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheCreationTokens: 40, CacheReadTokens: 20}
@@ -1062,6 +1078,19 @@ func TestBillingServiceGetModelPricing_OpenAIFallbackGpt52Variants(t *testing.T)
 	require.InDelta(t, 1.75e-6, gpt52Codex.InputPricePerToken, 1e-12)
 	require.InDelta(t, 3.5e-6, gpt52Codex.InputPricePerTokenPriority, 1e-12)
 	require.InDelta(t, 28e-6, gpt52Codex.OutputPricePerTokenPriority, 1e-12)
+}
+
+func TestBillingServiceGetModelPricing_OpenAIFallbackGpt55UsesOfficialPriority(t *testing.T) {
+	svc := newTestBillingService()
+
+	pricing, err := svc.GetModelPricing("gpt-5.5")
+	require.NoError(t, err)
+	require.InDelta(t, 5e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 12.5e-6, pricing.InputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 30e-6, pricing.OutputPricePerToken, 1e-12)
+	require.InDelta(t, 75e-6, pricing.OutputPricePerTokenPriority, 1e-12)
+	require.InDelta(t, 0.5e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 1.25e-6, pricing.CacheReadPricePerTokenPriority, 1e-12)
 }
 
 func TestCalculateCostWithServiceTier_PriorityFallsBackToTierMultiplierWhenExplicitPriceMissing(t *testing.T) {
