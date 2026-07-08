@@ -51,6 +51,17 @@ func newJSONResponse(status int, body string) *http.Response {
 	}
 }
 
+func codexToolFrameAccountTestExtra(now time.Time) map[string]any {
+	return map[string]any{
+		openAICodexToolFrameOn5hExhaustedKey: true,
+		"codex_usage_updated_at":             now.Format(time.RFC3339),
+		"codex_5h_used_percent":              100.0,
+		"codex_5h_reset_at":                  now.Add(time.Hour).Format(time.RFC3339),
+		"codex_7d_used_percent":              70.0,
+		"codex_7d_reset_at":                  now.Add(24 * time.Hour).Format(time.RFC3339),
+	}
+}
+
 // --- test functions ---
 
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -137,6 +148,33 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 	require.Contains(t, recorder.Body.String(), "test_complete")
 }
 
+func TestAccountTestService_OpenAIToolFrameByQuota(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	resp := newJSONResponse(http.StatusOK, `data: {"type":"response.completed"}
+
+`)
+	upstream := &httpUpstreamRecorder{resp: resp}
+	svc := &AccountTestService{httpUpstream: upstream}
+	account := &Account{
+		ID:          96,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "test-token"},
+		Extra:       codexToolFrameAccountTestExtra(time.Now()),
+	}
+
+	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.bodies, 1)
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.Equal(t, codexToolFrameStubToolName, gjson.GetBytes(upstream.bodies[0], "tools.#(type=\"function\").name").String())
+	require.Contains(t, recorder.Body.String(), "Tool Frame")
+	require.Contains(t, recorder.Body.String(), "test_complete")
+}
+
 func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
@@ -160,6 +198,44 @@ func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, recorder.Body.String(), "response.completed")
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
+}
+
+func TestAccountTestService_OpenAI429RetriesWithToolFrame(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, recorder := newTestContext()
+
+	first := newJSONResponse(http.StatusTooManyRequests, `{"error":{"type":"usage_limit_reached","message":"limit reached"}}`)
+	first.Header.Set("x-codex-primary-used-percent", "70")
+	first.Header.Set("x-codex-primary-window-minutes", "10080")
+	first.Header.Set("x-codex-secondary-used-percent", "100")
+	first.Header.Set("x-codex-secondary-window-minutes", "300")
+	second := newJSONResponse(http.StatusOK, `data: {"type":"response.completed"}
+
+`)
+
+	repo := &openAIAccountTestRepo{}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{first, second}}
+	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
+	account := &Account{
+		ID:          97,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "test-token"},
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+		},
+	}
+
+	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
+	require.NoError(t, err)
+	require.Len(t, upstream.bodies, 2)
+	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Equal(t, 100.0, repo.updatedExtra["codex_5h_used_percent"])
+	require.Zero(t, repo.rateLimitedID)
+	require.Contains(t, recorder.Body.String(), "Tool Frame 重试")
+	require.Contains(t, recorder.Body.String(), "test_complete")
 }
 
 func TestAccountTestService_OpenAI429PersistsSnapshotAndRateLimitState(t *testing.T) {

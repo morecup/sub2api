@@ -569,27 +569,41 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 	// Create OpenAI Responses API payload
 	payload := createOpenAITestPayload(testModelID, isOAuth)
-	payloadBytes, _ := json.Marshal(payload)
+	requestBody, _ := json.Marshal(payload)
+	codexToolFrameAppliedByQuota := false
+	if isOAuth && shouldUseCodexToolFrameByQuota(account, time.Now()) {
+		if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
+			requestBody = nextBody
+			codexToolFrameAppliedByQuota = true
+		}
+	}
 
 	// Send test_start event
 	s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
-
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(payloadBytes))
-	if err != nil {
-		return s.sendErrorAndEnd(c, "Failed to create request")
+	if codexToolFrameAppliedByQuota {
+		s.sendEvent(c, TestEvent{Type: "status", Text: "已根据 Codex 5h 配额状态启用 Tool Frame"})
 	}
-	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 
-	// Set common headers
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+authToken)
+	sessionSeed := fmt.Sprintf("account-test:%d:%s", account.ID, testModelID)
+	buildRequest := func(body []byte) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
 
-	// Set OAuth-specific headers for ChatGPT internal API
-	if isOAuth {
-		req.Host = "chatgpt.com"
-		applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("account-test:%d:%s", account.ID, testModelID), codexDesktopOriginator, false)
-		applyCodexRequestCompressionRaw(req, payloadBytes)
-		setOpenAIChatGPTAccountHeaders(req.Header, account)
+		// Set common headers
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+authToken)
+
+		// Set OAuth-specific headers for ChatGPT internal API
+		if isOAuth {
+			req.Host = "chatgpt.com"
+			applyCodexOAuthMimicHeaders(req, 0, sessionSeed, codexDesktopOriginator, false)
+			applyCodexRequestCompressionRaw(req, body)
+			setOpenAIChatGPTAccountHeaders(req.Header, account)
+		}
+		return req, nil
 	}
 
 	// Get proxy URL
@@ -598,22 +612,44 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		proxyURL = account.Proxy.URL()
 	}
 
-	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
-	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if isOAuth && s.accountRepo != nil {
-		if updates, err := extractOpenAICodexProbeUpdates(resp); err == nil && len(updates) > 0 {
-			_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
-			mergeAccountExtra(account, updates)
+	codexToolFrameRetryTried := false
+	for {
+		req, err := buildRequest(requestBody)
+		if err != nil {
+			return s.sendErrorAndEnd(c, "Failed to create request")
 		}
-	}
 
-	if resp.StatusCode != http.StatusOK {
+		resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, account.ID, account.Concurrency, s.tlsFPProfileService.ResolveTLSProfile(account))
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Request failed: %s", err.Error()))
+		}
+
+		if isOAuth {
+			s.persistOpenAICodexTestProbeUpdates(ctx, account, resp)
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			defer func() { _ = resp.Body.Close() }()
+			return s.processOpenAIStream(c, resp.Body)
+		}
+
 		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusTooManyRequests {
+		_ = resp.Body.Close()
+
+		if isOAuth &&
+			!codexToolFrameRetryTried &&
+			resp.StatusCode == http.StatusTooManyRequests &&
+			shouldRetryCodexToolFrameFrom429(account, resp.Header) {
+			if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
+				requestBody = nextBody
+				codexToolFrameRetryTried = true
+				s.sendEvent(c, TestEvent{Type: "status", Text: "检测到 Codex 5h 限额，正在使用 Tool Frame 重试"})
+				continue
+			}
+		}
+
+		if resp.StatusCode == http.StatusTooManyRequests &&
+			!shouldSuppressCodexToolFrame429AccountMark(account, resp.Header, requestBody) {
 			s.reconcileOpenAI429State(ctx, account, resp.Header, body)
 		}
 		// 401 Unauthorized: 标记账号为永久错误
@@ -623,9 +659,6 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		}
 		return s.sendErrorAndEnd(c, fmt.Sprintf("API returned %d: %s", resp.StatusCode, string(body)))
 	}
-
-	// Process SSE stream
-	return s.processOpenAIStream(c, resp.Body)
 }
 
 // testOpenAIChatCompletionsConnection tests an OpenAI-compatible APIKey account
@@ -799,6 +832,16 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	s.sendEvent(c, TestEvent{Type: "content", Text: "Compact probe succeeded"})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
+}
+
+func (s *AccountTestService) persistOpenAICodexTestProbeUpdates(ctx context.Context, account *Account, resp *http.Response) {
+	if s == nil || s.accountRepo == nil || account == nil || resp == nil {
+		return
+	}
+	if updates, err := extractOpenAICodexProbeUpdates(resp); err == nil && len(updates) > 0 {
+		_ = s.accountRepo.UpdateExtra(ctx, account.ID, updates)
+		mergeAccountExtra(account, updates)
+	}
 }
 
 func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, account *Account, headers http.Header, body []byte) {
@@ -1586,39 +1629,73 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 	if err != nil {
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to build image request: %s", err.Error()))
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexAPIURL, bytes.NewReader(responsesBody))
-	if err != nil {
-		return s.sendErrorAndEnd(c, "Failed to create request")
+	requestBody := responsesBody
+	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
+		if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
+			requestBody = nextBody
+			s.sendEvent(c, TestEvent{Type: "status", Text: "已根据 Codex 5h 配额状态启用 Tool Frame"})
+		}
 	}
-	req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
-	req.Host = "chatgpt.com"
-	req.Header.Set("Authorization", "Bearer "+authToken)
-	applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false)
-	applyCodexRequestCompressionRaw(req, responsesBody)
-	setOpenAIChatGPTAccountHeaders(req.Header, account)
+
+	buildRequest := func(body []byte) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexAPIURL, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		req = req.WithContext(WithHTTPUpstreamProfile(req.Context(), HTTPUpstreamProfileOpenAI))
+		req.Host = "chatgpt.com"
+		req.Header.Set("Authorization", "Bearer "+authToken)
+		applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false)
+		applyCodexRequestCompressionRaw(req, body)
+		setOpenAIChatGPTAccountHeaders(req.Header, account)
+		return req, nil
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		return s.sendErrorAndEnd(c, fmt.Sprintf("Responses API request failed: %s", err.Error()))
-	}
-	defer func() {
-		if resp != nil && resp.Body != nil {
-			_ = resp.Body.Close()
+	codexToolFrameRetryTried := false
+	var resp *http.Response
+	for {
+		req, err := buildRequest(requestBody)
+		if err != nil {
+			return s.sendErrorAndEnd(c, "Failed to create request")
 		}
-	}()
-	if resp.StatusCode >= 400 {
+		resp, err = s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+		if err != nil {
+			return s.sendErrorAndEnd(c, fmt.Sprintf("Responses API request failed: %s", err.Error()))
+		}
+
+		s.persistOpenAICodexTestProbeUpdates(ctx, account, resp)
+
+		if resp.StatusCode < 400 {
+			break
+		}
+
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+		_ = resp.Body.Close()
+		if !codexToolFrameRetryTried &&
+			resp.StatusCode == http.StatusTooManyRequests &&
+			shouldRetryCodexToolFrameFrom429(account, resp.Header) {
+			if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
+				requestBody = nextBody
+				codexToolFrameRetryTried = true
+				s.sendEvent(c, TestEvent{Type: "status", Text: "检测到 Codex 5h 限额，正在使用 Tool Frame 重试"})
+				continue
+			}
+		}
 		message := strings.TrimSpace(extractUpstreamErrorMessage(body))
 		if message == "" {
 			message = fmt.Sprintf("Responses API returned %d", resp.StatusCode)
 		}
 		return s.sendErrorAndEnd(c, message)
 	}
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
