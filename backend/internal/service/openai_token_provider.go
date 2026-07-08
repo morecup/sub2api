@@ -158,13 +158,12 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	expiresAt := account.GetCredentialAsTime("expires_at")
 	needsRefresh := !account.IsOpenAIPersonalAccessToken() && (expiresAt == nil || time.Until(*expiresAt) <= openAITokenRefreshSkew)
 	if needsRefresh && strings.TrimSpace(account.GetOpenAIRefreshToken()) == "" {
-		if expiresAt != nil && !time.Now().Before(*expiresAt) {
+		if account.ShouldSetErrorOnOAuth401NoRefreshToken() && expiresAt != nil && !time.Now().Before(*expiresAt) {
 			const reason = "openai access_token expired and refresh_token is missing"
-			// 永久故障：缺失 refresh_token 时账号无法自愈，必须立即从调度池剔除，
-			// 否则会被反复选中、每次都在 token 阶段直接返回错误，对用户呈现持续 502。
 			p.disableAccountMissingRefreshToken(account, reason)
 			return "", errors.New(reason)
 		}
+		slog.Debug("openai_token_missing_refresh_token_use_existing_access_token", "account_id", account.ID)
 		needsRefresh = false
 	}
 	refreshFailed := false
@@ -270,11 +269,7 @@ func (p *OpenAITokenProvider) GetAccessToken(ctx context.Context, account *Accou
 	return accessToken, nil
 }
 
-// disableAccountMissingRefreshToken 在请求路径上发现 OpenAI OAuth 账号
-// 凭证已过期且 refresh_token 缺失时，将账号标记为 error 状态。
-// 这是一种永久性故障：仅靠后续请求或 TokenRefreshService 不会自愈
-// （NeedsRefresh 也会因 refresh_token 为空直接跳过），
-// 必须主动剔除以避免账号被持续选中导致用户端反复 502。
+// disableAccountMissingRefreshToken 在显式开关开启时将缺少 refresh_token 的账号标记为 error。
 // 使用 background context 是因为请求 context 可能很快结束。
 func (p *OpenAITokenProvider) disableAccountMissingRefreshToken(account *Account, reason string) {
 	if p == nil || p.accountRepo == nil || account == nil {

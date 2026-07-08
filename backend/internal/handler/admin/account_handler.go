@@ -1434,7 +1434,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 // BatchUpdateCredentialsRequest represents batch credentials update request
 type BatchUpdateCredentialsRequest struct {
 	AccountIDs []int64 `json:"account_ids" binding:"required,min=1"`
-	Field      string  `json:"field" binding:"required,oneof=account_uuid org_uuid intercept_warmup_requests"`
+	Field      string  `json:"field" binding:"required,oneof=account_uuid org_uuid intercept_warmup_requests oauth_401_no_refresh_token_set_error"`
 	Value      any     `json:"value"`
 }
 
@@ -1448,10 +1448,10 @@ func (h *AccountHandler) BatchUpdateCredentials(c *gin.Context) {
 	}
 
 	// Validate value type based on field
-	if req.Field == "intercept_warmup_requests" {
+	if req.Field == "intercept_warmup_requests" || req.Field == service.OAuth401NoRefreshTokenSetErrorCredentialKey {
 		// Must be boolean
 		if _, ok := req.Value.(bool); !ok {
-			response.BadRequest(c, "intercept_warmup_requests must be boolean")
+			response.BadRequest(c, req.Field+" must be boolean")
 			return
 		}
 	} else {

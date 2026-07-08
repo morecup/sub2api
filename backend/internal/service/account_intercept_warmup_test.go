@@ -64,3 +64,45 @@ func TestAccount_IsInterceptWarmupEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestAccount_ShouldSetErrorOnOAuth401NoRefreshToken(t *testing.T) {
+	tests := []struct {
+		name        string
+		credentials map[string]any
+		expected    bool
+	}{
+		{
+			name:        "nil credentials",
+			credentials: nil,
+			expected:    false,
+		},
+		{
+			name:        "field not present",
+			credentials: map[string]any{"access_token": "tok"},
+			expected:    false,
+		},
+		{
+			name:        "field is true",
+			credentials: map[string]any{OAuth401NoRefreshTokenSetErrorCredentialKey: true},
+			expected:    true,
+		},
+		{
+			name:        "field is false",
+			credentials: map[string]any{OAuth401NoRefreshTokenSetErrorCredentialKey: false},
+			expected:    false,
+		},
+		{
+			name:        "field is string true",
+			credentials: map[string]any{OAuth401NoRefreshTokenSetErrorCredentialKey: "true"},
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &Account{Credentials: tt.credentials}
+			result := a.ShouldSetErrorOnOAuth401NoRefreshToken()
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}

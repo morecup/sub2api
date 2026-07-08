@@ -167,6 +167,42 @@ func TestBatchUpdateCredentials_InterceptWarmupRequests_ValidBool(t *testing.T) 
 		"intercept_warmup_requests 传入合法 bool 值应返回 200")
 }
 
+func TestBatchUpdateCredentials_OAuth401NoRefreshTokenSetError_NonBool(t *testing.T) {
+	svc := &failingAdminService{stubAdminService: newStubAdminService()}
+	router, _ := setupAccountHandlerWithService(svc)
+
+	body, _ := json.Marshal(map[string]any{
+		"account_ids": []int64{1},
+		"field":       service.OAuth401NoRefreshTokenSetErrorCredentialKey,
+		"value":       "not-a-bool",
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/admin/accounts/batch-update-credentials", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestBatchUpdateCredentials_OAuth401NoRefreshTokenSetError_ValidBool(t *testing.T) {
+	svc := &failingAdminService{stubAdminService: newStubAdminService()}
+	router, _ := setupAccountHandlerWithService(svc)
+
+	body, _ := json.Marshal(map[string]any{
+		"account_ids": []int64{1},
+		"field":       service.OAuth401NoRefreshTokenSetErrorCredentialKey,
+		"value":       true,
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/v1/admin/accounts/batch-update-credentials", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+}
+
 func TestBatchUpdateCredentials_AccountUUID_NonString(t *testing.T) {
 	svc := &failingAdminService{stubAdminService: newStubAdminService()}
 	router, _ := setupAccountHandlerWithService(svc)

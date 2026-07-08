@@ -1313,6 +1313,38 @@
         </div>
       </div>
 
+      <!-- OAuth 401 without refresh_token behavior -->
+      <div
+        v-if="account?.type === 'oauth' && account?.platform !== 'antigravity'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{
+              t('admin.accounts.oauth401NoRefreshTokenSetError')
+            }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.oauth401NoRefreshTokenSetErrorDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="oauth401NoRefreshTokenSetError = !oauth401NoRefreshTokenSetError"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              oauth401NoRefreshTokenSetError ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                oauth401NoRefreshTokenSetError ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+      </div>
+
       <div>
         <div class="mb-1 flex items-center gap-2">
           <label class="input-label mb-0">{{ t('admin.accounts.proxy') }}</label>
@@ -2517,7 +2549,8 @@ import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import {
   applyAntigravityProjectID,
-  applyInterceptWarmup
+  applyInterceptWarmup,
+  applyOAuth401NoRefreshTokenSetError
 } from '@/components/account/credentialsBuilder'
 import { formatDateTime, formatDateTimeLocalInput, parseDateTimeLocalInput } from '@/utils/format'
 import { isAnthropicOAuthMissingAccountUUID } from '@/utils/accountDiagnostics'
@@ -2645,6 +2678,7 @@ const customErrorCodesEnabled = ref(false)
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
+const oauth401NoRefreshTokenSetError = ref(false)
 const autoPauseOnExpired = ref(false)
 const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
@@ -3062,6 +3096,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
+  oauth401NoRefreshTokenSetError.value =
+    credentials?.oauth_401_no_refresh_token_set_error === true
   autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
   editVertexClientEmail.value = ''
@@ -4083,6 +4119,14 @@ const handleSubmit = async () => {
         newCredentials.model_mapping = antigravityModelMapping
       }
 
+      updatePayload.credentials = newCredentials
+    }
+
+    if (props.account.type === 'oauth' && props.account.platform !== 'antigravity') {
+      const currentCredentials = (updatePayload.credentials as Record<string, unknown>) ||
+        ((props.account.credentials as Record<string, unknown>) || {})
+      const newCredentials: Record<string, unknown> = { ...currentCredentials }
+      applyOAuth401NoRefreshTokenSetError(newCredentials, oauth401NoRefreshTokenSetError.value, 'edit')
       updatePayload.credentials = newCredentials
     }
 

@@ -486,6 +486,48 @@
         </div>
       </div>
 
+      <!-- OAuth 401 without refresh_token behavior -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="flex items-center justify-between">
+          <div class="flex-1 pr-4">
+            <label
+              id="bulk-edit-oauth-401-no-rt-label"
+              class="input-label mb-0"
+              for="bulk-edit-oauth-401-no-rt-enabled"
+            >
+              {{ t('admin.accounts.oauth401NoRefreshTokenSetError') }}
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.oauth401NoRefreshTokenSetErrorDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="enableOAuth401NoRefreshTokenSetError"
+            id="bulk-edit-oauth-401-no-rt-enabled"
+            type="checkbox"
+            aria-controls="bulk-edit-oauth-401-no-rt-body"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div v-if="enableOAuth401NoRefreshTokenSetError" id="bulk-edit-oauth-401-no-rt-body" class="mt-3">
+          <button
+            type="button"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              oauth401NoRefreshTokenSetError ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+            @click="oauth401NoRefreshTokenSetError = !oauth401NoRefreshTokenSetError"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                oauth401NoRefreshTokenSetError ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+      </div>
+
       <!-- Proxy -->
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1149,6 +1191,7 @@ import {
   buildModelMappingObject as buildModelMappingPayload,
   getPresetMappingsByPlatform
 } from '@/composables/useModelWhitelist'
+import { OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY } from '@/components/account/credentialsBuilder'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -1252,6 +1295,7 @@ const enableBaseUrl = ref(false)
 const enableModelRestriction = ref(false)
 const enableCustomErrorCodes = ref(false)
 const enableInterceptWarmup = ref(false)
+const enableOAuth401NoRefreshTokenSetError = ref(false)
 const enableProxy = ref(false)
 const enableConcurrency = ref(false)
 const enableLoadFactor = ref(false)
@@ -1280,6 +1324,7 @@ const modelMappings = ref<ModelMapping[]>([])
 const selectedErrorCodes = ref<number[]>([])
 const customErrorCodeInput = ref<number | null>(null)
 const interceptWarmupRequests = ref(false)
+const oauth401NoRefreshTokenSetError = ref(false)
 const proxyId = ref<number | null>(null)
 const concurrency = ref(1)
 const loadFactor = ref<number | null>(null)
@@ -1521,6 +1566,12 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     credentialsChanged = true
   }
 
+  if (enableOAuth401NoRefreshTokenSetError.value) {
+    credentials[OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY] =
+      oauth401NoRefreshTokenSetError.value
+    credentialsChanged = true
+  }
+
   if (enableOpenAIWSMode.value) {
     const extra = ensureExtra()
     extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
@@ -1649,6 +1700,7 @@ const handleSubmit = async () => {
     enableModelRestriction.value ||
     enableCustomErrorCodes.value ||
     enableInterceptWarmup.value ||
+    enableOAuth401NoRefreshTokenSetError.value ||
     enableProxy.value ||
     enableConcurrency.value ||
     enableLoadFactor.value ||
@@ -1751,6 +1803,7 @@ watch(
       enableModelRestriction.value = false
       enableCustomErrorCodes.value = false
       enableInterceptWarmup.value = false
+      enableOAuth401NoRefreshTokenSetError.value = false
       enableProxy.value = false
       enableConcurrency.value = false
       enableLoadFactor.value = false
@@ -1776,6 +1829,7 @@ watch(
       selectedErrorCodes.value = []
       customErrorCodeInput.value = null
       interceptWarmupRequests.value = false
+      oauth401NoRefreshTokenSetError.value = false
       proxyId.value = null
       concurrency.value = 1
       loadFactor.value = null

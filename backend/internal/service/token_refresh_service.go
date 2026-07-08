@@ -308,6 +308,20 @@ func (s *TokenRefreshService) refreshWithRetry(ctx context.Context, account *Acc
 			return nil
 		}
 
+		if isMissingRefreshTokenRefreshError(err) {
+			if account.ShouldSetErrorOnOAuth401NoRefreshToken() {
+				errorMsg := "Token refresh failed (missing refresh_token): " + logredact.RedactText(err.Error())
+				s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_missing_refresh_token")
+				if setErr := s.accountRepo.SetError(ctx, account.ID, errorMsg); setErr != nil {
+					slog.Error("token_refresh.set_error_status_failed",
+						"account_id", account.ID,
+						"error", setErr,
+					)
+				}
+			}
+			return err
+		}
+
 		// 不可重试错误（invalid_grant/invalid_client 等）直接标记 error 状态并返回
 		if isNonRetryableRefreshError(err) {
 			errorMsg := "Token refresh failed (non-retryable): " + logredact.RedactText(err.Error())
@@ -467,6 +481,16 @@ func isNonRetryableRefreshError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isMissingRefreshTokenRefreshError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no refresh token available") ||
+		strings.Contains(msg, "refresh_token is missing") ||
+		strings.Contains(msg, "refresh_token missing")
 }
 
 // ensureOpenAIPrivacy 检查 OpenAI OAuth 账号是否已设置 privacy_mode，

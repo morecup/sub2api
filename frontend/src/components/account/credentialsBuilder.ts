@@ -10,6 +10,21 @@ export function applyInterceptWarmup(
   }
 }
 
+export const OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY =
+  'oauth_401_no_refresh_token_set_error'
+
+export function applyOAuth401NoRefreshTokenSetError(
+  credentials: Record<string, unknown>,
+  enabled: boolean,
+  mode: 'create' | 'edit'
+): void {
+  if (enabled) {
+    credentials[OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY] = true
+  } else if (mode === 'edit') {
+    delete credentials[OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY]
+  }
+}
+
 export const ANTIGRAVITY_PROJECT_ID_CREDENTIAL_KEY = 'antigravity_project_id'
 
 export function applyAntigravityProjectID(

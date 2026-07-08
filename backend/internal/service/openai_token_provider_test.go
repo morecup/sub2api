@@ -943,6 +943,7 @@ func TestOpenAITokenProvider_NoRefreshTokenExpired_DisablesAccount(t *testing.T)
 		Credentials: map[string]any{
 			"access_token": "expired-access-token",
 			"expires_at":   expiresAt,
+			OAuth401NoRefreshTokenSetErrorCredentialKey: true,
 		},
 	}
 

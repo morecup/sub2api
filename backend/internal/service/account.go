@@ -1060,6 +1060,8 @@ func (a *Account) ShouldHandleErrorCode(statusCode int) bool {
 	return false
 }
 
+const OAuth401NoRefreshTokenSetErrorCredentialKey = "oauth_401_no_refresh_token_set_error"
+
 func (a *Account) IsInterceptWarmupEnabled() bool {
 	if a.Credentials == nil {
 		return false
@@ -1070,6 +1072,14 @@ func (a *Account) IsInterceptWarmupEnabled() bool {
 		}
 	}
 	return false
+}
+
+func (a *Account) ShouldSetErrorOnOAuth401NoRefreshToken() bool {
+	if a == nil || a.Credentials == nil {
+		return false
+	}
+	enabled, ok := a.Credentials[OAuth401NoRefreshTokenSetErrorCredentialKey].(bool)
+	return ok && enabled
 }
 
 func (a *Account) IsBedrock() bool {

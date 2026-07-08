@@ -3594,6 +3594,9 @@ export default {
       interceptWarmupRequests: 'Intercept Warmup Requests',
       interceptWarmupRequestsDesc:
         'When enabled, warmup requests like title generation will return mock responses without consuming upstream tokens',
+      oauth401NoRefreshTokenSetError: 'Mark 401 when RT is missing',
+      oauth401NoRefreshTokenSetErrorDesc:
+        'Off by default: keep using the existing access token when no refresh token exists. When enabled, upstream 401 or missing-RT refresh failures mark the account as error.',
       autoPauseOnExpired: 'Auto Pause On Expired',
       autoPauseOnExpiredDesc: 'When enabled, the account will auto pause scheduling after it expires',
 	  autoPause5hThreshold: '5h Usage Threshold (%)',

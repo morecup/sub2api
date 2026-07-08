@@ -193,7 +193,7 @@ func TestOpenAITokenRefresher_Refresh_PATRemovesStaleOAuthFields(t *testing.T) {
 	require.Equal(t, map[string]any{"gpt-5": "gpt-5-codex"}, credentials["model_mapping"])
 }
 
-func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenReturnsError(t *testing.T) {
+func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenUsesExistingByDefault(t *testing.T) {
 	provider := NewOpenAITokenProvider(nil, nil, nil)
 	expiresAt := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
 	account := &Account{
@@ -202,6 +202,24 @@ func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenReturnsError(t *tes
 		Credentials: map[string]any{
 			"access_token": "expired-access-token",
 			"expires_at":   expiresAt,
+		},
+	}
+
+	token, err := provider.GetAccessToken(context.Background(), account)
+	require.NoError(t, err)
+	require.Equal(t, "expired-access-token", token)
+}
+
+func TestOpenAITokenProvider_NoRefreshTokenExpiredAccessTokenReturnsErrorWhenEnabled(t *testing.T) {
+	provider := NewOpenAITokenProvider(nil, nil, nil)
+	expiresAt := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Credentials: map[string]any{
+			"access_token": "expired-access-token",
+			"expires_at":   expiresAt,
+			OAuth401NoRefreshTokenSetErrorCredentialKey: true,
 		},
 	}
 

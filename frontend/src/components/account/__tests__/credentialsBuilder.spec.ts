@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   ANTIGRAVITY_PROJECT_ID_CREDENTIAL_KEY,
+  OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY,
   applyAntigravityProjectID,
-  applyInterceptWarmup
+  applyInterceptWarmup,
+  applyOAuth401NoRefreshTokenSetError
 } from '../credentialsBuilder'
 
 describe('applyInterceptWarmup', () => {
@@ -46,6 +48,29 @@ describe('applyInterceptWarmup', () => {
     expect(creds.api_key).toBe('sk')
     expect(creds.base_url).toBe('url')
     expect('intercept_warmup_requests' in creds).toBe(false)
+  })
+})
+
+describe('applyOAuth401NoRefreshTokenSetError', () => {
+  it('create + enabled=true: should set oauth_401_no_refresh_token_set_error to true', () => {
+    const creds: Record<string, unknown> = { access_token: 'tok' }
+    applyOAuth401NoRefreshTokenSetError(creds, true, 'create')
+    expect(creds[OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY]).toBe(true)
+  })
+
+  it('create + enabled=false: should not add the field', () => {
+    const creds: Record<string, unknown> = { access_token: 'tok' }
+    applyOAuth401NoRefreshTokenSetError(creds, false, 'create')
+    expect(OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY in creds).toBe(false)
+  })
+
+  it('edit + enabled=false + field exists: should delete the field', () => {
+    const creds: Record<string, unknown> = {
+      access_token: 'tok',
+      [OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY]: true
+    }
+    applyOAuth401NoRefreshTokenSetError(creds, false, 'edit')
+    expect(OAUTH_401_NO_REFRESH_TOKEN_SET_ERROR_CREDENTIAL_KEY in creds).toBe(false)
   })
 })
 

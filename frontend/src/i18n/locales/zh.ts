@@ -3757,6 +3757,9 @@ export default {
       errorCodeExists: '该错误码已被选中',
       interceptWarmupRequests: '拦截预热请求',
       interceptWarmupRequestsDesc: '启用后，标题生成等预热请求将返回 mock 响应，不消耗上游 token',
+      oauth401NoRefreshTokenSetError: '缺少 RT 时标记 401',
+      oauth401NoRefreshTokenSetErrorDesc:
+        '默认关闭：没有 refresh_token 时继续使用已有 access_token。开启后，上游 401 或刷新缺 RT 会直接标记账号错误。',
       autoPauseOnExpired: '过期自动暂停调度',
       autoPauseOnExpiredDesc: '启用后，账号过期将自动暂停调度',
 	  autoPause5hThreshold: '5h 用量阈值(%)',
