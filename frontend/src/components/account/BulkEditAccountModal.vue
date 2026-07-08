@@ -828,6 +828,111 @@
         </div>
       </div>
 
+      <!-- OpenAI OAuth Codex Tool Frame -->
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <div class="flex-1 pr-4">
+            <label
+              id="bulk-edit-openai-tool-frame-5h-label"
+              class="input-label mb-0"
+              for="bulk-edit-openai-tool-frame-5h-enabled"
+            >
+              {{ t('admin.accounts.openai.codexToolFrameOn5hExhausted') }}
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexToolFrameOn5hExhaustedDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="enableCodexToolFrameOn5hExhausted"
+            id="bulk-edit-openai-tool-frame-5h-enabled"
+            type="checkbox"
+            aria-controls="bulk-edit-openai-tool-frame-5h"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div
+          id="bulk-edit-openai-tool-frame-5h"
+          :class="!enableCodexToolFrameOn5hExhausted && 'pointer-events-none opacity-50'"
+        >
+          <button
+            id="bulk-edit-openai-tool-frame-5h-toggle"
+            type="button"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              codexToolFrameOn5hExhaustedEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+            @click="codexToolFrameOn5hExhaustedEnabled = !codexToolFrameOn5hExhaustedEnabled"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                codexToolFrameOn5hExhaustedEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+
+          <div
+            v-if="codexToolFrameOn5hExhaustedEnabled"
+            class="mt-4 space-y-4 border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex-1 pr-4">
+                <label class="input-label mb-0">
+                  {{ t('admin.accounts.openai.codexToolFrame429NoCooldown') }}
+                </label>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.accounts.openai.codexToolFrame429NoCooldownDesc') }}
+                </p>
+              </div>
+              <button
+                id="bulk-edit-openai-tool-frame-429-no-cooldown-toggle"
+                type="button"
+                :class="[
+                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                  codexToolFrame429NoCooldownEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                ]"
+                @click="codexToolFrame429NoCooldownEnabled = !codexToolFrame429NoCooldownEnabled"
+              >
+                <span
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    codexToolFrame429NoCooldownEnabled ? 'translate-x-5' : 'translate-x-0'
+                  ]"
+                />
+              </button>
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div class="flex-1 pr-4">
+                <label class="input-label mb-0">
+                  {{ t('admin.accounts.openai.codexToolFrameForceAfter5h') }}
+                </label>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.accounts.openai.codexToolFrameForceAfter5hDesc') }}
+                </p>
+              </div>
+              <button
+                id="bulk-edit-openai-tool-frame-force-after-5h-toggle"
+                type="button"
+                :class="[
+                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                  codexToolFrameForceAfter5hEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                ]"
+                @click="codexToolFrameForceAfter5hEnabled = !codexToolFrameForceAfter5hEnabled"
+              >
+                <span
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    codexToolFrameForceAfter5hEnabled ? 'translate-x-5' : 'translate-x-0'
+                  ]"
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- OpenAI API Key WS mode -->
       <div v-if="allOpenAIAPIKey" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1308,6 +1413,7 @@ const enableOpenAIWSMode = ref(false)
 const enableOpenAIAPIKeyWSMode = ref(false)
 const enableCodexCLIOnly = ref(false)
 const enableCodexCLIOnlyAppServer = ref(false)
+const enableCodexToolFrameOn5hExhausted = ref(false)
 const enableOpenAICompactMode = ref(false)
 const enableOpenAICompactModelMapping = ref(false)
 const enableRpmLimit = ref(false)
@@ -1337,6 +1443,9 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
+const codexToolFrameOn5hExhaustedEnabled = ref(false)
+const codexToolFrame429NoCooldownEnabled = ref(true)
+const codexToolFrameForceAfter5hEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const rpmLimitEnabled = ref(false)
@@ -1604,6 +1713,15 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.codex_cli_only_allow_app_server = codexCLIOnlyAppServerEnabled.value
   }
 
+  if (enableCodexToolFrameOn5hExhausted.value) {
+    const extra = ensureExtra()
+    extra.codex_tool_frame_on_5h_exhausted = codexToolFrameOn5hExhaustedEnabled.value
+    if (codexToolFrameOn5hExhaustedEnabled.value) {
+      extra.codex_tool_frame_429_no_cooldown = codexToolFrame429NoCooldownEnabled.value
+      extra.codex_tool_frame_force_after_5h = codexToolFrameForceAfter5hEnabled.value
+    }
+  }
+
   if (enableOpenAICompactMode.value) {
     const extra = ensureExtra()
     extra.openai_compact_mode = openAICompactMode.value
@@ -1712,6 +1830,7 @@ const handleSubmit = async () => {
     enableOpenAIAPIKeyWSMode.value ||
     enableCodexCLIOnly.value ||
     enableCodexCLIOnlyAppServer.value ||
+    enableCodexToolFrameOn5hExhausted.value ||
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
     enableRpmLimit.value ||
@@ -1816,6 +1935,7 @@ watch(
       enableOpenAIAPIKeyWSMode.value = false
       enableCodexCLIOnly.value = false
       enableCodexCLIOnlyAppServer.value = false
+      enableCodexToolFrameOn5hExhausted.value = false
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false
@@ -1841,6 +1961,9 @@ watch(
       openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
       codexCLIOnlyEnabled.value = false
       codexCLIOnlyAppServerEnabled.value = false
+      codexToolFrameOn5hExhaustedEnabled.value = false
+      codexToolFrame429NoCooldownEnabled.value = true
+      codexToolFrameForceAfter5hEnabled.value = false
       openAICompactMode.value = 'auto'
       openAICompactModelMappings.value = []
       rpmLimitEnabled.value = false

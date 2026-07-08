@@ -235,6 +235,89 @@ describe('BulkEditAccountModal', () => {
     expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
   })
 
+  it('OpenAI OAuth 批量编辑可开启 5h 后 Tool Frame，并显式提交默认子开关', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['oauth']
+    })
+
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: {
+        codex_tool_frame_on_5h_exhausted: true,
+        codex_tool_frame_429_no_cooldown: true,
+        codex_tool_frame_force_after_5h: false
+      }
+    })
+  })
+
+  it('OpenAI OAuth 批量编辑可关闭 Tool Frame 真实 429 不冷却', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['oauth']
+    })
+
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-openai-tool-frame-429-no-cooldown-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: {
+        codex_tool_frame_on_5h_exhausted: true,
+        codex_tool_frame_429_no_cooldown: false,
+        codex_tool_frame_force_after_5h: false
+      }
+    })
+  })
+
+  it('OpenAI OAuth 批量编辑可开启 5h 后强制 Tool Frame', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['oauth']
+    })
+
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-openai-tool-frame-force-after-5h-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: {
+        codex_tool_frame_on_5h_exhausted: true,
+        codex_tool_frame_429_no_cooldown: true,
+        codex_tool_frame_force_after_5h: true
+      }
+    })
+  })
+
+  it('OpenAI OAuth 批量编辑可关闭 5h 后 Tool Frame', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['oauth']
+    })
+
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: {
+        codex_tool_frame_on_5h_exhausted: false
+      }
+    })
+  })
+
   it('OpenAI API Key 批量编辑应提交 API Key 专属 WS mode 字段', async () => {
     const wrapper = mountModal({
       selectedPlatforms: ['openai'],
