@@ -794,7 +794,8 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 	}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
 
-	headers, _ := svc.buildOpenAIWSHeaders(
+	headers, _, err := svc.buildOpenAIWSHeaders(
+		context.Background(),
 		c,
 		account,
 		"oauth-token",
@@ -804,6 +805,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 		`{"spoof":true}`,
 		"",
 	)
+	require.NoError(t, err)
 
 	wantSessionID := headers.Get("session-id")
 	require.Len(t, wantSessionID, 36)
