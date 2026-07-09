@@ -55,7 +55,7 @@ func TestDialerBasicConnection(t *testing.T) {
 
 // TestJA3Fingerprint verifies the JA3/JA4 fingerprint matches expected value.
 // This test uses tls.peet.ws to verify the fingerprint.
-// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.191 Windows main request)
+// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.201 Linux probe)
 func TestJA3Fingerprint(t *testing.T) {
 	skipNetworkTest(t)
 
@@ -80,7 +80,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.201 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -106,7 +106,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	t.Logf("PeetPrint: %s", fpResp.TLS.PeetPrint)
 	t.Logf("PeetPrint Hash: %s", fpResp.TLS.PeetPrintHash)
 
-	// Verify JA3 hash matches the local Claude Code 2.1.191 main-request capture.
+	// Verify JA3 hash matches the Claude Code 2.1.201 Linux capture.
 	expectedJA3Hash := BuiltInDefaultJA3Hash
 	if fpResp.TLS.JA3Hash == expectedJA3Hash {
 		t.Logf("✓ JA3 hash matches expected value: %s", expectedJA3Hash)
@@ -142,7 +142,7 @@ func TestJA3Fingerprint(t *testing.T) {
 		t.Logf("Warning: JA3 does not contain expected TLS 1.3 cipher suites")
 	}
 
-	// Verify extension list (14 extensions, local Claude Code 2.1.191 main-request order)
+	// Verify extension list (14 extensions, Claude Code 2.1.201 Linux order)
 	expectedExtensions := "0-23-65281-10-11-35-16-5-13-18-51-45-43-21"
 	if strings.Contains(fpResp.TLS.JA3, expectedExtensions) {
 		t.Logf("✓ JA3 contains expected extension list: %s", expectedExtensions)
@@ -295,7 +295,7 @@ func TestAllProfiles(t *testing.T) {
 
 	profiles := []TestProfileExpectation{
 		{
-			// Default profile (Claude Code 2.1.191 Windows main request)
+			// Default profile (Claude Code 2.1.201 Linux probe)
 			// JA3 Hash: d871d02cecbde59abbf8f4806134addf
 			Profile: &Profile{
 				Name:         "default_claude_code_21191_windows_main",
@@ -382,7 +382,7 @@ func fetchFingerprint(t *testing.T, profile *Profile) *TLSInfo {
 		t.Fatalf("failed to create request: %v", err)
 		return nil
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.201 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

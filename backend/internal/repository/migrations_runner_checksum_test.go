@@ -154,12 +154,17 @@ func TestIsMigrationChecksumCompatible(t *testing.T) {
 	})
 
 	t.Run("129历史Claude Code模板checksum可兼容", func(t *testing.T) {
-		ok := isMigrationChecksumCompatible(
-			"129_seed_claude_code_template.sql",
-			"10324a1f1c176a5ab6bc24ac01eee8563f66ffabf4c013b8e4e023caf9f26328",
+		for _, fileChecksum := range []string{
 			"12ca46ecba7b67a3e93997236d31abf1aa27f89fb8cb96b590c1bea262e243c5",
-		)
-		require.True(t, ok)
+			"b3674f91a51b923a7f78ed1530565a9b14cae3b203f8bdd92565a32ee0e7ae59",
+		} {
+			ok := isMigrationChecksumCompatible(
+				"129_seed_claude_code_template.sql",
+				"10324a1f1c176a5ab6bc24ac01eee8563f66ffabf4c013b8e4e023caf9f26328",
+				fileChecksum,
+			)
+			require.True(t, ok)
+		}
 	})
 
 	t.Run("119未知checksum不兼容", func(t *testing.T) {

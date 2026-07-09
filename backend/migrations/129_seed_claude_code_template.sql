@@ -13,16 +13,16 @@ INSERT INTO channel_monitor_request_templates (
 VALUES (
     'Claude Code TTY',
     'anthropic',
-    '对齐 Claude Code 2.1.191 交互 TTY 主请求：UA + anthropic-beta + system attribution + metadata.user_id 按官方 CLI 形态生成。',
+    '对齐 Claude Code 2.1.201 洛杉矶 Linux 抓包口径：UA + anthropic-beta + system attribution + metadata.user_id 按官方 CLI 形态生成。',
     '{
-        "User-Agent": "claude-cli/2.1.191 (external, cli)",
+        "User-Agent": "claude-cli/2.1.201 (external, cli)",
         "x-app": "cli",
         "anthropic-version": "2023-06-01",
         "anthropic-beta": "claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24",
         "anthropic-dangerous-direct-browser-access": "true",
         "X-Stainless-Arch": "x64",
         "X-Stainless-Lang": "js",
-        "X-Stainless-OS": "Windows",
+        "X-Stainless-OS": "Linux",
         "X-Stainless-Package-Version": "0.94.0",
         "X-Stainless-Retry-Count": "0",
         "X-Stainless-Runtime": "node",
@@ -34,7 +34,7 @@ VALUES (
         "system": [
             {
                 "type": "text",
-                "text": "x-anthropic-billing-header: cc_version=2.1.191.8d2; cc_entrypoint=cli; cch=00000;"
+                "text": "x-anthropic-billing-header: cc_version=2.1.201.500; cc_entrypoint=cli; cch=00000;"
             },
             {
                 "type": "text",

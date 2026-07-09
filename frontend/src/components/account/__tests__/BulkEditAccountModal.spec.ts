@@ -251,7 +251,8 @@ describe('BulkEditAccountModal', () => {
       extra: {
         codex_tool_frame_on_5h_exhausted: true,
         codex_tool_frame_429_no_cooldown: true,
-        codex_tool_frame_force_after_5h: false
+        codex_tool_frame_force_after_5h: false,
+        codex_tool_frame_never_429: false
       }
     })
   })
@@ -273,7 +274,8 @@ describe('BulkEditAccountModal', () => {
       extra: {
         codex_tool_frame_on_5h_exhausted: true,
         codex_tool_frame_429_no_cooldown: false,
-        codex_tool_frame_force_after_5h: false
+        codex_tool_frame_force_after_5h: false,
+        codex_tool_frame_never_429: false
       }
     })
   })
@@ -295,7 +297,31 @@ describe('BulkEditAccountModal', () => {
       extra: {
         codex_tool_frame_on_5h_exhausted: true,
         codex_tool_frame_429_no_cooldown: true,
-        codex_tool_frame_force_after_5h: true
+        codex_tool_frame_force_after_5h: true,
+        codex_tool_frame_never_429: false
+      }
+    })
+  })
+
+  it('OpenAI OAuth 批量编辑可开启 Tool Frame 永不返回 429', async () => {
+    const wrapper = mountModal({
+      selectedPlatforms: ['openai'],
+      selectedTypes: ['oauth']
+    })
+
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-enabled').setValue(true)
+    await wrapper.get('#bulk-edit-openai-tool-frame-5h-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-openai-tool-frame-never-429-toggle').trigger('click')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledTimes(1)
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: {
+        codex_tool_frame_on_5h_exhausted: true,
+        codex_tool_frame_429_no_cooldown: true,
+        codex_tool_frame_force_after_5h: false,
+        codex_tool_frame_never_429: true
       }
     })
   })

@@ -99,6 +99,25 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, nil, body))
 }
 
+func TestRewriteCodexToolFrame429FailoverForClient(t *testing.T) {
+	body, changed := appendCodexToolFrameIfNeeded([]byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`))
+	require.True(t, changed)
+
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAICodexToolFrameNever429Key: true,
+		},
+	}
+	status, rewritten := rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{"error":{"type":"rate_limit_error"}}`), account, body)
+	require.Equal(t, http.StatusServiceUnavailable, status)
+	require.Equal(t, "upstream_error", gjson.GetBytes(rewritten, "error.type").String())
+
+	status, _ = rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{}`), account, []byte(`{"input":[]}`))
+	require.Equal(t, http.StatusTooManyRequests, status)
+}
+
 func TestAppendCodexToolFrameIfNeeded(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`)
 

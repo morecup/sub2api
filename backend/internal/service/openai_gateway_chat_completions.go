@@ -327,9 +327,10 @@ sendChatCompatRequest:
 					s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, responsesBody, false, resp.Header.Get("x-request-id"), upstreamMsg)) {
 					s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
 				}
+				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account, responsesBody)
 				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
+					StatusCode:             failoverStatus,
+					ResponseBody:           failoverBody,
 					RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 				}
 			}

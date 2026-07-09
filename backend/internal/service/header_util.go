@@ -38,9 +38,10 @@ var headerWireCasing = map[string]string{
 	"authorization":                             "authorization",
 
 	// Claude Code 2.1.87+ 新增 header
-	"x-claude-code-session-id": "X-Claude-Code-Session-Id",
-	"x-client-request-id":      "x-client-request-id",
-	"content-length":           "content-length",
+	"x-claude-code-session-id":   "X-Claude-Code-Session-Id",
+	"x-claude-remote-session-id": "x-claude-remote-session-id",
+	"x-client-request-id":        "x-client-request-id",
+	"content-length":             "content-length",
 }
 
 // headerWireOrder 定义真实 Claude CLI 发送 header 的顺序（基于抓包）。
@@ -61,6 +62,7 @@ var headerWireOrder = []string{
 	"x-app",
 	"User-Agent",
 	"X-Claude-Code-Session-Id",
+	"x-claude-remote-session-id",
 	"content-type",
 	"anthropic-beta",
 	"x-client-request-id",

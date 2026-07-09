@@ -40,7 +40,7 @@ func skipIfExternalServiceUnavailable(t *testing.T, err error) {
 
 // TestJA3Fingerprint verifies the JA3/JA4 fingerprint matches expected value.
 // This test uses tls.peet.ws to verify the fingerprint.
-// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.191 Windows main request)
+// Expected JA3 hash: d871d02cecbde59abbf8f4806134addf (Claude Code 2.1.201 Linux probe)
 func TestJA3Fingerprint(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
@@ -66,7 +66,7 @@ func TestJA3Fingerprint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.201 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	skipIfExternalServiceUnavailable(t, err)
@@ -113,7 +113,7 @@ func TestAllProfiles(t *testing.T) {
 	// These profiles are from config.yaml gateway.tls_fingerprint.profiles
 	profiles := []TestProfileExpectation{
 		{
-			// Default profile (Claude Code 2.1.191 Windows main request)
+			// Default profile (Claude Code 2.1.201 Linux probe)
 			Profile: &Profile{
 				Name:         "default_claude_code_21191_windows_main",
 				EnableGREASE: false,
@@ -199,7 +199,7 @@ func fetchFingerprint(t *testing.T, profile *Profile) *TLSInfo {
 		t.Fatalf("failed to create request: %v", err)
 		return nil
 	}
-	req.Header.Set("User-Agent", "Claude Code/2.1.191 Node.js/26.3.0")
+	req.Header.Set("User-Agent", "Claude Code/2.1.201 Node.js/26.3.0")
 
 	resp, err := client.Do(req)
 	skipIfExternalServiceUnavailable(t, err)

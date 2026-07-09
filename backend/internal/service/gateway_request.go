@@ -835,6 +835,10 @@ func removeThinkingDependentContextStrategies(body []byte) []byte {
 // claude package 的该常量含义。
 const anthropicBetaContextManagementToken = "context-management-2025-06-27"
 
+// anthropicBetaEffortToken 是 output_config.effort 字段受的 beta token。
+// 与 claude.BetaEffort 保持一致；本文件用本地常量避免在 hot path 引入包依赖。
+const anthropicBetaEffortToken = "effort-2025-11-24"
+
 // sanitizeAnthropicBodyForBetaTokens 是对 Anthropic 直连路径上 body↔beta header
 // **能力维度**对称约束的统一实现，与 Bedrock 路径的
 // `sanitizeBedrockFieldsForBetaTokens` 对称。
@@ -847,8 +851,8 @@ const anthropicBetaContextManagementToken = "context-management-2025-06-27"
 //   - 若两侧不一致上游 Pydantic schema 拒收：
 //     "context_management: Extra inputs are not permitted"
 //
-// 本函数按最终发送的 anthropic-beta header 决定是否保留 body 中的
-// context_management 字段：缺 beta token → strip。这将限制完全建立在
+// 本函数按最终发送的 anthropic-beta header 决定是否保留 body 中受 beta
+// 保护的能力字段：缺 beta token → strip。这将限制完全建立在
 // "能力维度" 上，与 model 名 / token type / mimicry 子路径无关。
 //
 // 调用约束：必须在创建上游请求前调用，否则最终 anthropic-beta header
@@ -860,23 +864,54 @@ func sanitizeAnthropicBodyForBetaTokens(body []byte, anthropicBetaHeader string)
 	if len(body) == 0 {
 		return body, false
 	}
-	if !gjson.GetBytes(body, "context_management").Exists() {
-		return body, false
+	out := body
+	changed := false
+
+	if gjson.GetBytes(out, "context_management").Exists() &&
+		!anthropicBetaTokensContains(anthropicBetaHeader, anthropicBetaContextManagementToken) {
+		if b, err := sjson.DeleteBytes(out, "context_management"); err == nil {
+			out = b
+			changed = true
+		} else {
+			// 不应发生：gjson 刚验证过字段存在 + body 是合法 JSON。如果 sjson 仍报错，
+			// 调用方会拿到未修改 body，但此前 computeFinalAnthropicBeta 已按“strip 后”
+			// 计算了 finalBeta——两侧会不一致。记录 warning 最小限度提醒运维。
+			logger.LegacyPrintf("service.gateway",
+				"[BetaCapabilitySanitize] delete context_management failed unexpectedly: %v (body len=%d). "+
+					"body and final anthropic-beta header may be out of sync.", err, len(out))
+		}
 	}
-	if anthropicBetaTokensContains(anthropicBetaHeader, anthropicBetaContextManagementToken) {
-		return body, false
+
+	if gjson.GetBytes(out, "output_config.effort").Exists() &&
+		!anthropicBetaTokensContains(anthropicBetaHeader, anthropicBetaEffortToken) {
+		if b, err := sjson.DeleteBytes(out, "output_config.effort"); err == nil {
+			out = b
+			changed = true
+			if outputConfigIsEmptyObject(out) {
+				if bb, err := sjson.DeleteBytes(out, "output_config"); err == nil {
+					out = bb
+				}
+			}
+		} else {
+			logger.LegacyPrintf("service.gateway",
+				"[BetaCapabilitySanitize] delete output_config.effort failed unexpectedly: %v (body len=%d). "+
+					"body and final anthropic-beta header may be out of sync.", err, len(out))
+		}
 	}
-	if b, err := sjson.DeleteBytes(body, "context_management"); err == nil {
-		return b, true
-	} else {
-		// 不应发生：gjson 刚验证过字段存在 + body 是合法 JSON。如果 sjson 仍报错，
-		// 调用方会拿到 (body, false)，但此前 computeFinalAnthropicBeta 已按“strip 后”
-		// 计算了 finalBeta——两侧会不一致。记录 warning 最小限度提醒运维。
-		logger.LegacyPrintf("service.gateway",
-			"[CtxMgmtSanitize] sjson.DeleteBytes failed unexpectedly: %v (body len=%d). "+
-				"body and final anthropic-beta header may be out of sync.", err, len(body))
+	return out, changed
+}
+
+func outputConfigIsEmptyObject(body []byte) bool {
+	outputConfig := gjson.GetBytes(body, "output_config")
+	if !outputConfig.IsObject() {
+		return false
 	}
-	return body, false
+	empty := true
+	outputConfig.ForEach(func(_, _ gjson.Result) bool {
+		empty = false
+		return false
+	})
+	return empty
 }
 
 // anthropicBetaTokensContains 检测逗号分隔的 anthropic-beta header 是否含指定 token。

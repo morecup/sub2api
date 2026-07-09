@@ -3489,6 +3489,9 @@ export default {
         codexToolFrameForceAfter5h: 'Force Tool Frame after 5h',
         codexToolFrameForceAfter5hDesc:
           'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame; any 429 after Tool Frame is already present will never cooldown the account.',
+        codexToolFrameNever429: 'Never return 429 with Tool Frame',
+        codexToolFrameNever429Desc:
+          'Disabled by default. When enabled, 429s after Tool Frame still trigger account failover; if every attempt fails, the client receives 503 instead of 429.',
         codexCLIOnlyAppServer: 'Allow Codex app-server clients',
         codexCLIOnlyAppServerDesc:
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",

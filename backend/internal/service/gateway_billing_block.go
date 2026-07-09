@@ -131,9 +131,12 @@ func buildBillingAttributionTextWithOptions(body []byte, cliVersion string, opts
 	fp := computeClaudeCodeFingerprint(body, cliVersion)
 	entrypoint := normalizeClaudeCodeBillingEntrypoint(opts.Entrypoint)
 	text := fmt.Sprintf(
-		"x-anthropic-billing-header: cc_version=%s.%s; cc_entrypoint=%s; cch=00000;",
+		"x-anthropic-billing-header: cc_version=%s.%s; cc_entrypoint=%s;",
 		cliVersion, fp, entrypoint,
 	)
+	if !opts.OmitCCH {
+		text += " cch=00000;"
+	}
 	if opts.Workload != "" && claudeCodeBillingWorkloadValueRe.MatchString(opts.Workload) {
 		text += " cc_workload=" + opts.Workload + ";"
 	}

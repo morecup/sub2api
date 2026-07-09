@@ -3658,6 +3658,9 @@ export default {
         codexToolFrameForceAfter5h: '5h 后强制 Tool Frame',
         codexToolFrameForceAfter5hDesc:
           '默认关闭。开启后只要 5h 额度已耗尽，就不再判断 7d 额度，仍然添加 Tool Frame；已带 Tool Frame 后遇到任何 429 都不会冷却账号。',
+        codexToolFrameNever429: 'Tool Frame 永不返回 429',
+        codexToolFrameNever429Desc:
+          '默认关闭。开启后已带 Tool Frame 的 429 会继续触发账号切换；最终仍失败时返回 503，而不是向客户端返回 429。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
         codexImageGenerationBridge: 'Codex 图片生成桥接',

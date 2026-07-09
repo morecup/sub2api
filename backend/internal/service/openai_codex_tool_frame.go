@@ -15,6 +15,7 @@ const (
 	openAICodexToolFrameOn5hExhaustedKey = "codex_tool_frame_on_5h_exhausted"
 	openAICodexToolFrame429NoCooldownKey = "codex_tool_frame_429_no_cooldown"
 	openAICodexToolFrameForceAfter5hKey  = "codex_tool_frame_force_after_5h"
+	openAICodexToolFrameNever429Key      = "codex_tool_frame_never_429"
 	codexToolFrameStubToolName           = "noop"
 )
 

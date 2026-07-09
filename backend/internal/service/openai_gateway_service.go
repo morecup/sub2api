@@ -3254,9 +3254,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				})
 
 				s.handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx, resp, account, respBody, body, c, false, upstreamMsg, upstreamModel)
+				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account, body)
 				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
+					StatusCode:             failoverStatus,
+					ResponseBody:           failoverBody,
 					RetryableOnSameAccount: account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 				}
 			}
@@ -3781,9 +3782,10 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
 	})
+	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, body, account, requestBody)
 	return &UpstreamFailoverError{
-		StatusCode:      resp.StatusCode,
-		ResponseBody:    body,
+		StatusCode:      failoverStatus,
+		ResponseBody:    failoverBody,
 		ResponseHeaders: resp.Header.Clone(),
 	}
 }
@@ -4038,9 +4040,10 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 			"message": message,
 		},
 	})
+	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(upstreamStatus, body, account, currentOpsOpenAIUpstreamRequestBody(c))
 	return &UpstreamFailoverError{
-		StatusCode:             upstreamStatus,
-		ResponseBody:           body,
+		StatusCode:             failoverStatus,
+		ResponseBody:           failoverBody,
 		RetryableOnSameAccount: openAIStreamEventRetryableOnSameAccount(account, upstreamStatus, payload, message),
 	}
 }

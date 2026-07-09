@@ -926,7 +926,7 @@ func TestGatewayService_AnthropicOAuth_ForwardKeepsClaudeCodeBillingFamilySystem
 	require.True(t, system.IsArray())
 	arr := system.Array()
 	require.Len(t, arr, 4)
-	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.191.")
+	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.201.")
 	require.NotContains(t, arr[0].Get("text").String(), "cc_version=2.1.22.old")
 	require.Contains(t, arr[0].Get("text").String(), "cc_entrypoint=cli")
 	require.NotContains(t, arr[0].Get("text").String(), "cc_entrypoint=sdk-cli")
@@ -957,7 +957,7 @@ func TestGatewayService_AnthropicOAuth_ForwardKeepsClaudeCodeBillingFamilySystem
 	require.Contains(t, outBeta, claude.BetaContextManagement)
 	require.Contains(t, outBeta, claude.BetaPromptCachingScope)
 	require.Contains(t, outBeta, claude.BetaRedactThinking)
-	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+	require.Equal(t, "claude-cli/2.1.201 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
 	require.NotEmpty(t, getHeaderRaw(upstream.lastReq.Header, "x-client-request-id"))
 }
 
@@ -1094,11 +1094,11 @@ func TestGatewayService_AnthropicOAuth_NonClaudeCodeIngressTTYLikeWireAndRespons
 	require.Equal(t, "application/json", getHeaderRaw(upstream.lastReq.Header, "content-type"))
 	require.Equal(t, "2023-06-01", getHeaderRaw(upstream.lastReq.Header, "anthropic-version"))
 	require.Equal(t, "application/json", getHeaderRaw(upstream.lastReq.Header, "Accept"))
-	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+	require.Equal(t, "claude-cli/2.1.201 (external, cli)", getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
 	require.Equal(t, "cli", getHeaderRaw(upstream.lastReq.Header, "X-App"))
 	require.Equal(t, "js", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Lang"))
 	require.Equal(t, "0.94.0", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Package-Version"))
-	require.Equal(t, "Windows", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
+	require.Equal(t, "Linux", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
 	require.Equal(t, "x64", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Arch"))
 	require.Equal(t, "node", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime"))
 	require.Equal(t, "v26.3.0", getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime-Version"))
@@ -1123,7 +1123,7 @@ func TestGatewayService_AnthropicOAuth_NonClaudeCodeIngressTTYLikeWireAndRespons
 	arr := system.Array()
 	require.Len(t, arr, 4)
 	require.Contains(t, arr[0].Get("text").String(), "x-anthropic-billing-header:")
-	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.191.")
+	require.Contains(t, arr[0].Get("text").String(), "cc_version=2.1.201.")
 	require.Contains(t, arr[0].Get("text").String(), "cc_entrypoint=cli")
 	require.NotContains(t, arr[0].Get("text").String(), "cch=00000;")
 	require.False(t, arr[0].Get("cache_control").Exists())
@@ -1279,10 +1279,14 @@ func TestGatewayService_AnthropicOAuth_ReplaysCanonicalTTYCaptures(t *testing.T)
 				require.Equal(t, "Bearer oauth-token", getHeaderRaw(upstream.lastReq.Header, "authorization"))
 				require.Equal(t, captureHeaders["Accept"], getHeaderRaw(upstream.lastReq.Header, "Accept"))
 				require.Equal(t, captureHeaders["Content-Type"], getHeaderRaw(upstream.lastReq.Header, "Content-Type"))
-				require.Equal(t, captureHeaders["User-Agent"], getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
+				require.Equal(t, claude.DefaultHeaders["User-Agent"], getHeaderRaw(upstream.lastReq.Header, "User-Agent"))
 				require.Equal(t, captureHeaders["X-Stainless-Arch"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Arch"))
 				require.Equal(t, captureHeaders["X-Stainless-Lang"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Lang"))
-				require.Equal(t, captureHeaders["X-Stainless-OS"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
+				expectedOS := captureHeaders["X-Stainless-OS"]
+				if expectedOS == "" {
+					expectedOS = claude.DefaultHeaders["X-Stainless-OS"]
+				}
+				require.Equal(t, expectedOS, getHeaderRaw(upstream.lastReq.Header, "X-Stainless-OS"))
 				require.Equal(t, captureHeaders["X-Stainless-Package-Version"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Package-Version"))
 				require.Equal(t, captureHeaders["X-Stainless-Retry-Count"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Retry-Count"))
 				require.Equal(t, captureHeaders["X-Stainless-Runtime"], getHeaderRaw(upstream.lastReq.Header, "X-Stainless-Runtime"))
@@ -1295,16 +1299,29 @@ func TestGatewayService_AnthropicOAuth_ReplaysCanonicalTTYCaptures(t *testing.T)
 				require.NotEmpty(t, getHeaderRaw(upstream.lastReq.Header, "x-client-request-id"))
 
 				wire := upstream.lastBody
-				require.Equal(t, claudeTTYTopLevelKeyOrder(t, body), claudeTTYTopLevelKeyOrder(t, wire))
-				require.Equal(t, gjson.GetBytes(body, "model").Raw, gjson.GetBytes(wire, "model").Raw)
-				require.Equal(t, gjson.GetBytes(body, "messages").Raw, gjson.GetBytes(wire, "messages").Raw)
-				require.Equal(t, gjson.GetBytes(body, "tools").Raw, gjson.GetBytes(wire, "tools").Raw)
-				require.Equal(t, gjson.GetBytes(body, "max_tokens").Raw, gjson.GetBytes(wire, "max_tokens").Raw)
-				require.Equal(t, gjson.GetBytes(body, "thinking").Raw, gjson.GetBytes(wire, "thinking").Raw)
-				require.Equal(t, gjson.GetBytes(body, "temperature").Raw, gjson.GetBytes(wire, "temperature").Raw)
-				require.Equal(t, gjson.GetBytes(body, "context_management").Raw, gjson.GetBytes(wire, "context_management").Raw)
-				require.Equal(t, gjson.GetBytes(body, "output_config").Raw, gjson.GetBytes(wire, "output_config").Raw)
-				require.Equal(t, gjson.GetBytes(body, "stream").Raw, gjson.GetBytes(wire, "stream").Raw)
+				outProfile := classifyClaudeMessagesBody(wire)
+				expectedWire := body
+				if outProfile.OfficialProfile == claudeCodeOfficialProfileCLITitle {
+					inProfile := classifyClaudeMessagesBody(body)
+					require.Equal(t, claudeCodeOfficialProfileCLITitle, inProfile.OfficialProfile)
+					var changed bool
+					expectedWire, changed = normalizeClaudeCodeOfficialProfileBody(body, inProfile)
+					require.True(t, changed)
+				}
+				require.Equal(t, claudeTTYTopLevelKeyOrder(t, expectedWire), claudeTTYTopLevelKeyOrder(t, wire))
+				require.Equal(t, gjson.GetBytes(expectedWire, "model").Raw, gjson.GetBytes(wire, "model").Raw)
+				expectedMessages := gjson.GetBytes(expectedWire, "messages").Raw
+				if outProfile.OfficialProfile != claudeCodeOfficialProfileCLITitle && claudeCodeOfficialProfileOmitsCCH(outProfile) {
+					expectedMessages = claudeTTYExpectedMessagesForCurrentDate(t, expectedMessages)
+				}
+				require.JSONEq(t, expectedMessages, gjson.GetBytes(wire, "messages").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "tools").Raw, gjson.GetBytes(wire, "tools").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "max_tokens").Raw, gjson.GetBytes(wire, "max_tokens").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "thinking").Raw, gjson.GetBytes(wire, "thinking").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "temperature").Raw, gjson.GetBytes(wire, "temperature").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "context_management").Raw, gjson.GetBytes(wire, "context_management").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "output_config").Raw, gjson.GetBytes(wire, "output_config").Raw)
+				require.Equal(t, gjson.GetBytes(expectedWire, "stream").Raw, gjson.GetBytes(wire, "stream").Raw)
 
 				inSystem := gjson.GetBytes(body, "system")
 				outSystem := gjson.GetBytes(wire, "system")
@@ -1312,15 +1329,36 @@ func TestGatewayService_AnthropicOAuth_ReplaysCanonicalTTYCaptures(t *testing.T)
 				require.True(t, outSystem.IsArray())
 				inBlocks := inSystem.Array()
 				outBlocks := outSystem.Array()
-				require.Len(t, outBlocks, len(inBlocks))
-				for i := 1; i < len(inBlocks); i++ {
-					require.Equal(t, inBlocks[i].Raw, outBlocks[i].Raw, "system[%d] should be preserved from captured Claude Code body", i)
+				if outProfile.OfficialProfile == claudeCodeOfficialProfileCLITitle {
+					require.Len(t, outBlocks, 3)
+					require.Equal(t, claudeCodeSystemPrompt, outBlocks[1].Get("text").String())
+					require.False(t, outBlocks[1].Get("cache_control").Exists())
+					require.Equal(t, claudeCodeCLITitlePrompt, outBlocks[2].Get("text").String())
+					require.False(t, outBlocks[2].Get("cache_control").Exists())
+				} else if claudeCodeOfficialProfileOmitsCCH(outProfile) {
+					require.Len(t, outBlocks, 3)
+					require.GreaterOrEqual(t, len(inBlocks), 3)
+					require.Equal(t, inBlocks[1].Get("type").String(), outBlocks[1].Get("type").String())
+					require.Equal(t, inBlocks[1].Get("text").String(), outBlocks[1].Get("text").String(), "system[1] should preserve the official identity text")
+					require.Equal(t, "ephemeral", outBlocks[1].Get("cache_control.type").String())
+					require.Equal(t, inBlocks[2].Get("type").String(), outBlocks[2].Get("type").String())
+					require.Equal(t, inBlocks[2].Get("text").String(), outBlocks[2].Get("text").String(), "system[2] should preserve the official main prompt text")
+					require.Equal(t, "ephemeral", outBlocks[2].Get("cache_control.type").String())
+				} else {
+					require.Len(t, outBlocks, len(inBlocks))
+					for i := 1; i < len(inBlocks); i++ {
+						require.JSONEq(t, inBlocks[i].Raw, outBlocks[i].Raw, "system[%d] should be preserved from captured Claude Code body", i)
+					}
 				}
 				require.Contains(t, outBlocks[0].Get("text").String(), "x-anthropic-billing-header:")
-				require.Contains(t, outBlocks[0].Get("text").String(), "cc_version=2.1.191.")
+				require.Contains(t, outBlocks[0].Get("text").String(), "cc_version=2.1.201.")
 				require.Contains(t, outBlocks[0].Get("text").String(), "cc_entrypoint=cli")
 				require.False(t, outBlocks[0].Get("cache_control").Exists())
-				requireClaudeCodeCCHSelfConsistent(t, wire)
+				if claudeCodeOfficialProfileOmitsCCH(outProfile) {
+					require.NotContains(t, outBlocks[0].Get("text").String(), "cch=")
+				} else {
+					requireClaudeCodeCCHSelfConsistent(t, wire)
+				}
 
 				metadata := ParseMetadataUserID(gjson.GetBytes(wire, "metadata.user_id").String())
 				require.NotNil(t, metadata)
@@ -1393,6 +1431,34 @@ func claudeTTYCaptureHeaderMap(headers [][]string) map[string]string {
 		out[pair[0]] = pair[1]
 	}
 	return out
+}
+
+func claudeTTYExpectedMessagesForCurrentDate(t *testing.T, raw string) string {
+	t.Helper()
+	if strings.TrimSpace(raw) == "" {
+		return raw
+	}
+	var messages []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(raw), &messages))
+	today := time.Now().Format("2006-01-02")
+	for _, msg := range messages {
+		if msg["role"] != "user" {
+			continue
+		}
+		content, _ := msg["content"].([]any)
+		for _, item := range content {
+			block, _ := item.(map[string]any)
+			text, _ := block["text"].(string)
+			if strings.Contains(text, "# currentDate") {
+				block["text"] = normalizeClaudeCodeCurrentDateReminderText(text, today)
+				break
+			}
+		}
+		break
+	}
+	out, err := json.Marshal(messages)
+	require.NoError(t, err)
+	return string(out)
 }
 
 func claudeTTYTopLevelKeyOrder(t *testing.T, body []byte) []string {

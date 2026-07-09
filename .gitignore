@@ -134,6 +134,10 @@ docs/*
 !docs/CLAUDE_CODE_REQUEST_PROFILES.md
 !docs/CLAUDE_CODE_BODY_PROFILE_HEADER_POLICY.md
 !docs/CLAUDE_DESKTOP_PATHS.md
+!docs/claude-code-cli-capture/
+docs/claude-code-cli-capture/*
+!docs/claude-code-cli-capture/README.md
+!docs/claude-code-cli-capture/PROFILE_NORMALIZATION_GUIDE.md
 !docs/legal/
 !docs/legal/*.md
 .serena/
@@ -141,3 +145,7 @@ docs/*
 frontend/coverage/
 aicodex
 output/
+.codex-release/
+account-monitor/config.json
+account-monitor/state.json
+account-monitor/account-monitor-*

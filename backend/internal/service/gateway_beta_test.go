@@ -8,6 +8,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,6 +157,21 @@ func TestClaudeCodeMainBetasForModel_MatchesTTYBranches(t *testing.T) {
 		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,advanced-tool-use-2025-11-20,effort-2025-11-24",
 		opus48,
 	)
+
+	fable := claude.ClaudeCodeMainBetaHeaderForModel("claude-fable-5")
+	require.Equal(t,
+		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,advanced-tool-use-2025-11-20,effort-2025-11-24,fallback-credit-2026-06-01",
+		fable,
+	)
+	require.Contains(t, fable, claude.BetaFallbackCredit)
+
+	fableToolSearchOff := strings.Join(claude.ClaudeCodeMainToolSearchOffBetasForModel("claude-fable-5"), ",")
+	require.NotContains(t, fableToolSearchOff, claude.BetaAdvancedToolUse)
+	require.Contains(t, fableToolSearchOff, claude.BetaFallbackCredit)
+	require.Equal(t,
+		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,effort-2025-11-24,fallback-credit-2026-06-01",
+		fableToolSearchOff,
+	)
 }
 
 func TestClaudeCodeTitleBetas_MatchesTTYTitleQuery(t *testing.T) {
@@ -164,14 +180,22 @@ func TestClaudeCodeTitleBetas_MatchesTTYTitleQuery(t *testing.T) {
 		claude.TitleBetaHeader,
 	)
 	require.Equal(t, claude.TitleBetaHeader, strings.Join(claude.ClaudeCodeTitleBetas(), ","))
+	require.Equal(t,
+		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,effort-2025-11-24,structured-outputs-2025-12-15",
+		claude.ClaudeCodeTitleBetaHeaderForModel("claude-sonnet-5"),
+	)
+	require.Equal(t,
+		"claude-code-20250219,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,effort-2025-11-24,structured-outputs-2025-12-15",
+		claude.ClaudeCodeTitleBetaHeaderForModel("claude-fable-5"),
+	)
 }
 
 func TestDefaultHeaders_MatchTTYFingerprint(t *testing.T) {
-	require.Equal(t, "claude-cli/2.1.191 (external, cli)", claude.DefaultHeaders["User-Agent"])
+	require.Equal(t, "claude-cli/2.1.201 (external, cli)", claude.DefaultHeaders["User-Agent"])
 	require.Equal(t, "cli", claude.DefaultHeaders["X-App"])
 	require.Equal(t, "js", claude.DefaultHeaders["X-Stainless-Lang"])
 	require.Equal(t, "0.94.0", claude.DefaultHeaders["X-Stainless-Package-Version"])
-	require.Equal(t, "Windows", claude.DefaultHeaders["X-Stainless-OS"])
+	require.Equal(t, "Linux", claude.DefaultHeaders["X-Stainless-OS"])
 	require.Equal(t, "x64", claude.DefaultHeaders["X-Stainless-Arch"])
 	require.Equal(t, "node", claude.DefaultHeaders["X-Stainless-Runtime"])
 	require.Equal(t, "v26.3.0", claude.DefaultHeaders["X-Stainless-Runtime-Version"])
@@ -233,12 +257,79 @@ func TestApplyClaudeCodeMimicHeaders_DoesNotInventHelperMethod(t *testing.T) {
 	applyClaudeCodeMimicHeaders(req)
 
 	require.Equal(t, "application/json", getHeaderRaw(req.Header, "Accept"))
-	require.Equal(t, "claude-cli/2.1.191 (external, cli)", getHeaderRaw(req.Header, "User-Agent"))
-	require.Equal(t, "Windows", getHeaderRaw(req.Header, "X-Stainless-OS"))
+	require.Equal(t, "claude-cli/2.1.201 (external, cli)", getHeaderRaw(req.Header, "User-Agent"))
+	require.Equal(t, "Linux", getHeaderRaw(req.Header, "X-Stainless-OS"))
 	require.Equal(t, "x64", getHeaderRaw(req.Header, "X-Stainless-Arch"))
 	require.Equal(t, "v26.3.0", getHeaderRaw(req.Header, "X-Stainless-Runtime-Version"))
 	require.Empty(t, getHeaderRaw(req.Header, "x-stainless-helper-method"))
 	require.NotEmpty(t, getHeaderRaw(req.Header, "x-client-request-id"))
+}
+
+func TestApplyClaudeCodeFamilyHeaders_CLITitlePlatformAndRemoteSession(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", nil)
+	clientHeaders := http.Header{}
+	clientHeaders.Set("X-Stainless-OS", "Windows")
+	clientHeaders.Set("x-claude-remote-session-id", "remote-from-client")
+	profile := claudeCodeBodyClassification{
+		OfficialProfile:   claudeCodeOfficialProfileCLITitle,
+		BillingEntryPoint: "cli",
+		HasBilling:        true,
+	}
+
+	applyClaudeCodeFamilyHeaders(req, profile, nil, clientHeaders)
+
+	require.Equal(t, "Windows", getHeaderRaw(req.Header, "X-Stainless-OS"))
+	require.Equal(t, "remote-from-client", getHeaderRaw(req.Header, "x-claude-remote-session-id"))
+	require.Equal(t, "claude-cli/2.1.201 (external, cli)", getHeaderRaw(req.Header, "User-Agent"))
+}
+
+func TestRefineClaudeCodeMessagesProfileForHTTPRequest_CLITitleSignals(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	profile := claudeCodeBodyClassification{
+		Profile:           claudeCodeBodyProfileTitle,
+		OfficialProfile:   claudeCodeOfficialProfileCLITitle,
+		SystemProfile:     claudeCodeSystemProfileCLITitle,
+		HasBilling:        true,
+		BillingEntryPoint: "cli",
+	}
+	headers := http.Header{}
+	headers.Set("User-Agent", "claude-cli/2.1.201 (external, cli)")
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages?beta=true", nil)
+
+	got := refineClaudeCodeMessagesProfileForHTTPRequest(profile, c, headers)
+	require.Equal(t, claudeCodeOfficialProfileCLITitle, got.OfficialProfile)
+
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages/count_tokens?beta=true", nil)
+	got = refineClaudeCodeMessagesProfileForHTTPRequest(profile, c, headers)
+	require.Equal(t, claudeCodeOfficialProfileUnknown, got.OfficialProfile)
+
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages?beta=true", nil)
+	headers.Set("User-Agent", "curl/8.0")
+	got = refineClaudeCodeMessagesProfileForHTTPRequest(profile, c, headers)
+	require.Equal(t, claudeCodeOfficialProfileUnknown, got.OfficialProfile)
+}
+
+func TestClaudeCodeBodyProfileBetaTokens_CLITitleRequiresOfficialProfile(t *testing.T) {
+	profile := claudeCodeBodyClassification{
+		Profile:             claudeCodeBodyProfileTitle,
+		OfficialProfile:     claudeCodeOfficialProfileUnknown,
+		HasBilling:          true,
+		HasStructuredOutput: true,
+	}
+
+	got := claudeCodeBodyProfileBetaTokens("claude-sonnet-5", profile)
+
+	require.Equal(t, []string{claude.BetaClaudeCode, claude.BetaStructuredOutputs}, got)
+}
+
+func TestResolveClaudeCodeStainlessOS_Fallbacks(t *testing.T) {
+	body := []byte(`{"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.201.055; cc_entrypoint=cli;"},{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."},{"type":"text","text":"# Environment\n - Platform: win32\n - OS Version: Windows 11"}]}`)
+
+	require.Equal(t, "Windows", resolveClaudeCodeStainlessOS(body, nil))
+	require.Equal(t, "Linux", resolveClaudeCodeStainlessOS(nil, nil))
 }
 
 func TestSyncClaudeCodeSessionIDHeader_UsesMetadataJSON(t *testing.T) {

@@ -161,7 +161,7 @@ func TestDialerAgainstCaptureServer(t *testing.T) {
 			}
 
 			// 校验扩展顺序；如果 Profile 显式配置了 Extensions 就使用配置值，
-			// 否则使用内置 Claude Code 2.1.191 Windows 主请求顺序。
+			// 否则使用内置 Claude Code 2.1.201 Linux 顺序。
 			expectedExtOrder := uint16sToInts(defaultExtensionOrder)
 			if len(tc.profile.Extensions) > 0 {
 				expectedExtOrder = uint16sToInts(tc.profile.Extensions)

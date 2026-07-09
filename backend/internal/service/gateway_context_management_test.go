@@ -103,6 +103,30 @@ func TestSanitizeAnthropicBodyForBetaTokens_FieldStrippedWhenBetaEmpty(t *testin
 	require.False(t, gjson.GetBytes(out, "context_management").Exists())
 }
 
+func TestSanitizeAnthropicBodyForBetaTokens_EffortStrippedWhenBetaMissing(t *testing.T) {
+	body := []byte(`{"model":"claude-haiku-4-5","output_config":{"effort":"high"},"messages":[]}`)
+	out, changed := sanitizeAnthropicBodyForBetaTokens(body, claude.HaikuBetaHeader)
+	require.True(t, changed)
+	require.False(t, gjson.GetBytes(out, "output_config.effort").Exists())
+	require.False(t, gjson.GetBytes(out, "output_config").Exists(),
+		"output_config 只剩空对象时应一并删除，对齐 Haiku 实抓 main body")
+}
+
+func TestSanitizeAnthropicBodyForBetaTokens_EffortStripPreservesOutputFormat(t *testing.T) {
+	body := []byte(`{"model":"claude-haiku-4-5","output_config":{"effort":"high","format":{"type":"json_schema"}},"messages":[]}`)
+	out, changed := sanitizeAnthropicBodyForBetaTokens(body, claude.HaikuBetaHeader)
+	require.True(t, changed)
+	require.False(t, gjson.GetBytes(out, "output_config.effort").Exists())
+	require.True(t, gjson.GetBytes(out, "output_config.format").Exists())
+}
+
+func TestSanitizeAnthropicBodyForBetaTokens_EffortKeptWhenBetaPresent(t *testing.T) {
+	body := []byte(`{"model":"claude-sonnet-5","output_config":{"effort":"high"},"messages":[]}`)
+	out, changed := sanitizeAnthropicBodyForBetaTokens(body, claude.DefaultBetaHeader)
+	require.False(t, changed)
+	require.Equal(t, "high", gjson.GetBytes(out, "output_config.effort").String())
+}
+
 func TestSanitizeAnthropicBodyForBetaTokens_EmptyBody(t *testing.T) {
 	out, changed := sanitizeAnthropicBodyForBetaTokens([]byte{}, "")
 	require.False(t, changed)

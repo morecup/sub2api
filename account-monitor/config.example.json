@@ -1,0 +1,53 @@
+{
+  "listen": "127.0.0.1:8099",
+  "auth_token": "",
+  "api_key": "",
+  "state_file": "state.json",
+  "sub2api": {
+    "base_url": "http://127.0.0.1:8080",
+    "admin_api_key": "replace-with-sub2api-admin-api-key",
+    "request_timeout_seconds": 20,
+    "test_timeout_seconds": 120
+  },
+  "monitor": {
+    "enabled": true,
+    "check_interval_seconds": 5,
+    "failure_threshold": 1,
+    "recovery_threshold": 1,
+    "check_mode": "status",
+    "default_model_id": "",
+    "notify_on_recovery": true
+  },
+  "account_defaults": {
+    "use_proxy": false,
+    "proxy_id": null,
+    "priority": 8,
+    "concurrency": 30,
+    "group_ids": [
+      5,
+      7,
+      6
+    ]
+  },
+  "email": {
+    "enabled": true,
+    "smtp_host": "smtp.qq.com",
+    "smtp_port": 465,
+    "username": "your-email@example.com",
+    "password": "replace-with-smtp-password",
+    "from": "your-email@example.com",
+    "from_name": "Account Monitor",
+    "use_tls": true,
+    "to": [
+      "ops@example.com"
+    ]
+  },
+  "accounts": [
+    {
+      "account_id": 1,
+      "name": "primary account",
+      "model_id": "",
+      "enabled": true
+    }
+  ]
+}

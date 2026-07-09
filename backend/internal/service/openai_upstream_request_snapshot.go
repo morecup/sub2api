@@ -36,6 +36,21 @@ func setOpsOpenAIUpstreamRequestBody(c *gin.Context, body []byte) {
 	c.Set(OpsUpstreamRequestSnapshotKey, nil)
 }
 
+func currentOpsOpenAIUpstreamRequestBody(c *gin.Context) []byte {
+	if c == nil {
+		return nil
+	}
+	v, ok := c.Get(opsOpenAIUpstreamRequestBodyKey)
+	if !ok {
+		return nil
+	}
+	body, ok := v.([]byte)
+	if !ok || len(body) == 0 {
+		return nil
+	}
+	return body
+}
+
 func currentOpsOpenAIUpstreamRequestSnapshot(c *gin.Context) *OpenAIUpstreamRequestSnapshot {
 	if c == nil {
 		return nil

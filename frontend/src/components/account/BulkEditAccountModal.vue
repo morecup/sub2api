@@ -929,6 +929,33 @@
                 />
               </button>
             </div>
+
+            <div class="flex items-center justify-between">
+              <div class="flex-1 pr-4">
+                <label class="input-label mb-0">
+                  {{ t('admin.accounts.openai.codexToolFrameNever429') }}
+                </label>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t('admin.accounts.openai.codexToolFrameNever429Desc') }}
+                </p>
+              </div>
+              <button
+                id="bulk-edit-openai-tool-frame-never-429-toggle"
+                type="button"
+                :class="[
+                  'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+                  codexToolFrameNever429Enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+                ]"
+                @click="codexToolFrameNever429Enabled = !codexToolFrameNever429Enabled"
+              >
+                <span
+                  :class="[
+                    'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                    codexToolFrameNever429Enabled ? 'translate-x-5' : 'translate-x-0'
+                  ]"
+                />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1446,6 +1473,7 @@ const codexCLIOnlyAppServerEnabled = ref(false)
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
+const codexToolFrameNever429Enabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const rpmLimitEnabled = ref(false)
@@ -1719,6 +1747,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     if (codexToolFrameOn5hExhaustedEnabled.value) {
       extra.codex_tool_frame_429_no_cooldown = codexToolFrame429NoCooldownEnabled.value
       extra.codex_tool_frame_force_after_5h = codexToolFrameForceAfter5hEnabled.value
+      extra.codex_tool_frame_never_429 = codexToolFrameNever429Enabled.value
     }
   }
 
@@ -1964,6 +1993,7 @@ watch(
       codexToolFrameOn5hExhaustedEnabled.value = false
       codexToolFrame429NoCooldownEnabled.value = true
       codexToolFrameForceAfter5hEnabled.value = false
+      codexToolFrameNever429Enabled.value = false
       openAICompactMode.value = 'auto'
       openAICompactModelMappings.value = []
       rpmLimitEnabled.value = false

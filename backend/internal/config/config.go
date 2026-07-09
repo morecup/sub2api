@@ -1023,7 +1023,7 @@ type TLSFingerprintConfig struct {
 }
 
 // TLSProfileConfig 单个TLS指纹模板的配置
-// 所有列表字段为空时使用内置默认值（本机 Claude Code 2.1.191 Windows 主请求抓包）
+// 所有列表字段为空时使用内置默认值（Claude Code 2.1.201 Linux 抓包）
 // 建议通过 TLS 指纹采集工具 (tests/tls-fingerprint-web) 获取完整配置
 type TLSProfileConfig struct {
 	// Name: 模板显示名称

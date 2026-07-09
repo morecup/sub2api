@@ -11,6 +11,8 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+var codexToolFrameNever429ClientBody = []byte(`{"error":{"type":"upstream_error","message":"Upstream service temporarily unavailable, please retry later"}}`)
+
 func openAIStreamFailedEventUpstreamStatus(payload []byte, message string) int {
 	if openAIStreamFailedEventIndicatesRateLimit(payload, message) {
 		return http.StatusTooManyRequests
@@ -72,6 +74,25 @@ func shouldSuppressCodexToolFrame429AccountMark(account *Account, headers http.H
 		return false
 	}
 	return shouldRetryCodexToolFrameFromUsageLimit(account, headers, time.Now())
+}
+
+func shouldRewriteCodexToolFrame429ForClient(account *Account, requestBody []byte) bool {
+	if account == nil || !account.IsOpenAIOAuth() {
+		return false
+	}
+	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameNever429Key) {
+		return false
+	}
+	return openAIRequestBodyHasCodexToolFrame(requestBody)
+}
+
+func rewriteCodexToolFrame429Failover(statusCode int, responseBody []byte, account *Account, requestBody []byte) (int, []byte) {
+	if statusCode != http.StatusTooManyRequests || !shouldRewriteCodexToolFrame429ForClient(account, requestBody) {
+		return statusCode, responseBody
+	}
+	body := make([]byte, len(codexToolFrameNever429ClientBody))
+	copy(body, codexToolFrameNever429ClientBody)
+	return http.StatusServiceUnavailable, body
 }
 
 func (s *OpenAIGatewayService) shouldSuppressCodexToolFrame429AccountMark(c *gin.Context, account *Account, headers http.Header, requestBody []byte, passthrough bool, upstreamRequestID string, message string) bool {

@@ -1848,6 +1848,33 @@
             />
           </button>
         </div>
+        <div
+          v-if="codexToolFrameOn5hExhaustedEnabled"
+          class="mt-4 flex items-center justify-between border-l-2 border-gray-200 pl-4 dark:border-dark-600"
+        >
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.codexToolFrameNever429') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.codexToolFrameNever429Desc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="codex-tool-frame-never-429-toggle"
+            @click="codexToolFrameNever429Enabled = !codexToolFrameNever429Enabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              codexToolFrameNever429Enabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                codexToolFrameNever429Enabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
       </div>
 
       <div
@@ -2743,6 +2770,7 @@ const codexCLIOnlyEnabled = ref(false)
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
+const codexToolFrameNever429Enabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexImageGenerationBridgeMode = 'inherit' | 'enabled' | 'disabled'
 const codexImageGenerationBridgeMode = ref<CodexImageGenerationBridgeMode>('inherit')
@@ -3132,6 +3160,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   codexToolFrameOn5hExhaustedEnabled.value = false
   codexToolFrame429NoCooldownEnabled.value = true
   codexToolFrameForceAfter5hEnabled.value = false
+  codexToolFrameNever429Enabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   codexImageGenerationBridgeMode.value = 'inherit'
   anthropicPassthroughEnabled.value = false
@@ -3173,6 +3202,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       codexToolFrameOn5hExhaustedEnabled.value = extra?.codex_tool_frame_on_5h_exhausted === true
       codexToolFrame429NoCooldownEnabled.value = extra?.codex_tool_frame_429_no_cooldown !== false
       codexToolFrameForceAfter5hEnabled.value = extra?.codex_tool_frame_force_after_5h === true
+      codexToolFrameNever429Enabled.value = extra?.codex_tool_frame_never_429 === true
       codexCLIOnlyAppServerEnabled.value =
         extra?.codex_cli_only_allow_app_server === true
     }
@@ -4327,10 +4357,16 @@ const handleSubmit = async () => {
           } else {
             delete newExtra.codex_tool_frame_force_after_5h
           }
+          if (codexToolFrameNever429Enabled.value) {
+            newExtra.codex_tool_frame_never_429 = true
+          } else {
+            delete newExtra.codex_tool_frame_never_429
+          }
         } else {
           delete newExtra.codex_tool_frame_on_5h_exhausted
           delete newExtra.codex_tool_frame_429_no_cooldown
           delete newExtra.codex_tool_frame_force_after_5h
+          delete newExtra.codex_tool_frame_never_429
         }
         if (codexCLIOnlyEnabled.value) {
           newExtra.codex_cli_only = true

@@ -20,6 +20,7 @@ type claudeCodeBillingAttributionOptions struct {
 	Entrypoint string
 	Workload   string
 	IsSubagent bool
+	OmitCCH    bool
 }
 
 // syncBillingHeaderVersion rewrites cc_version in x-anthropic-billing-header
@@ -101,6 +102,14 @@ func normalizeClaudeCodeBillingEntrypoint(_ string) string {
 }
 
 func refreshClaudeCodeBillingAttribution(body []byte, cliVersion string) []byte {
+	return refreshClaudeCodeBillingAttributionWithOptions(body, cliVersion, false)
+}
+
+func refreshClaudeCodeBillingAttributionWithoutCCH(body []byte, cliVersion string) []byte {
+	return refreshClaudeCodeBillingAttributionWithOptions(body, cliVersion, true)
+}
+
+func refreshClaudeCodeBillingAttributionWithOptions(body []byte, cliVersion string, omitCCH bool) []byte {
 	cliVersion = strings.TrimSpace(cliVersion)
 	if cliVersion == "" {
 		return body
@@ -126,6 +135,7 @@ func refreshClaudeCodeBillingAttribution(body []byte, cliVersion string) []byte 
 
 	opts := extractClaudeCodeBillingAttributionOptions(current)
 	opts.Entrypoint = normalizeClaudeCodeBillingEntrypoint(entrypoint)
+	opts.OmitCCH = omitCCH
 	nextText, err := buildBillingAttributionTextWithOptions(
 		body,
 		cliVersion,

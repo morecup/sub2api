@@ -335,6 +335,7 @@ func buildClaudeMimicDebugLine(req *http.Request, body []byte, account *Account,
 		"x-stainless-runtime-version",
 		"x-stainless-retry-count",
 		"x-stainless-timeout",
+		"x-claude-remote-session-id",
 		"authorization",
 		"x-api-key",
 		"content-type",
@@ -445,6 +446,7 @@ var allowedHeaders = map[string]bool{
 	"content-type":                              true,
 	"accept-encoding":                           true,
 	"x-claude-code-session-id":                  true,
+	"x-claude-remote-session-id":                true,
 	"x-client-request-id":                       true,
 }
 
@@ -6941,6 +6943,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		clientHeaders = c.Request.Header
 	}
 	bodyProfile := classifyClaudeMessagesBody(body)
+	bodyProfile = refineClaudeCodeMessagesProfileForHTTPRequest(bodyProfile, c, clientHeaders)
 	inboundIsClaudeCode := bodyProfile.isClaudeCodeFamily()
 	outboundIsClaudeOAuth := tokenType == "oauth" && isAnthropicClaudeOAuthAccount(account)
 	useClaudeCodeHeaders := outboundIsClaudeOAuth && (shouldMimicClaudeCode || inboundIsClaudeCode)
@@ -6996,6 +6999,14 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		}
 	}
 
+	if outboundIsClaudeOAuth && inboundIsClaudeCode {
+		if normalizedBody, changed := normalizeClaudeCodeOfficialProfileBody(body, bodyProfile); changed {
+			body = normalizedBody
+			bodyProfile = classifyClaudeMessagesBody(body)
+			bodyProfile = refineClaudeCodeMessagesProfileForHTTPRequest(bodyProfile, c, clientHeaders)
+		}
+	}
+
 	// === 计算最终 anthropic-beta header（先于 body sanitize 与请求创建）===
 	//
 	// 顺序约束：
@@ -7025,7 +7036,11 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	}
 
 	if tokenType == "oauth" {
-		body = refreshClaudeCodeBillingAttribution(body, claudeCodeVersionForFingerprint(fingerprint))
+		if claudeCodeOfficialProfileOmitsCCH(bodyProfile) {
+			body = refreshClaudeCodeBillingAttributionWithoutCCH(body, claudeCodeVersionForFingerprint(fingerprint))
+		} else {
+			body = refreshClaudeCodeBillingAttribution(body, claudeCodeVersionForFingerprint(fingerprint))
+		}
 	}
 	body = applyClaudeCodeCCH(body)
 
@@ -7076,7 +7091,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if outboundIsClaudeOAuth && shouldMimicClaudeCode {
 		applyClaudeCodeMimicHeaders(req)
 	} else if useClaudeCodeHeaders {
-		applyClaudeCodeFamilyHeaders(req, bodyProfile)
+		applyClaudeCodeFamilyHeaders(req, bodyProfile, body, clientHeaders)
 	}
 
 	// 写入最终 anthropic-beta header
@@ -7315,12 +7330,123 @@ func claudeCodeUserAgentForEntrypoint(entrypoint string) string {
 	return fmt.Sprintf("claude-cli/%s (external, %s)", claude.CLICurrentVersion, entrypoint)
 }
 
-func applyClaudeCodeFamilyHeaders(req *http.Request, profile claudeCodeBodyClassification) {
+func refineClaudeCodeMessagesProfileForHTTPRequest(profile claudeCodeBodyClassification, c *gin.Context, clientHeaders http.Header) claudeCodeBodyClassification {
+	if profile.OfficialProfile != claudeCodeOfficialProfileCLITitle {
+		return profile
+	}
+	if !claudeCodeHTTPRequestLooksLikeMessagesBeta(c) || !claudeCodeClientHeadersLookLikeCLI(clientHeaders) {
+		profile.OfficialProfile = claudeCodeOfficialProfileUnknown
+	}
+	return profile
+}
+
+func refineClaudeCodeMessagesProfileForClientHeaders(profile claudeCodeBodyClassification, clientHeaders http.Header) claudeCodeBodyClassification {
+	if profile.OfficialProfile != claudeCodeOfficialProfileCLITitle {
+		return profile
+	}
+	if !claudeCodeClientHeadersLookLikeCLI(clientHeaders) {
+		profile.OfficialProfile = claudeCodeOfficialProfileUnknown
+	}
+	return profile
+}
+
+func claudeCodeHTTPRequestLooksLikeMessagesBeta(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil {
+		return true
+	}
+	if c.Request.URL.Path != "/v1/messages" {
+		return false
+	}
+	return strings.EqualFold(c.Request.URL.Query().Get("beta"), "true")
+}
+
+func claudeCodeClientHeadersLookLikeCLI(headers http.Header) bool {
+	if headers == nil {
+		return false
+	}
+	ua := strings.ToLower(strings.TrimSpace(getHeaderRaw(headers, "User-Agent")))
+	return strings.HasPrefix(ua, "claude-cli/") && strings.Contains(ua, "(external, cli)")
+}
+
+const defaultClaudeCodeTitleRemoteSessionID = "00000000-0000-4000-8000-000000000201"
+
+func applyClaudeCodeFamilyHeaders(req *http.Request, profile claudeCodeBodyClassification, body []byte, clientHeaders http.Header) {
 	if req == nil || !profile.isClaudeCodeFamily() {
 		return
 	}
 	setHeaderRaw(req.Header, "User-Agent", claudeCodeUserAgentForEntrypoint(profile.BillingEntryPoint))
+	applyClaudeCodePlatformHeaders(req, body, clientHeaders)
+	if profile.OfficialProfile == claudeCodeOfficialProfileCLITitle {
+		applyClaudeCodeTitleRemoteSessionHeader(req, clientHeaders)
+	}
 	ensureClaudeCodeRequestIDHeader(req)
+}
+
+func applyClaudeCodePlatformHeaders(req *http.Request, body []byte, clientHeaders http.Header) {
+	if req == nil {
+		return
+	}
+	setHeaderRaw(req.Header, "X-Stainless-OS", resolveClaudeCodeStainlessOS(body, clientHeaders))
+	if getHeaderRaw(req.Header, "X-Stainless-Arch") == "" {
+		setHeaderRaw(req.Header, "X-Stainless-Arch", claude.DefaultHeaders["X-Stainless-Arch"])
+	}
+}
+
+func applyClaudeCodeTitleRemoteSessionHeader(req *http.Request, clientHeaders http.Header) {
+	if req == nil {
+		return
+	}
+	remoteSessionID := ""
+	if clientHeaders != nil {
+		remoteSessionID = strings.TrimSpace(getHeaderRaw(clientHeaders, "x-claude-remote-session-id"))
+	}
+	if remoteSessionID == "" {
+		remoteSessionID = defaultClaudeCodeTitleRemoteSessionID
+	}
+	setHeaderRaw(req.Header, "x-claude-remote-session-id", remoteSessionID)
+}
+
+func resolveClaudeCodeStainlessOS(body []byte, clientHeaders http.Header) string {
+	if clientHeaders != nil {
+		if osName := normalizeClaudeCodeStainlessOS(getHeaderRaw(clientHeaders, "X-Stainless-OS")); osName != "" {
+			return osName
+		}
+	}
+	if osName := detectClaudeCodeStainlessOSFromBody(body); osName != "" {
+		return osName
+	}
+	if fallback := strings.TrimSpace(claude.DefaultHeaders["X-Stainless-OS"]); fallback != "" {
+		return fallback
+	}
+	return "Linux"
+}
+
+func detectClaudeCodeStainlessOSFromBody(body []byte) string {
+	system2 := strings.ToLower(claudeCodeSystemTextAt(body, 2))
+	switch {
+	case strings.Contains(system2, "platform: win32"),
+		strings.Contains(system2, "platform: windows"),
+		strings.Contains(system2, "os version: windows"):
+		return "Windows"
+	case strings.Contains(system2, "platform: linux"),
+		strings.Contains(system2, "os version: linux"),
+		strings.Contains(system2, "os version: ubuntu"),
+		strings.Contains(system2, "os version: debian"):
+		return "Linux"
+	default:
+		return ""
+	}
+}
+
+func normalizeClaudeCodeStainlessOS(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "windows", "win32":
+		return "Windows"
+	case "linux":
+		return "Linux"
+	default:
+		return ""
+	}
 }
 
 func mergeAnthropicBeta(required []string, incoming string) string {
@@ -7399,6 +7525,7 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 
 	if tokenType == "oauth" {
 		classification := classifyClaudeMessagesBody(body)
+		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
 		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
 		if shouldMimicClaudeCode && !classification.isClaudeCodeFamily() {
 			requiredBetas = append(claude.ClaudeCodeMainBetasForModel(modelID), requiredBetas...)
@@ -7444,6 +7571,7 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 
 	if tokenType == "oauth" {
 		classification := classifyClaudeMessagesBody(body)
+		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
 		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
 		if shouldMimicClaudeCode && !classification.isClaudeCodeFamily() {
 			requiredBetas = append(claude.ClaudeCodeMainBetasForModel(modelID), requiredBetas...)
@@ -10678,7 +10806,7 @@ func (s *GatewayService) buildCountTokensRequest(ctx context.Context, c *gin.Con
 	if outboundIsClaudeOAuth && shouldMimicClaudeCode {
 		applyClaudeCodeMimicHeaders(req)
 	} else if useClaudeCodeHeaders {
-		applyClaudeCodeFamilyHeaders(req, bodyProfile)
+		applyClaudeCodeFamilyHeaders(req, bodyProfile, body, clientHeaders)
 	}
 
 	// 写入最终 anthropic-beta header（Del 一次避免白名单透传值残留）

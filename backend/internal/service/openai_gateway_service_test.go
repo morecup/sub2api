@@ -1564,6 +1564,74 @@ func TestOpenAIHTTP429WithCodexToolFrameNoCooldownDisabledMarksAccountRateLimite
 	require.True(t, foundUnexpected)
 }
 
+func TestOpenAIHTTP429WithCodexToolFrameNever429ReturnsServiceUnavailable(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"model":"gpt-5.5","stream":true,"input":[{"type":"message","role":"user","content":"hello"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	headers429 := http.Header{
+		"Content-Type":                          []string{"application/json"},
+		"X-Request-Id":                          []string{"rid_tool_frame_429"},
+		"X-Codex-Primary-Used-Percent":          []string{"100"},
+		"X-Codex-Primary-Window-Minutes":        []string{"10080"},
+		"X-Codex-Secondary-Used-Percent":        []string{"100"},
+		"X-Codex-Secondary-Window-Minutes":      []string{"300"},
+		"X-Codex-Secondary-Reset-After-Seconds": []string{"120"},
+	}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"5h exhausted"}}`)),
+		},
+		{
+			StatusCode: http.StatusTooManyRequests,
+			Header:     headers429.Clone(),
+			Body:       io.NopCloser(strings.NewReader(`{"error":{"type":"usage_limit_reached","message":"still 429 with tool frame"}}`)),
+		},
+	}}
+	repo := &openAIToolFrame429AccountRepo{}
+	svc := &OpenAIGatewayService{
+		cfg:              &config.Config{},
+		httpUpstream:     upstream,
+		accountRepo:      repo,
+		rateLimitService: NewRateLimitService(repo, nil, &config.Config{}, nil, nil),
+	}
+	account := &Account{
+		ID:          1,
+		Name:        "openai-oauth",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{
+			"access_token":       "oauth-token",
+			"chatgpt_account_id": "chatgpt-acc",
+		},
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+			openAICodexToolFrameForceAfter5hKey:  true,
+			openAICodexToolFrameNever429Key:      true,
+		},
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, body)
+	require.Error(t, err)
+	require.Nil(t, result)
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusServiceUnavailable, failoverErr.StatusCode)
+	require.Equal(t, "upstream_error", gjson.GetBytes(failoverErr.ResponseBody, "error.type").String())
+	require.Len(t, upstream.bodies, 2)
+	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Zero(t, repo.rateLimitCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
 func TestOpenAIStreamingResponseFailedBeforeOutputServerOverloadedCodeReturnsFailover(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{

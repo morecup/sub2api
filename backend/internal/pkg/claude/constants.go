@@ -7,8 +7,9 @@ import "strings"
 
 // Beta header 常量
 //
-// 这里的常量对齐真实 Claude Code 2.1.191 交互 TTY 流量（截至 2026-06）。
-// 选型参考：本机 Claude Code 2.1.191 交互 TTY 抓包，
+// 这里的常量对齐真实 Claude Code 2.1.x 流量。
+// 选型参考：本机 Claude Code 2.1.191 交互 TTY 抓包，以及洛杉矶 Linux
+// VPS 上 Claude Code 2.1.201 SDK/ToolSearch/TLS 抓包，
 // 原因：Anthropic 上游会基于 anthropic-beta 的完整集合判定请求来源；
 // 缺少任何"官方 Claude Code 请求才会带"的 beta，都会被降级到第三方额度，
 // 对应报错：`Third-party apps now draw from your extra usage, not your plan limits.`
@@ -31,6 +32,7 @@ const (
 	BetaAdvancedToolUse    = "advanced-tool-use-2025-11-20"
 	BetaMidConversation    = "mid-conversation-system-2026-04-07"
 	BetaStructuredOutputs  = "structured-outputs-2025-12-15"
+	BetaFallbackCredit     = "fallback-credit-2026-06-01"
 )
 
 // DroppedBetas 是转发时需要从 anthropic-beta header 中移除的 beta token 列表。
@@ -81,7 +83,7 @@ const DefaultCacheControlTTL = "5m"
 // CLICurrentVersion 是 sub2api 当前对外伪装的 Claude Code CLI 版本号（三段 semver）。
 // 用于 billing attribution block 中的 cc_version=X.Y.Z.{fp} 前缀以及 fingerprint 计算。
 // 必须与 DefaultHeaders["User-Agent"] 中的版本号严格一致；不一致会被 Anthropic 判第三方。
-const CLICurrentVersion = "2.1.191"
+const CLICurrentVersion = "2.1.201"
 
 // FullClaudeCodeMimicryBetas 返回最像真实 Claude Code 交互 TTY 主请求的完整 beta 列表，
 // 用于 OAuth 账号伪装成 Claude Code 时使用。
@@ -104,16 +106,68 @@ func FullClaudeCodeMimicryBetas() []string {
 	}
 }
 
-// ClaudeCodeTitleBetas 返回 TTY title query 的固定 beta 顺序。
+// ClaudeCodeTitleBetas 返回 TTY title query 的旧版/Haiku beta 顺序。
 func ClaudeCodeTitleBetas() []string {
+	return ClaudeCodeTitleBetasForModel("")
+}
+
+// ClaudeCodeTitleBetasForModel 返回 TTY title query 的模型分支 beta 列表。
+func ClaudeCodeTitleBetasForModel(modelID string) []string {
+	lower := strings.ToLower(modelID)
+	if strings.Contains(lower, "haiku") || strings.TrimSpace(lower) == "" {
+		return []string{
+			BetaInterleavedThinking,
+			BetaRedactThinking,
+			BetaThinkingTokenCount,
+			BetaContextManagement,
+			BetaPromptCachingScope,
+			BetaStructuredOutputs,
+		}
+	}
+
+	if strings.Contains(lower, "fable-5") {
+		return []string{
+			BetaClaudeCode,
+			BetaInterleavedThinking,
+			BetaRedactThinking,
+			BetaThinkingTokenCount,
+			BetaContextManagement,
+			BetaPromptCachingScope,
+			BetaMidConversation,
+			BetaEffort,
+			BetaStructuredOutputs,
+		}
+	}
+
+	if strings.Contains(lower, "opus-4-8") {
+		return []string{
+			BetaClaudeCode,
+			BetaInterleavedThinking,
+			BetaRedactThinking,
+			BetaThinkingTokenCount,
+			BetaContextManagement,
+			BetaPromptCachingScope,
+			BetaMidConversation,
+			BetaEffort,
+			BetaStructuredOutputs,
+		}
+	}
+
 	return []string{
+		BetaClaudeCode,
 		BetaInterleavedThinking,
 		BetaRedactThinking,
 		BetaThinkingTokenCount,
 		BetaContextManagement,
 		BetaPromptCachingScope,
+		BetaEffort,
 		BetaStructuredOutputs,
 	}
+}
+
+// ClaudeCodeTitleBetaHeaderForModel 返回 TTY title query 的 anthropic-beta header。
+func ClaudeCodeTitleBetaHeaderForModel(modelID string) string {
+	return strings.Join(ClaudeCodeTitleBetasForModel(modelID), ",")
 }
 
 // ClaudeCodeMainBetasForModel 返回 TTY main 请求的模型分支 beta 列表。
@@ -128,6 +182,21 @@ func ClaudeCodeMainBetasForModel(modelID string) []string {
 			BetaPromptCachingScope,
 			BetaClaudeCode,
 			BetaAdvancedToolUse,
+		}
+	}
+
+	if strings.Contains(lower, "fable-5") {
+		return []string{
+			BetaClaudeCode,
+			BetaInterleavedThinking,
+			BetaRedactThinking,
+			BetaThinkingTokenCount,
+			BetaContextManagement,
+			BetaPromptCachingScope,
+			BetaMidConversation,
+			BetaAdvancedToolUse,
+			BetaEffort,
+			BetaFallbackCredit,
 		}
 	}
 
@@ -147,6 +216,20 @@ func ClaudeCodeMainBetasForModel(modelID string) []string {
 	return FullClaudeCodeMimicryBetas()
 }
 
+// ClaudeCodeMainToolSearchOffBetasForModel returns the CLI main beta profile
+// captured with ToolSearch disabled. ToolSearch-off omits advanced-tool-use.
+func ClaudeCodeMainToolSearchOffBetasForModel(modelID string) []string {
+	base := ClaudeCodeMainBetasForModel(modelID)
+	out := make([]string, 0, len(base))
+	for _, token := range base {
+		if token == BetaAdvancedToolUse {
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
 // ClaudeCodeMainBetaHeaderForModel 返回 TTY main 请求的 anthropic-beta header。
 func ClaudeCodeMainBetaHeaderForModel(modelID string) string {
 	return strings.Join(ClaudeCodeMainBetasForModel(modelID), ",")
@@ -159,7 +242,7 @@ var DefaultHeaders = map[string]string{
 	"User-Agent":                                "claude-cli/" + CLICurrentVersion + " (external, cli)",
 	"X-Stainless-Lang":                          "js",
 	"X-Stainless-Package-Version":               "0.94.0",
-	"X-Stainless-OS":                            "Windows",
+	"X-Stainless-OS":                            "Linux",
 	"X-Stainless-Arch":                          "x64",
 	"X-Stainless-Runtime":                       "node",
 	"X-Stainless-Runtime-Version":               "v26.3.0",
