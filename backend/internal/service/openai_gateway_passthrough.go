@@ -399,6 +399,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			seed = resolveOpenAICompactMimicSessionID(c)
 		}
 		applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
+	} else if isOpenAIResponsesCompactPath(c) {
+		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
+		// unary JSON 协议，API-key 账号同样强制 Accept，避免上游按 SSE 返回
+		// （#3777 期望行为 4）。
+		req.Header.Set("accept", "application/json")
 	}
 
 	if account.Type != AccountTypeOAuth {
@@ -1179,6 +1184,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 				}
 			}
 		}
+		finalResponse = supplementCompactionItemFromSSE(c, finalResponse, bodyText)
 		body = finalResponse
 		if originalModel != "" && mappedModel != "" && originalModel != mappedModel {
 			body = s.replaceModelInResponseBody(body, mappedModel, originalModel)
