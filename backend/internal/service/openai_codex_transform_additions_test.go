@@ -1,6 +1,8 @@
 package service
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -78,6 +80,17 @@ func TestBuildCodexOAIAttestationMatchesDesktopWindowsEnvelope(t *testing.T) {
 	const appSessionID = "eeb98e1c-5890-479a-a8db-3516fa5338e6"
 	const captured = `{"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}`
 	require.Equal(t, captured, buildCodexOAIAttestation(appSessionID))
+}
+
+func TestSyncCodexOAuthMimicRequestBodyPreservesCompactBody(t *testing.T) {
+	body := []byte(`{"model":"gpt-5.4","input":"compact me"}`)
+	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses/compact", strings.NewReader(string(body)))
+	applyCodexOAuthMimicHeaders(req, 1, "compact-session", codexDesktopOriginator, true)
+
+	updated, err := syncCodexOAuthMimicRequestBody(req, body, true)
+	require.NoError(t, err)
+	require.Equal(t, body, updated)
+	require.False(t, strings.Contains(string(updated), "client_metadata"))
 }
 
 // defaultCodexSynthInstructions：按模型选用真实 Codex base prompt。

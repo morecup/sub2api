@@ -98,6 +98,30 @@ func decodeRecorderRequestBody(encoding string, raw []byte) []byte {
 	return out
 }
 
+func requireCodexDesktopBodyMetadataMatchesHeaders(t *testing.T, req *http.Request, body []byte) {
+	t.Helper()
+	require.NotNil(t, req)
+
+	turnMetadata := req.Header.Get("X-Codex-Turn-Metadata")
+	sessionID := req.Header.Get("Session-Id")
+	threadID := req.Header.Get("Thread-Id")
+	windowID := req.Header.Get("X-Codex-Window-Id")
+	require.NotEmpty(t, turnMetadata)
+	require.NotEmpty(t, sessionID)
+	require.Equal(t, sessionID, threadID)
+	require.Equal(t, sessionID, gjson.Get(turnMetadata, "session_id").String())
+	require.Equal(t, threadID, gjson.Get(turnMetadata, "thread_id").String())
+	require.Equal(t, windowID, gjson.Get(turnMetadata, "window_id").String())
+	require.NotEmpty(t, gjson.Get(turnMetadata, "turn_id").String())
+
+	require.Equal(t, sessionID, gjson.GetBytes(body, "client_metadata.session_id").String())
+	require.Equal(t, threadID, gjson.GetBytes(body, "client_metadata.thread_id").String())
+	require.Equal(t, gjson.Get(turnMetadata, "turn_id").String(), gjson.GetBytes(body, "client_metadata.turn_id").String())
+	require.Equal(t, windowID, gjson.GetBytes(body, "client_metadata.x-codex-window-id").String())
+	require.Equal(t, codexInstallationID, gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String())
+	require.Equal(t, turnMetadata, gjson.GetBytes(body, "client_metadata.x-codex-turn-metadata").String())
+}
+
 func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -506,6 +530,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
 	require.Equal(t, codexInstallationID, gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.NotEqual(t, "dev-should-not-leak", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
+	requireCodexDesktopBodyMetadataMatchesHeaders(t, upstream.lastReq, upstream.lastBody)
 
 	// 2) only auth is replaced; inbound auth/cookie are not forwarded
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))

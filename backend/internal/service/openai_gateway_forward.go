@@ -951,19 +951,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				seed = resolveOpenAICompactMimicSessionID(c)
 			}
 			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
-			if !isCompact {
-				updatedBody, modified, metadataErr := applyCodexClientMetadataBytes(body, req.Header.Get("x-codex-turn-metadata"))
-				if metadataErr != nil {
-					return nil, fmt.Errorf("apply codex client metadata: %w", metadataErr)
-				}
-				if modified {
-					body = updatedBody
-					req.Body = io.NopCloser(bytes.NewReader(body))
-					req.ContentLength = int64(len(body))
-					req.GetBody = func() (io.ReadCloser, error) {
-						return io.NopCloser(bytes.NewReader(body)), nil
-					}
-				}
+			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
+			if err != nil {
+				return nil, fmt.Errorf("apply codex client metadata: %w", err)
 			}
 			s.applyCodexRequestCompression(req, body)
 			codexMimicApplied = true

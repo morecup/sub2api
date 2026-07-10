@@ -615,6 +615,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if isOAuth {
 			req.Host = "chatgpt.com"
 			applyCodexOAuthMimicHeaders(req, 0, sessionSeed, codexDesktopOriginator, false)
+			body, err = syncCodexOAuthMimicRequestBody(req, body, false)
+			if err != nil {
+				return nil, fmt.Errorf("apply codex client metadata: %w", err)
+			}
 			applyCodexRequestCompressionRaw(req, body)
 			setOpenAIChatGPTAccountHeaders(req.Header, credentialAccount)
 		}
@@ -888,6 +892,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if isOAuth {
 		req.Host = "chatgpt.com"
 		applyCodexOAuthMimicHeaders(req, 0, probeSessionID, codexDesktopOriginator, true)
+		payloadBytes, err = syncCodexOAuthMimicRequestBody(req, payloadBytes, true)
+		if err != nil {
+			return s.sendErrorAndEnd(c, "Failed to apply Codex request metadata")
+		}
 		applyCodexRequestCompressionRaw(req, payloadBytes)
 		setOpenAIChatGPTAccountHeaders(req.Header, account)
 	}
@@ -1756,6 +1764,10 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		req.Host = "chatgpt.com"
 		req.Header.Set("Authorization", "Bearer "+authToken)
 		applyCodexOAuthMimicHeaders(req, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false)
+		body, err = syncCodexOAuthMimicRequestBody(req, body, false)
+		if err != nil {
+			return nil, fmt.Errorf("apply codex client metadata: %w", err)
+		}
 		applyCodexRequestCompressionRaw(req, body)
 		setOpenAIChatGPTAccountHeaders(req.Header, account)
 		return req, nil

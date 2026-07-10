@@ -311,6 +311,30 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces))
 }
 
+// syncCodexOAuthMimicRequestBody 将非 compact OAuth 请求体中的 client_metadata
+// 与 applyCodexOAuthMimicHeaders 生成的 Desktop turn metadata 对齐。调用方必须在
+// header 重建后、请求体压缩前调用；compact 请求保持原有专用 body 形态不变。
+func syncCodexOAuthMimicRequestBody(req *http.Request, body []byte, isCompact bool) ([]byte, error) {
+	if req == nil || isCompact {
+		return body, nil
+	}
+
+	updatedBody, modified, err := applyCodexClientMetadataBytes(body, req.Header.Get("x-codex-turn-metadata"))
+	if err != nil {
+		return body, err
+	}
+	if !modified {
+		return body, nil
+	}
+
+	req.Body = io.NopCloser(bytes.NewReader(updatedBody))
+	req.ContentLength = int64(len(updatedBody))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(updatedBody)), nil
+	}
+	return updatedBody, nil
+}
+
 // applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
 // WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
 // Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。

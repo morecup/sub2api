@@ -141,7 +141,12 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
 	require.NoError(t, err)
 	require.Len(t, upstream.requests, 1)
-	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.requests[0].Context()))
+	req := upstream.requests[0]
+	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(req.Context()))
+	compressedBody, err := io.ReadAll(req.Body)
+	require.NoError(t, err)
+	requestBody := decodeRecorderRequestBody(req.Header.Get("Content-Encoding"), compressedBody)
+	requireCodexDesktopBodyMetadataMatchesHeaders(t, req, requestBody)
 	require.NotEmpty(t, repo.updatedExtra)
 	require.Equal(t, 42.0, repo.updatedExtra["codex_5h_used_percent"])
 	require.Equal(t, 88.0, repo.updatedExtra["codex_7d_used_percent"])
@@ -229,6 +234,7 @@ func TestAccountTestService_OpenAIShadowUsesParentCredentialsAndShadowModel(t *t
 	require.Equal(t, "org-parent", req.Header.Get("chatgpt-account-id"))
 	body, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
+	body = decodeRecorderRequestBody(req.Header.Get("Content-Encoding"), body)
 	require.Equal(t, "gpt-5.3-codex-spark", gjson.GetBytes(body, "model").String())
 	require.Contains(t, recorder.Body.String(), `"success":true`)
 }

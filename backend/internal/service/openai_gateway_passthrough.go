@@ -399,6 +399,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 			seed = resolveOpenAICompactMimicSessionID(c)
 		}
 		applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
+		body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
+		if err != nil {
+			return nil, fmt.Errorf("apply codex client metadata: %w", err)
+		}
 	} else if isOpenAIResponsesCompactPath(c) {
 		// 透传白名单会放行客户端的 Accept: text/event-stream；compact 上游是
 		// unary JSON 协议，API-key 账号同样强制 Accept，避免上游按 SSE 返回
