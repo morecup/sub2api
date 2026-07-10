@@ -12,13 +12,13 @@ import (
 
 // CodexModels serves the Codex models manifest for Codex clients.
 //
-// Codex CLI and the Codex desktop app refresh their model picker from
+// Codex clients refresh their model picker from
 // GET {base_url}/models?client_version=... (custom provider mode) or
 // GET /backend-api/codex/models (chatgpt_base_url mode). Both routes land
 // here. The manifest is proxied verbatim from the ChatGPT backend with a
-// schedulable OAuth account's credentials, so clients pointed at the gateway
-// see the account's real, always-current model entitlements instead of a
-// frozen local cache.
+// schedulable OAuth account's credentials and the gateway's fixed Codex
+// Desktop profile, so clients pointed at the gateway see the account's real,
+// always-current model entitlements instead of a frozen local cache.
 func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok || apiKey.Group == nil {
@@ -36,7 +36,7 @@ func (h *OpenAIGatewayHandler) CodexModels(c *gin.Context) {
 		return
 	}
 
-	manifest, err := h.gatewayService.FetchCodexModelsManifest(c.Request.Context(), account, c.Query("client_version"), c.GetHeader("If-None-Match"))
+	manifest, err := h.gatewayService.FetchCodexModelsManifest(c.Request.Context(), account, c.GetHeader("If-None-Match"))
 	if err != nil {
 		h.errorResponse(c, infraerrors.Code(err), "upstream_error", infraerrors.Message(err))
 		return

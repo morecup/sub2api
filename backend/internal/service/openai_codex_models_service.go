@@ -33,7 +33,7 @@ type CodexModelsManifest struct {
 // with Codex client releases, and interpreting it here would force the gateway
 // to chase upstream changes. Passing it through keeps the gateway
 // schema-agnostic and always reflects the account's real entitlements.
-func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, clientVersion, ifNoneMatch string) (*CodexModelsManifest, error) {
+func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, account *Account, ifNoneMatch string) (*CodexModelsManifest, error) {
 	if account == nil {
 		return nil, infraerrors.New(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_ACCOUNT_REQUIRED", "account is required")
 	}
@@ -46,11 +46,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")
 	}
 
-	clientVersion = strings.TrimSpace(clientVersion)
-	if clientVersion == "" {
-		clientVersion = openAICodexProbeVersion
-	}
-	requestURL := chatgptCodexModelsURL + "?client_version=" + url.QueryEscape(clientVersion)
+	requestURL := chatgptCodexModelsURL + "?client_version=" + url.QueryEscape(codexDesktopVersion)
 
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -60,9 +56,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Originator", "codex_cli_rs")
-	req.Header.Set("Version", clientVersion)
-	req.Header.Set("User-Agent", codexCLIUserAgent)
+	req.Header.Set("Originator", codexDesktopOriginator)
+	req.Header.Set("Version", codexDesktopVersion)
+	req.Header.Set("User-Agent", codexDesktopUserAgent)
 	if ifNoneMatch = strings.TrimSpace(ifNoneMatch); ifNoneMatch != "" {
 		req.Header.Set("If-None-Match", ifNoneMatch)
 	}
