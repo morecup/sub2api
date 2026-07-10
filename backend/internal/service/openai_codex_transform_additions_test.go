@@ -53,6 +53,31 @@ func TestApplyCodexClientMetadata(t *testing.T) {
 	require.True(t, applyCodexClientMetadata(body4))
 	cm4, _ := body4["client_metadata"].(map[string]any)
 	require.Equal(t, codexInstallationID, cm4["x-codex-installation-id"])
+
+	// 0.144 完整 turn profile 会把 header metadata 同步到 body。
+	turnMetadata := `{"installation_id":"` + codexInstallationID + `","session_id":"session-1","thread_id":"thread-1","turn_id":"turn-1","window_id":"window-1","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1}`
+	body5 := map[string]any{"client_metadata": map[string]any{"keep": "value"}}
+	require.True(t, applyCodexClientMetadata(body5, turnMetadata))
+	cm5, _ := body5["client_metadata"].(map[string]any)
+	require.Equal(t, "value", cm5["keep"])
+	require.Equal(t, "session-1", cm5["session_id"])
+	require.Equal(t, "thread-1", cm5["thread_id"])
+	require.Equal(t, "turn-1", cm5["turn_id"])
+	require.Equal(t, codexInstallationID, cm5["x-codex-installation-id"])
+	require.Equal(t, "window-1", cm5["x-codex-window-id"])
+	require.Equal(t, turnMetadata, cm5["x-codex-turn-metadata"])
+	require.False(t, applyCodexClientMetadata(body5, turnMetadata))
+
+	body6 := map[string]any{"client_metadata": map[string]any(nil)}
+	require.True(t, applyCodexClientMetadata(body6))
+	cm6, _ := body6["client_metadata"].(map[string]any)
+	require.Equal(t, codexInstallationID, cm6["x-codex-installation-id"])
+}
+
+func TestBuildCodexOAIAttestationMatchesDesktopWindowsEnvelope(t *testing.T) {
+	const appSessionID = "eeb98e1c-5890-479a-a8db-3516fa5338e6"
+	const captured = `{"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}`
+	require.Equal(t, captured, buildCodexOAIAttestation(appSessionID))
 }
 
 // defaultCodexSynthInstructions：按模型选用真实 Codex base prompt。

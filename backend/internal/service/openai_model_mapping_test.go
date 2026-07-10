@@ -227,6 +227,11 @@ func TestResolveOpenAICompactForwardModel(t *testing.T) {
 
 func TestNormalizeCodexModel(t *testing.T) {
 	cases := map[string]string{
+		"gpt-5.6":                   "gpt-5.6-sol",
+		"openai/gpt-5.6":            "gpt-5.6-sol",
+		"gpt-5.6-sol":               "gpt-5.6-sol",
+		"gpt-5.6-terra":             "gpt-5.6-terra",
+		"gpt-5.6-luna":              "gpt-5.6-luna",
 		"gpt-5.3-codex-spark":       "gpt-5.3-codex-spark",
 		"gpt-5.3-codex-spark-high":  "gpt-5.3-codex-spark",
 		"gpt-5.3-codex-spark-xhigh": "gpt-5.3-codex-spark",
@@ -263,6 +268,12 @@ func TestNormalizeOpenAIModelForUpstream(t *testing.T) {
 			account: &Account{Type: AccountTypeOAuth},
 			model:   "gpt6",
 			want:    "gpt6",
+		},
+		{
+			name:    "oauth maps official GPT-5.6 alias to Sol",
+			account: &Account{Type: AccountTypeOAuth},
+			model:   "gpt-5.6",
+			want:    "gpt-5.6-sol",
 		},
 		{
 			name:    "oauth normalizes known codex alias",

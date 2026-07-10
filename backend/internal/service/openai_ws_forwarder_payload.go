@@ -124,7 +124,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
-		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), codexDesktopOriginator, "")
+		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), codexDesktopOriginator, turnMetadata)
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。

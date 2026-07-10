@@ -678,14 +678,27 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	meta := captureDialer.lastHeaders.Get(openAIWSTurnMetadataHeader)
 	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, wantSessionID, gjson.Get(meta, "thread_id").String())
-	require.False(t, gjson.Get(meta, "thread_source").Exists())
+	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
 	require.Equal(t, codexInstallationID, gjson.Get(meta, "installation_id").String())
 	require.Empty(t, gjson.Get(meta, "turn_id").String())
-	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
 	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, wantSessionID+":0", gjson.Get(meta, "window_id").String())
+	require.True(t, gjson.Get(meta, "workspaces").IsObject())
 	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
 	require.False(t, gjson.Get(meta, "workspace_kind").Exists())
+
+	// response.create body 使用正式 turn metadata，并与握手的 session/window 身份保持一致。
+	payloadMeta := gjson.Get(requestJSON, "client_metadata.x-codex-turn-metadata").String()
+	require.Equal(t, wantSessionID, gjson.Get(requestJSON, "client_metadata.session_id").String())
+	require.Equal(t, wantSessionID, gjson.Get(requestJSON, "client_metadata.thread_id").String())
+	require.Equal(t, codexInstallationID, gjson.Get(requestJSON, "client_metadata.x-codex-installation-id").String())
+	require.Equal(t, wantSessionID+":0", gjson.Get(requestJSON, "client_metadata.x-codex-window-id").String())
+	require.Equal(t, wantSessionID, gjson.Get(payloadMeta, "session_id").String())
+	require.Equal(t, "turn", gjson.Get(payloadMeta, "request_kind").String())
+	require.Equal(t, "user", gjson.Get(payloadMeta, "thread_source").String())
+	require.NotEmpty(t, gjson.Get(payloadMeta, "turn_id").String())
+	require.Greater(t, gjson.Get(payloadMeta, "turn_started_at_unix_ms").Int(), int64(0))
 }
 
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {

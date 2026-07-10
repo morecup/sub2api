@@ -318,7 +318,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if codexResult.Modified {
 			markDecodedModified()
 		}
-		// 带真实 device_id 时补齐 client_metadata 安装标识，与真实 Codex 对齐（compact 形态不同，跳过）。
+		// 先补 installation 标识；buildUpstreamRequest 生成最终 turn metadata 后再同步完整 body 身份字段。
 		if !isCompactRequest && applyCodexClientMetadata(decoded) {
 			markDecodedModified()
 		}
@@ -944,13 +944,27 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				}
 			}
 		} else {
-			// 保持 morecup 提交中的 Codex Desktop HTTP 画像与 zstd 压缩行为。
+			// 保持 Codex Desktop HTTP 画像与 zstd 压缩行为。
 			isCompact := isOpenAIResponsesCompactPath(c)
 			seed := promptCacheKey
 			if seed == "" && isCompact {
 				seed = resolveOpenAICompactMimicSessionID(c)
 			}
 			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
+			if !isCompact {
+				updatedBody, modified, metadataErr := applyCodexClientMetadataBytes(body, req.Header.Get("x-codex-turn-metadata"))
+				if metadataErr != nil {
+					return nil, fmt.Errorf("apply codex client metadata: %w", metadataErr)
+				}
+				if modified {
+					body = updatedBody
+					req.Body = io.NopCloser(bytes.NewReader(body))
+					req.ContentLength = int64(len(body))
+					req.GetBody = func() (io.ReadCloser, error) {
+						return io.NopCloser(bytes.NewReader(body)), nil
+					}
+				}
+			}
 			s.applyCodexRequestCompression(req, body)
 			codexMimicApplied = true
 		}

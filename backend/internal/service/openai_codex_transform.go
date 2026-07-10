@@ -9,6 +9,7 @@ import (
 )
 
 var codexModelMap = map[string]string{
+	"gpt-5.6":              "gpt-5.6-sol",
 	"gpt-5.6-sol":          "gpt-5.6-sol",
 	"gpt-5.6-terra":        "gpt-5.6-terra",
 	"gpt-5.6-luna":         "gpt-5.6-luna",
@@ -1121,37 +1122,80 @@ func ensureCodexReasoningInclude(reqBody map[string]any) bool {
 	}
 }
 
-// applyCodexClientMetadata 在请求体写入 client_metadata["x-codex-installation-id"]。
-//
-// 该字段与 x-codex-turn-metadata.installation_id 同源，均使用当前固定的 Codex
-// Desktop 安装标识；已有不一致值会被覆盖，避免同一请求出现两套 installation id。
-func applyCodexClientMetadata(reqBody map[string]any) bool {
-	const key = "x-codex-installation-id"
-	switch existing := reqBody["client_metadata"].(type) {
-	case map[string]any:
-		if v, ok := existing[key].(string); ok && strings.TrimSpace(v) == codexInstallationID {
-			return false
-		}
-		existing[key] = codexInstallationID
-		reqBody["client_metadata"] = existing
-		return true
-	case map[string]string:
-		if strings.TrimSpace(existing[key]) == codexInstallationID {
-			return false
-		}
-		next := make(map[string]any, len(existing)+1)
-		for k, v := range existing {
-			next[k] = v
-		}
-		next[key] = codexInstallationID
-		reqBody["client_metadata"] = next
-		return true
-	case nil:
-		reqBody["client_metadata"] = map[string]any{key: codexInstallationID}
-		return true
-	default:
+// applyCodexClientMetadata 写入 Desktop 0.144 的 client_metadata 画像。
+// 未提供 turn metadata 时保留旧行为，只注入 installation id；提供时把 header 中的
+// session/thread/turn/window 标识同步进 body，确保同一请求不存在两套身份元数据。
+func applyCodexClientMetadata(reqBody map[string]any, turnMetadata ...string) bool {
+	if reqBody == nil {
 		return false
 	}
+
+	values := map[string]string{
+		"x-codex-installation-id": codexInstallationID,
+	}
+	if len(turnMetadata) > 0 {
+		metadata := strings.TrimSpace(turnMetadata[0])
+		if metadata != "" {
+			var parsed struct {
+				SessionID string `json:"session_id"`
+				ThreadID  string `json:"thread_id"`
+				TurnID    string `json:"turn_id"`
+				WindowID  string `json:"window_id"`
+			}
+			if err := json.Unmarshal([]byte(metadata), &parsed); err == nil {
+				values["session_id"] = parsed.SessionID
+				values["thread_id"] = parsed.ThreadID
+				values["turn_id"] = parsed.TurnID
+				values["x-codex-window-id"] = parsed.WindowID
+				values["x-codex-turn-metadata"] = metadata
+			}
+		}
+	}
+
+	var clientMetadata map[string]any
+	switch existing := reqBody["client_metadata"].(type) {
+	case map[string]any:
+		clientMetadata = existing
+	case map[string]string:
+		clientMetadata = make(map[string]any, len(existing)+len(values))
+		for key, value := range existing {
+			clientMetadata[key] = value
+		}
+	default:
+		clientMetadata = make(map[string]any, len(values))
+	}
+	if clientMetadata == nil {
+		clientMetadata = make(map[string]any, len(values))
+	}
+
+	modified := false
+	for key, value := range values {
+		if existing, ok := clientMetadata[key].(string); ok && existing == value {
+			continue
+		}
+		clientMetadata[key] = value
+		modified = true
+	}
+	if !modified {
+		return false
+	}
+	reqBody["client_metadata"] = clientMetadata
+	return true
+}
+
+func applyCodexClientMetadataBytes(body []byte, turnMetadata string) ([]byte, bool, error) {
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body, false, err
+	}
+	if !applyCodexClientMetadata(reqBody, turnMetadata) {
+		return body, false, nil
+	}
+	updated, err := json.Marshal(reqBody)
+	if err != nil {
+		return body, false, err
+	}
+	return updated, true, nil
 }
 
 // applyInstructions 处理 instructions 字段：仅在 instructions 为空时填充默认值。

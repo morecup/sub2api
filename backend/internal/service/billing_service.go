@@ -128,6 +128,23 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 		pricing.CacheCreationPricePerTokenPriority > 0 || pricing.CacheReadPricePerTokenPriority > 0
 }
 
+func newOpenAIGPT56ModelPricing(input, output, cacheCreation, cacheRead float64) *ModelPricing {
+	return &ModelPricing{
+		InputPricePerToken:                 input,
+		InputPricePerTokenPriority:         input * 2,
+		OutputPricePerToken:                output,
+		OutputPricePerTokenPriority:        output * 2,
+		CacheCreationPricePerToken:         cacheCreation,
+		CacheCreationPricePerTokenPriority: cacheCreation * 2,
+		CacheReadPricePerToken:             cacheRead,
+		CacheReadPricePerTokenPriority:     cacheRead * 2,
+		SupportsCacheBreakdown:             false,
+		LongContextInputThreshold:          openAIGPT54LongContextInputThreshold,
+		LongContextInputMultiplier:         openAIGPT54LongContextInputMultiplier,
+		LongContextOutputMultiplier:        openAIGPT54LongContextOutputMultiplier,
+	}
+}
+
 func serviceTierCostMultiplier(serviceTier string) float64 {
 	switch normalizeBillingServiceTier(serviceTier) {
 	case "priority":
@@ -296,37 +313,11 @@ func (s *BillingService) initFallbackPricing() {
 	// GPT-5.5 Pro 暂无独立定价，回退到 GPT-5.4。
 	s.fallbackPrices["gpt-5.5-pro"] = s.fallbackPrices["gpt-5.4"]
 
-	// OpenAI GPT-5.6 官方价格（USD/token）。缓存写入为输入价的 1.25 倍。
-	s.fallbackPrices["gpt-5.6-sol"] = &ModelPricing{
-		InputPricePerToken:                 5e-6,
-		InputPricePerTokenPriority:         10e-6,
-		OutputPricePerToken:                30e-6,
-		OutputPricePerTokenPriority:        60e-6,
-		CacheCreationPricePerToken:         6.25e-6,
-		CacheCreationPricePerTokenPriority: 12.5e-6,
-		CacheReadPricePerToken:             0.5e-6,
-		CacheReadPricePerTokenPriority:     1e-6,
-	}
-	s.fallbackPrices["gpt-5.6-terra"] = &ModelPricing{
-		InputPricePerToken:                 2.5e-6,
-		InputPricePerTokenPriority:         5e-6,
-		OutputPricePerToken:                15e-6,
-		OutputPricePerTokenPriority:        30e-6,
-		CacheCreationPricePerToken:         3.125e-6,
-		CacheCreationPricePerTokenPriority: 6.25e-6,
-		CacheReadPricePerToken:             0.25e-6,
-		CacheReadPricePerTokenPriority:     0.5e-6,
-	}
-	s.fallbackPrices["gpt-5.6-luna"] = &ModelPricing{
-		InputPricePerToken:                 1e-6,
-		InputPricePerTokenPriority:         2e-6,
-		OutputPricePerToken:                6e-6,
-		OutputPricePerTokenPriority:        12e-6,
-		CacheCreationPricePerToken:         1.25e-6,
-		CacheCreationPricePerTokenPriority: 2.5e-6,
-		CacheReadPricePerToken:             0.1e-6,
-		CacheReadPricePerTokenPriority:     0.2e-6,
-	}
+	// GPT-5.6 三档官方定价；裸 gpt-5.6 是 Sol 的官方别名。
+	s.fallbackPrices["gpt-5.6-sol"] = newOpenAIGPT56ModelPricing(5e-6, 30e-6, 6.25e-6, 0.5e-6)
+	s.fallbackPrices["gpt-5.6-terra"] = newOpenAIGPT56ModelPricing(2.5e-6, 15e-6, 3.125e-6, 0.25e-6)
+	s.fallbackPrices["gpt-5.6-luna"] = newOpenAIGPT56ModelPricing(1e-6, 6e-6, 1.25e-6, 0.1e-6)
+	s.fallbackPrices["gpt-5.6"] = s.fallbackPrices["gpt-5.6-sol"]
 
 	s.fallbackPrices["gpt-5.4-mini"] = &ModelPricing{
 		InputPricePerToken:     7.5e-7,
@@ -957,8 +948,8 @@ func (s *BillingService) computeTokenBreakdown(
 		if pricing.CacheReadPricePerTokenPriority > 0 {
 			cacheReadPrice = pricing.CacheReadPricePerTokenPriority
 		}
-		if pricing.CacheCreationPricePerTokenPriority > 0 {
-			cacheCreationPrice = pricing.CacheCreationPricePerTokenPriority
+		if pricing.CacheCreationPricePerTokenPriority > 0 && pricing.CacheCreationPricePerToken > 0 {
+			cacheCreationMultiplier *= pricing.CacheCreationPricePerTokenPriority / pricing.CacheCreationPricePerToken
 		}
 	} else {
 		tierMultiplier = serviceTierCostMultiplier(serviceTier)
@@ -973,7 +964,7 @@ func (s *BillingService) computeTokenBreakdown(
 		// 缓存创建（cache_write）也是输入侧操作，三档价格（标准 / 5m / 1h）
 		// 都通过 computeCacheCreationCost 直接读取 pricing.*，不会经过这里
 		// 的倍率修改，因此显式向下传一个倍率，避免长上下文场景下被漏乘。
-		cacheCreationMultiplier = pricing.LongContextInputMultiplier
+		cacheCreationMultiplier *= pricing.LongContextInputMultiplier
 	}
 
 	bd := &CostBreakdown{}

@@ -30,6 +30,7 @@ FRONTEND_DIR = REPO_ROOT / "frontend"
 BACKEND_DIR = REPO_ROOT / "backend"
 FRONTEND_DIST = BACKEND_DIR / "internal" / "web" / "dist"
 VERSION_FILE = BACKEND_DIR / "cmd" / "server" / "VERSION"
+PRICING_FALLBACK_FILE = BACKEND_DIR / "resources" / "model-pricing" / "model_prices_and_context_window.json"
 
 
 def info(message: str) -> None:
@@ -207,12 +208,15 @@ def q(value: str | Path) -> str:
 def deploy(args: argparse.Namespace, binary_path: Path, digest: str, label: str) -> None:
     remote_stage_dir = f"/tmp/sub2api-deploy-{label}"
     remote_stage_path = f"{remote_stage_dir}/{binary_path.name}"
+    remote_pricing_path = f"{remote_stage_dir}/{PRICING_FALLBACK_FILE.name}"
+    pricing_digest = sha256_file(PRICING_FALLBACK_FILE)
 
     remote_exec(
         args,
-        f"set -euo pipefail\nmkdir -p {q(remote_stage_dir)}\nrm -f {q(remote_stage_path)}\n",
+        f"set -euo pipefail\nmkdir -p {q(remote_stage_dir)}\nrm -f {q(remote_stage_path)} {q(remote_pricing_path)}\n",
     )
     upload_file(args, binary_path, remote_stage_path)
+    upload_file(args, PRICING_FALLBACK_FILE, remote_pricing_path)
 
     uid = detect_remote_uid(args)
     use_sudo = (uid != "0") and not args.no_sudo
@@ -232,12 +236,15 @@ def deploy(args: argparse.Namespace, binary_path: Path, digest: str, label: str)
 
     remote_script = f"""set -euo pipefail
 candidate_tmp={q(remote_stage_path)}
+pricing_tmp={q(remote_pricing_path)}
 app_dir={q(args.remote_app_dir)}
 service_name={q(args.service)}
 health_url={q(args.health_url)}
 expected_sha={q(digest)}
+expected_pricing_sha={q(pricing_digest)}
 
 target="$app_dir/sub2api"
+pricing_target="$app_dir/resources/model-pricing/model_prices_and_context_window.json"
 deploy_tmp="$app_dir/.deploy-tmp"
 mkdir -p "$deploy_tmp"
 
@@ -248,6 +255,13 @@ actual_sha="$(sha256sum "$candidate" | awk '{{print $1}}')"
 printf 'candidate_sha=%s\\n' "$actual_sha"
 if [ "$actual_sha" != "$expected_sha" ]; then
   printf 'sha256 mismatch: expected=%s actual=%s\\n' "$expected_sha" "$actual_sha" >&2
+  exit 1
+fi
+
+actual_pricing_sha="$(sha256sum "$pricing_tmp" | awk '{{print $1}}')"
+printf 'pricing_candidate_sha=%s\\n' "$actual_pricing_sha"
+if [ "$actual_pricing_sha" != "$expected_pricing_sha" ]; then
+  printf 'pricing sha256 mismatch: expected=%s actual=%s\\n' "$expected_pricing_sha" "$actual_pricing_sha" >&2
   exit 1
 fi
 
@@ -266,6 +280,13 @@ else
   backup=""
 fi
 
+pricing_backup="$deploy_tmp/model_prices_and_context_window.backup.$(date -u +%Y%m%dT%H%M%SZ).json"
+if [ -e "$pricing_target" ]; then
+  cp -a "$pricing_target" "$pricing_backup"
+else
+  pricing_backup=""
+fi
+
 owner="sub2api:sub2api"
 if [ -e "$target" ]; then
   owner="$(stat -c '%U:%G' "$target" 2>/dev/null || printf 'sub2api:sub2api')"
@@ -280,6 +301,8 @@ fi
 # Stop service before replacing binary to avoid "Text file busy"
 {restart_stop}
 install -o "$owner_user" -g "$owner_group" -m 755 "$candidate" "$target"
+mkdir -p "$(dirname "$pricing_target")"
+install -o "$owner_user" -g "$owner_group" -m 644 "$pricing_tmp" "$pricing_target"
 {restart_start}
 sleep 2
 {restart_check}
@@ -295,6 +318,9 @@ fi
 
 if [ -n "$backup" ]; then
   printf 'backup=%s\\n' "$backup"
+fi
+if [ -n "$pricing_backup" ]; then
+  printf 'pricing_backup=%s\\n' "$pricing_backup"
 fi
 rm -rf "$(dirname "$candidate_tmp")"
 """
@@ -341,6 +367,9 @@ def main(argv: Iterable[str] = sys.argv[1:]) -> int:
     digest = sha256_file(binary_path)
     info(f"built {binary_path}")
     info(f"sha256 {digest}")
+    if not PRICING_FALLBACK_FILE.exists():
+        fail(f"pricing fallback file is missing: {PRICING_FALLBACK_FILE}")
+    info(f"pricing fallback sha256 {sha256_file(PRICING_FALLBACK_FILE)}")
 
     if args.build_only:
         info("build-only mode; deployment skipped")
