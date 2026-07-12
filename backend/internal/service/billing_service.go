@@ -1101,10 +1101,11 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
-	if !isGPT56 && !usesLegacyLongContextPricing {
+	usesLongContextPricing := isGPT56 || usesLegacyLongContextPricing
+	if !usesLongContextPricing {
 		return pricing
 	}
-	needsLongContextPolicy := usesLegacyLongContextPricing &&
+	needsLongContextPolicy := usesLongContextPricing &&
 		(pricing.LongContextInputThreshold <= 0 || pricing.LongContextInputMultiplier <= 0 || pricing.LongContextOutputMultiplier <= 0)
 	needsCacheCreationPolicy := isGPT56 && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
@@ -1120,7 +1121,7 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 			cloned.CacheCreationPricePerTokenPriority = cloned.InputPricePerTokenPriority * 1.25
 		}
 	}
-	if usesLegacyLongContextPricing {
+	if usesLongContextPricing {
 		if cloned.LongContextInputThreshold <= 0 {
 			cloned.LongContextInputThreshold = openAIGPT54LongContextInputThreshold
 		}

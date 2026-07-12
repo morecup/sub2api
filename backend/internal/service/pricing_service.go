@@ -130,13 +130,18 @@ type PricingRemoteClient interface {
 type LiteLLMRawEntry struct {
 	InputCostPerToken                   *float64 `json:"input_cost_per_token"`
 	InputCostPerTokenPriority           *float64 `json:"input_cost_per_token_priority"`
+	InputCostPerTokenAbove272KTokens    *float64 `json:"input_cost_per_token_above_272k_tokens"`
 	OutputCostPerToken                  *float64 `json:"output_cost_per_token"`
 	OutputCostPerTokenPriority          *float64 `json:"output_cost_per_token_priority"`
+	OutputCostPerTokenAbove272KTokens   *float64 `json:"output_cost_per_token_above_272k_tokens"`
 	CacheCreationInputTokenCost         *float64 `json:"cache_creation_input_token_cost"`
 	CacheCreationInputTokenCostPriority *float64 `json:"cache_creation_input_token_cost_priority"`
 	CacheCreationInputTokenCostAbove1hr *float64 `json:"cache_creation_input_token_cost_above_1hr"`
 	CacheReadInputTokenCost             *float64 `json:"cache_read_input_token_cost"`
 	CacheReadInputTokenCostPriority     *float64 `json:"cache_read_input_token_cost_priority"`
+	LongContextInputTokenThreshold      *int     `json:"long_context_input_token_threshold"`
+	LongContextInputCostMultiplier      *float64 `json:"long_context_input_cost_multiplier"`
+	LongContextOutputCostMultiplier     *float64 `json:"long_context_output_cost_multiplier"`
 	SupportsServiceTier                 bool     `json:"supports_service_tier"`
 	LiteLLMProvider                     string   `json:"litellm_provider"`
 	Mode                                string   `json:"mode"`
@@ -464,6 +469,29 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 		if entry.OutputCostPerImageToken != nil {
 			pricing.OutputCostPerImageToken = *entry.OutputCostPerImageToken
+		}
+		if entry.LongContextInputTokenThreshold != nil {
+			pricing.LongContextInputTokenThreshold = *entry.LongContextInputTokenThreshold
+		}
+		if entry.LongContextInputCostMultiplier != nil {
+			pricing.LongContextInputCostMultiplier = *entry.LongContextInputCostMultiplier
+		}
+		if entry.LongContextOutputCostMultiplier != nil {
+			pricing.LongContextOutputCostMultiplier = *entry.LongContextOutputCostMultiplier
+		}
+
+		// LiteLLM 的 OpenAI 长上下文价格使用 *_above_272k_tokens 字段表达。
+		// 计费核心使用“阈值 + 倍率”，因此在加载时将绝对价格换算为倍率。
+		hasLongContextInputPrice := entry.InputCostPerTokenAbove272KTokens != nil && *entry.InputCostPerTokenAbove272KTokens > 0
+		hasLongContextOutputPrice := entry.OutputCostPerTokenAbove272KTokens != nil && *entry.OutputCostPerTokenAbove272KTokens > 0
+		if pricing.LongContextInputTokenThreshold <= 0 && (hasLongContextInputPrice || hasLongContextOutputPrice) {
+			pricing.LongContextInputTokenThreshold = openAIGPT54LongContextInputThreshold
+		}
+		if pricing.LongContextInputCostMultiplier <= 0 && hasLongContextInputPrice && pricing.InputCostPerToken > 0 {
+			pricing.LongContextInputCostMultiplier = *entry.InputCostPerTokenAbove272KTokens / pricing.InputCostPerToken
+		}
+		if pricing.LongContextOutputCostMultiplier <= 0 && hasLongContextOutputPrice && pricing.OutputCostPerToken > 0 {
+			pricing.LongContextOutputCostMultiplier = *entry.OutputCostPerTokenAbove272KTokens / pricing.OutputCostPerToken
 		}
 
 		result[modelName] = pricing
