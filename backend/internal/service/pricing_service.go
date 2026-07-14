@@ -464,6 +464,15 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		if entry.CacheReadInputTokenCostPriority != nil {
 			pricing.CacheReadInputTokenCostPriority = *entry.CacheReadInputTokenCostPriority
 		}
+		if entry.LongContextInputTokenThreshold != nil {
+			pricing.LongContextInputTokenThreshold = *entry.LongContextInputTokenThreshold
+		}
+		if entry.LongContextInputCostMultiplier != nil {
+			pricing.LongContextInputCostMultiplier = *entry.LongContextInputCostMultiplier
+		}
+		if entry.LongContextOutputCostMultiplier != nil {
+			pricing.LongContextOutputCostMultiplier = *entry.LongContextOutputCostMultiplier
+		}
 		if entry.OutputCostPerImage != nil {
 			pricing.OutputCostPerImage = *entry.OutputCostPerImage
 		}
@@ -775,6 +784,12 @@ func normalizeModelNameForPricing(model string) string {
 
 	model = strings.TrimLeft(model, "/")
 	if canonical := canonicalizeOpenAIModelAliasSpelling(model); canonical != "" {
+		if canonical == "gpt-5.6" {
+			return "gpt-5.6-sol"
+		}
+		if suffix, ok := strings.CutPrefix(canonical, "gpt-5.6-"); ok && (suffix == "max" || isKnownCodexModelSuffix(suffix)) {
+			return "gpt-5.6-sol"
+		}
 		return canonical
 	}
 	return model

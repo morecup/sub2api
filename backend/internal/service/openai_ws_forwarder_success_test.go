@@ -602,6 +602,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.98.0")
 	c.Request.Header.Set("session_id", "sess-oauth-1")
 	c.Request.Header.Set("conversation_id", "conv-oauth-1")
+	c.Request.Header.Set("x-codex-beta-features", "remote_compaction_v2")
 
 	cfg := &config.Config{}
 	cfg.Security.URLAllowlist.Enabled = false
@@ -704,15 +705,18 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
+	// 上游要求 originator 与最终 user-agent 首段配套（issue #3901）：
+	// originator 一律由最终 UA 推导；推导不出官方身份时整体回退默认 Codex CLI 身份。
 	tests := []struct {
 		name           string
 		userAgent      string
 		originator     string
 		wantOriginator string
+		wantUA         string
 	}{
-		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "Codex Desktop"},
-		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "Codex Desktop"},
-		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop"},
+		{name: "desktop originator ignored", originator: "Codex Desktop", wantOriginator: "Codex Desktop", wantUA: codexDesktopUserAgent},
+		{name: "vscode originator ignored", originator: "codex_vscode", wantOriginator: "Codex Desktop", wantUA: codexDesktopUserAgent},
+		{name: "official ua ignored", userAgent: "Codex Desktop/1.2.3", wantOriginator: "Codex Desktop", wantUA: codexDesktopUserAgent},
 	}
 
 	for _, tt := range tests {
@@ -777,6 +781,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthOriginatorCompatibility(t *testi
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			require.Equal(t, tt.wantOriginator, captureDialer.lastHeaders.Get("originator"))
+			require.Equal(t, tt.wantUA, captureDialer.lastHeaders.Get("user-agent"))
 		})
 	}
 }

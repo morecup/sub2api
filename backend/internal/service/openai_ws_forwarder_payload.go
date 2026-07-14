@@ -75,6 +75,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if v := strings.TrimSpace(c.Request.Header.Get("accept-language")); v != "" {
 			headers.Set("accept-language", v)
 		}
+		for _, value := range c.Request.Header.Values("x-codex-beta-features") {
+			if value = strings.TrimSpace(value); value != "" {
+				headers.Add("x-codex-beta-features", value)
+			}
+		}
 	}
 	if !isOAuthAccount {
 		if sessionResolution.SessionID != "" {
@@ -125,6 +130,8 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
 		applyCodexOAuthWSMimicHeaders(headers, apiKeyID, strings.TrimSpace(promptCacheKey), codexDesktopOriginator, turnMetadata)
+		// 终态收口：保证 Desktop originator 与最终 UA 配套。
+		enforceCodexIdentityHeaders(headers)
 	}
 
 	// 账号级请求头覆写（仅 openai api_key 账号启用时生效；OAuth 路径 no-op）。
