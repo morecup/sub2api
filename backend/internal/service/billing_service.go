@@ -114,6 +114,9 @@ const (
 	openAIGPT54LongContextInputThreshold   = 272000
 	openAIGPT54LongContextInputMultiplier  = 2.0
 	openAIGPT54LongContextOutputMultiplier = 1.5
+	grok45LongContextInputThreshold        = 200000
+	grok45LongContextInputMultiplier       = 2.0
+	grok45LongContextOutputMultiplier      = 2.0
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
@@ -548,11 +551,17 @@ func (s *BillingService) initFallbackPricing() {
 	}
 
 	// xAI Grok 4.5 (official docs: $2 input / $0.50 cached input / $6 output per MTok)
+	// Requests whose total prompt context exceeds 200K use the long-context
+	// prices for the entire request: $4 input / $1 cached input / $12 output.
 	s.fallbackPrices["grok-4.5"] = &ModelPricing{
-		InputPricePerToken:     2e-6,
-		OutputPricePerToken:    6e-6,
-		CacheReadPricePerToken: 0.5e-6,
-		SupportsCacheBreakdown: false,
+		InputPricePerToken:          2e-6,
+		OutputPricePerToken:         6e-6,
+		CacheCreationPricePerToken:  2e-6,
+		CacheReadPricePerToken:      0.5e-6,
+		SupportsCacheBreakdown:      false,
+		LongContextInputThreshold:   grok45LongContextInputThreshold,
+		LongContextInputMultiplier:  grok45LongContextInputMultiplier,
+		LongContextOutputMultiplier: grok45LongContextOutputMultiplier,
 	}
 
 	// xAI Grok 4.3 (official docs: $1.25 input / $2.50 output per MTok)
@@ -1150,7 +1159,8 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 	normalized := normalizeKnownOpenAICodexModel(model)
 	isGPT56 := isOpenAIGPT56Model(normalized)
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
-	usesLongContextPricing := isGPT56 || usesLegacyLongContextPricing
+	usesGrok45LongContextPricing := isGrok45LongContextPricingModel(model)
+	usesLongContextPricing := isGPT56 || usesLegacyLongContextPricing || usesGrok45LongContextPricing
 	if !usesLongContextPricing {
 		return pricing
 	}
@@ -1171,14 +1181,22 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		}
 	}
 	if usesLongContextPricing {
+		threshold := openAIGPT54LongContextInputThreshold
+		inputMultiplier := openAIGPT54LongContextInputMultiplier
+		outputMultiplier := openAIGPT54LongContextOutputMultiplier
+		if usesGrok45LongContextPricing {
+			threshold = grok45LongContextInputThreshold
+			inputMultiplier = grok45LongContextInputMultiplier
+			outputMultiplier = grok45LongContextOutputMultiplier
+		}
 		if cloned.LongContextInputThreshold <= 0 {
-			cloned.LongContextInputThreshold = openAIGPT54LongContextInputThreshold
+			cloned.LongContextInputThreshold = threshold
 		}
 		if cloned.LongContextInputMultiplier <= 0 {
-			cloned.LongContextInputMultiplier = openAIGPT54LongContextInputMultiplier
+			cloned.LongContextInputMultiplier = inputMultiplier
 		}
 		if cloned.LongContextOutputMultiplier <= 0 {
-			cloned.LongContextOutputMultiplier = openAIGPT54LongContextOutputMultiplier
+			cloned.LongContextOutputMultiplier = outputMultiplier
 		}
 	}
 	return &cloned
@@ -1197,6 +1215,15 @@ func (s *BillingService) shouldApplySessionLongContextPricing(tokens UsageTokens
 
 func usesOpenAILegacyLongContextPricing(normalized string) bool {
 	return normalized == "gpt-5.4" || normalized == "gpt-5.5" || normalized == "gpt-5.5-pro"
+}
+
+func isGrok45LongContextPricingModel(model string) bool {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "grok", "grok-latest", "grok-4.5", "grok-4.5-latest", "grok-build-latest":
+		return true
+	default:
+		return false
+	}
 }
 
 // CalculateCostWithConfig 使用配置中的默认倍率计算费用

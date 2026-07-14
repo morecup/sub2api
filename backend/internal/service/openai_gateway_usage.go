@@ -185,7 +185,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			return err
 		}
 	}
-	longContextBillingEnabled := billingAccount.IsOpenAILongContextBillingEnabled()
+	longContextBillingEnabled := shouldEnableLongContextBillingForAccount(billingAccount)
 	cost, err = s.calculateOpenAIRecordUsageCost(
 		ctx,
 		result,
@@ -374,6 +374,20 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	writeUsageLogBestEffort(ctx, s.usageLogRepo, usageLog, "service.openai_gateway")
 
 	return nil
+}
+
+func shouldEnableLongContextBillingForAccount(account *Account) bool {
+	if account == nil {
+		return false
+	}
+	// xAI applies Grok long-context pricing automatically once the model's
+	// threshold is exceeded. OpenAI accounts keep their existing explicit
+	// opt-in because their upstream may be a subscription or another route
+	// that does not charge API long-context rates.
+	if account.Platform == PlatformGrok {
+		return true
+	}
+	return account.IsOpenAILongContextBillingEnabled()
 }
 
 func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(

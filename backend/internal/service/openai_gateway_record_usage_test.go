@@ -1127,6 +1127,43 @@ func TestOpenAIGatewayServiceRecordUsage_Gpt54LongContextBillingEnabledPerAccoun
 	require.True(t, usageRepo.lastLog.LongContextBillingApplied)
 }
 
+func TestOpenAIGatewayServiceRecordUsage_Grok45LongContextBillingEnabledByPlatform(t *testing.T) {
+	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+	userRepo := &openAIRecordUsageUserRepoStub{}
+	subRepo := &openAIRecordUsageSubRepoStub{}
+	svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, subRepo, nil)
+
+	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
+		Result: &OpenAIForwardResult{
+			RequestID: "resp_grok45_long_context",
+			Usage: OpenAIUsage{
+				InputTokens:          210000,
+				CacheReadInputTokens: 150000,
+				OutputTokens:         5000,
+			},
+			Model:    "grok-4.5",
+			Duration: time.Second,
+		},
+		APIKey:  &APIKey{ID: 1016},
+		User:    &User{ID: 2016},
+		Account: &Account{ID: 3016, Platform: PlatformGrok},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, usageRepo.lastLog)
+
+	expectedInput := 60000 * 4e-6
+	expectedCacheRead := 150000 * 1e-6
+	expectedOutput := 5000 * 12e-6
+	expectedTotal := expectedInput + expectedCacheRead + expectedOutput
+	require.InDelta(t, expectedInput, usageRepo.lastLog.InputCost, 1e-10)
+	require.InDelta(t, expectedCacheRead, usageRepo.lastLog.CacheReadCost, 1e-10)
+	require.InDelta(t, expectedOutput, usageRepo.lastLog.OutputCost, 1e-10)
+	require.InDelta(t, expectedTotal, usageRepo.lastLog.TotalCost, 1e-10)
+	require.InDelta(t, expectedTotal*1.1, usageRepo.lastLog.ActualCost, 1e-10)
+	require.True(t, usageRepo.lastLog.LongContextBillingApplied)
+}
+
 func TestOpenAIGatewayServiceRecordUsage_SparkShadowUsesCurrentParentBillingSetting(t *testing.T) {
 	tests := []struct {
 		name          string
