@@ -49,10 +49,17 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	if err != nil {
 		return nil, err
 	}
+	// Normalize service_tier (fast→priority, drop unknown) so upstream + billing share one value.
+	patchedBody, _, err = normalizeResponsesBodyServiceTier(patchedBody)
+	if err != nil {
+		return nil, fmt.Errorf("normalize service_tier in grok responses body: %w", err)
+	}
 	patchedBody, err = applyGrokResponsesCacheIdentity(patchedBody, body, cacheIdentity, account.IsGrokOAuth())
 	if err != nil {
 		return nil, fmt.Errorf("apply grok prompt cache identity: %w", err)
 	}
+	// Capture for billing after body normalization (mirrors OpenAI Responses path).
+	serviceTier := extractOpenAIServiceTierFromBody(patchedBody)
 
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
@@ -138,6 +145,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 		Usage:           *usage,
 		Model:           originalModel,
 		UpstreamModel:   upstreamModel,
+		ServiceTier:     serviceTier,
 		ReasoningEffort: reasoningEffort,
 		Stream:          reqStream,
 		OpenAIWSMode:    false,

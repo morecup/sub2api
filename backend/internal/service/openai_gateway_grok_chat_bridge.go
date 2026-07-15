@@ -29,6 +29,7 @@ var grokChatResponsesBridgeTopLevelFields = map[string]struct{}{
 	"temperature":           {},
 	"top_p":                 {},
 	"prompt_cache_key":      {},
+	"service_tier":          {}, // priority/flex; billed 2x/0.5x and forwarded to xAI
 	"tools":                 {},
 	"tool_choice":           {},
 	"functions":             {},
@@ -120,6 +121,14 @@ func grokChatResponsesBridgeEligibility(body []byte) (bool, string) {
 		if json.Unmarshal(raw, &key) != nil {
 			return false, "invalid_prompt_cache_key"
 		}
+	}
+	if raw, ok := root["service_tier"]; ok {
+		var tier string
+		if json.Unmarshal(raw, &tier) != nil {
+			return false, "invalid_service_tier"
+		}
+		// Empty is allowed (same as omitted). Unknown values are stripped later by
+		// normalizeResponsesRequestServiceTier; only reject non-string JSON here.
 	}
 
 	var messages []map[string]json.RawMessage
@@ -224,6 +233,8 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	// protocol. Keep the bridge request as close as possible to native Grok.
 	responsesReq.Include = nil
 	responsesReq.Store = nil
+	// Normalize service_tier (fast→priority) so upstream + billing share one value.
+	normalizeResponsesRequestServiceTier(responsesReq)
 
 	responsesBody, err := json.Marshal(responsesReq)
 	if err != nil {
@@ -251,7 +262,9 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		}
 		return nil, policyErr
 	}
+	// Billing must use post-policy service_tier (filter may strip priority/flex).
 	responsesBody = updatedBody
+	serviceTier := extractOpenAIServiceTierFromBody(responsesBody)
 
 	token, _, err := s.GetAccessToken(ctx, account)
 	if err != nil {
@@ -314,6 +327,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		if result.RequestID == "" {
 			result.RequestID = firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id"))
 		}
+		result.ServiceTier = serviceTier
 		result.ReasoningEffort = extractOpenAIReasoningEffortFromBody(body, upstreamModel, billingModel, originalModel)
 	}
 	return result, err

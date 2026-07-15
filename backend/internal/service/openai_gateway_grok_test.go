@@ -974,6 +974,86 @@ func TestForwardGrokResponsesAPIKeyUsesXAIResponses(t *testing.T) {
 	require.Equal(t, 1, result.Usage.OutputTokens)
 }
 
+func TestForwardGrokResponsesPropagatesServiceTierForBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		body           string
+		wantUpstream   string
+		wantResultTier string
+		wantMissing    bool
+	}{
+		{
+			name:           "priority",
+			body:           `{"model":"grok","input":"hi","stream":false,"service_tier":"priority"}`,
+			wantUpstream:   "priority",
+			wantResultTier: "priority",
+		},
+		{
+			name:           "fast alias normalizes to priority",
+			body:           `{"model":"grok","input":"hi","stream":false,"service_tier":"fast"}`,
+			wantUpstream:   "priority",
+			wantResultTier: "priority",
+		},
+		{
+			name:           "flex",
+			body:           `{"model":"grok","input":"hi","stream":false,"service_tier":"flex"}`,
+			wantUpstream:   "flex",
+			wantResultTier: "flex",
+		},
+		{
+			name:        "unknown tier stripped",
+			body:        `{"model":"grok","input":"hi","stream":false,"service_tier":"turbo"}`,
+			wantMissing: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			body := []byte(tt.body)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(body))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Set("api_key", &APIKey{ID: 5301})
+
+			account := &Account{
+				ID:          54,
+				Name:        "grok-service-tier",
+				Platform:    PlatformGrok,
+				Type:        AccountTypeAPIKey,
+				Concurrency: 1,
+				Credentials: map[string]any{
+					"api_key":  "xai-test-key",
+					"base_url": "https://api.x.ai/v1",
+				},
+			}
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(
+					`{"id":"resp_tier","object":"response","model":"grok-4.5","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":3,"output_tokens":1,"total_tokens":4}}`,
+				)),
+			}}
+			svc := &OpenAIGatewayService{httpUpstream: upstream}
+
+			result, err := svc.forwardGrokResponses(context.Background(), c, account, body, "grok", false, time.Now())
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			if tt.wantMissing {
+				require.False(t, gjson.GetBytes(upstream.lastBody, "service_tier").Exists())
+				require.Nil(t, result.ServiceTier)
+				return
+			}
+			require.Equal(t, tt.wantUpstream, gjson.GetBytes(upstream.lastBody, "service_tier").String())
+			require.NotNil(t, result.ServiceTier)
+			require.Equal(t, tt.wantResultTier, *result.ServiceTier)
+		})
+	}
+}
+
 func TestAccountTestServiceGrokAPIKeyUsesXAIResponses(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

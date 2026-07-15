@@ -40,6 +40,16 @@ func TestGrokChatResponsesBridgeEligibility(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "service_tier priority is eligible",
+			body: `{"model":"grok","messages":[{"role":"user","content":"hi"}],"service_tier":"priority"}`,
+			want: true,
+		},
+		{
+			name: "service_tier fast alias is eligible",
+			body: `{"model":"grok","messages":[{"role":"user","content":"hi"}],"service_tier":"fast"}`,
+			want: true,
+		},
+		{
 			name:   "stop falls back",
 			body:   `{"model":"grok","messages":[{"role":"user","content":"hi"}],"stop":"done"}`,
 			reason: "unsupported_stop",
@@ -193,6 +203,50 @@ func TestForwardGrokChatViaResponsesStreamingPropagatesCachedUsage(t *testing.T)
 	require.Contains(t, recorder.Body.String(), `"content":"cached ok"`)
 	require.Contains(t, recorder.Body.String(), `"cached_tokens":4096`)
 	require.Contains(t, recorder.Body.String(), "data: [DONE]")
+}
+
+func TestForwardGrokChatViaResponsesPropagatesServiceTierForBilling(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	tests := []struct {
+		name           string
+		serviceTier    string
+		wantUpstream   string
+		wantResultTier string
+	}{
+		{name: "priority", serviceTier: "priority", wantUpstream: "priority", wantResultTier: "priority"},
+		{name: "fast alias", serviceTier: "fast", wantUpstream: "priority", wantResultTier: "priority"},
+		{name: "flex", serviceTier: "flex", wantUpstream: "flex", wantResultTier: "flex"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := []byte(`{"model":"grok","messages":[{"role":"system","content":"be concise"},{"role":"user","content":"hi"}],"stream":false,"service_tier":"` + tt.serviceTier + `"}`)
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, grokChatRawEndpoint, bytes.NewReader(body))
+			c.Set("api_key", &APIKey{ID: 7301})
+
+			account := grokChatBridgeTestAccount(73)
+			repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
+				accountsByID: map[int64]*Account{account.ID: account},
+			}}
+			upstream := &httpUpstreamRecorder{resp: grokChatBridgeCompletedResponse("resp_grok_chat_tier", 128)}
+			svc := &OpenAIGatewayService{
+				httpUpstream:      upstream,
+				grokTokenProvider: NewGrokTokenProvider(repo, nil),
+				accountRepo:       repo,
+			}
+
+			result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Equal(t, grokChatResponsesEndpoint, result.UpstreamEndpoint, "service_tier should remain bridge-eligible")
+			require.Equal(t, tt.wantUpstream, gjson.GetBytes(upstream.lastBody, "service_tier").String())
+			require.NotNil(t, result.ServiceTier)
+			require.Equal(t, tt.wantResultTier, *result.ServiceTier)
+		})
+	}
 }
 
 func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {

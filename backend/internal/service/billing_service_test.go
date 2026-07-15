@@ -1242,6 +1242,20 @@ func TestServiceTierCostMultiplier(t *testing.T) {
 	require.InDelta(t, 1.0, serviceTierCostMultiplier("default"), 1e-12)
 }
 
+func TestCalculateCostWithServiceTier_GrokPriorityAppliesDoubleMultiplier(t *testing.T) {
+	svc := newTestBillingService()
+	tokens := UsageTokens{InputTokens: 1000, OutputTokens: 500}
+
+	baseCost, err := svc.CalculateCost("grok-4.5", tokens, 1.0)
+	require.NoError(t, err)
+
+	priorityCost, err := svc.CalculateCostWithServiceTier("grok-4.5", tokens, 1.0, "priority")
+	require.NoError(t, err)
+	require.InDelta(t, baseCost.InputCost*2, priorityCost.InputCost, 1e-10)
+	require.InDelta(t, baseCost.OutputCost*2, priorityCost.OutputCost, 1e-10)
+	require.InDelta(t, baseCost.TotalCost*2, priorityCost.TotalCost, 1e-10)
+}
+
 func TestCalculateCostWithServiceTier_OpenAIPriorityUsesPriorityPricing(t *testing.T) {
 	svc := newTestBillingService()
 	tokens := UsageTokens{InputTokens: 100, OutputTokens: 50, CacheReadTokens: 20}
