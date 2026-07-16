@@ -582,6 +582,7 @@ const (
 	GatewayFailureScopeAccount  GatewayFailureScope = "account"
 	GatewayFailureScopeProvider GatewayFailureScope = "provider"
 	GatewayFailureScopeRequest  GatewayFailureScope = "request"
+	GatewayFailureScopeRoute    GatewayFailureScope = "route"
 )
 
 // NextAccountAction is tri-state for backwards compatibility. The zero value
@@ -600,18 +601,19 @@ type GatewayFailureReason string
 // trigger account failover. Additive metadata keeps existing composite literals
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
-	StatusCode               int
-	ResponseBody             []byte      // 上游响应体，用于错误透传规则匹配
-	ResponseHeaders          http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
-	ForceCacheBilling        bool        // Antigravity 粘性会话切换时设为 true
-	RetryableOnSameAccount   bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
-	SafeToFailoverAfterWrite bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
-	Stage                    GatewayFailureStage
-	Scope                    GatewayFailureScope
-	Reason                   GatewayFailureReason
-	NextAccountAction        NextAccountAction
-	ClientStatusCode         int
-	ClientMessage            string
+	StatusCode                     int
+	ResponseBody                   []byte      // 上游响应体，用于错误透传规则匹配
+	ResponseHeaders                http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
+	ForceCacheBilling              bool        // Antigravity 粘性会话切换时设为 true
+	RetryableOnSameAccount         bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
+	SafeToFailoverAfterWrite       bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	SuppressAccountScheduleFailure bool        // 提供商容量或链路故障，不应降低所选账号的调度健康度
+	Stage                          GatewayFailureStage
+	Scope                          GatewayFailureScope
+	Reason                         GatewayFailureReason
+	NextAccountAction              NextAccountAction
+	ClientStatusCode               int
+	ClientMessage                  string
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -660,6 +662,9 @@ func (e *UpstreamFailoverError) IsCredentialFailure() bool {
 // and inference failures retain their existing scheduler-health behavior.
 func (e *UpstreamFailoverError) ShouldReportAccountScheduleFailure() bool {
 	if e == nil {
+		return false
+	}
+	if e.SuppressAccountScheduleFailure {
 		return false
 	}
 	return !e.IsCredentialFailure() || e.Scope == GatewayFailureScopeAccount

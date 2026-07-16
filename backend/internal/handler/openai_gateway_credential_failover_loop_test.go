@@ -239,6 +239,18 @@ func (r *grokCredentialHandlerRepo) rateLimitedAccountIDs() []int64 {
 	return append([]int64(nil), r.rateLimitIDs...)
 }
 
+func (r *grokCredentialHandlerRepo) tempUnschedulableAccountIDs() []int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]int64(nil), r.setTempIDs...)
+}
+
+func (r *grokCredentialHandlerRepo) updatedExtraAccountIDs() []int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]int64(nil), r.updateExtraIDs...)
+}
+
 type grokCredentialHandlerTokenCache struct {
 	service.GrokTokenCache
 	mu        sync.Mutex
@@ -319,7 +331,16 @@ type grokCredentialHandlerUpstream struct {
 	failAccountID int64
 	rateLimitIDs  map[int64]bool
 	failureStatus map[int64]int
+	fastFailures  map[int64]*grokFastFailureScript
 	cancelRequest context.CancelFunc
+	opsEvents     []*service.OpsUpstreamErrorEvent
+}
+
+type grokFastFailureScript struct {
+	statusCode  int
+	contentType string
+	body        string
+	remaining   int // -1 means every request fails.
 }
 
 func (u *grokCredentialHandlerUpstream) Do(req *http.Request, _ string, accountID int64, _ int) (*http.Response, error) {
@@ -334,8 +355,30 @@ func (u *grokCredentialHandlerUpstream) Do(req *http.Request, _ string, accountI
 	failAccountID := u.failAccountID
 	rateLimited := u.rateLimitIDs[accountID]
 	failureStatus := u.failureStatus[accountID]
+	fastFailure := u.fastFailures[accountID]
+	var fastStatus int
+	var fastContentType, fastBody string
+	if fastFailure != nil && fastFailure.remaining != 0 {
+		fastStatus = fastFailure.statusCode
+		fastContentType = fastFailure.contentType
+		fastBody = fastFailure.body
+		if fastFailure.remaining > 0 {
+			fastFailure.remaining--
+		}
+	}
 	cancelRequest := u.cancelRequest
 	u.mu.Unlock()
+	if fastStatus > 0 {
+		return &http.Response{
+			StatusCode: fastStatus,
+			Header: http.Header{
+				"Content-Type": []string{fastContentType},
+				"Retry-After":  []string{"0"},
+				"X-Request-Id": []string{"grok-fast-transient"},
+			},
+			Body: io.NopCloser(strings.NewReader(fastBody)),
+		}, nil
+	}
 	if rateLimited {
 		return &http.Response{
 			StatusCode: http.StatusTooManyRequests,
@@ -400,6 +443,12 @@ func (u *grokCredentialHandlerUpstream) requests() ([]string, []string) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	return append([]string(nil), u.requestURLs...), append([]string(nil), u.authorization...)
+}
+
+func (u *grokCredentialHandlerUpstream) capturedOpsEvents() []*service.OpsUpstreamErrorEvent {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]*service.OpsUpstreamErrorEvent(nil), u.opsEvents...)
 }
 
 func TestResponsesCredentialFailoverLoop(t *testing.T) {
@@ -594,6 +643,122 @@ func TestResponsesGrok429FailoverIsBounded(t *testing.T) {
 	})
 }
 
+func TestResponsesGrokFastTransientRetryPolicy(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("capacity retries same account three times then one different account", func(t *testing.T) {
+		h, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_first")
+		defer cleanup()
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"grok","input":"hello","stream":false}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		router.ServeHTTP(recorder, req)
+
+		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+		require.Empty(t, repo.updatedExtraAccountIDs())
+		metrics := h.gatewayService.SnapshotOpenAIAccountSchedulerMetrics()
+		require.Zero(t, metrics.RuntimeStatsAccountCount, "capacity failures must not enter scheduler health stats")
+	})
+
+	t.Run("capacity recovery on the third retry never switches account", func(t *testing.T) {
+		_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_recovers")
+		defer cleanup()
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"grok","input":"hello","stream":false}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		router.ServeHTTP(recorder, req)
+
+		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		require.Equal(t, []int64{801, 801, 801, 801}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+	})
+
+	t.Run("two capacity accounts stop after exactly one followup attempt", func(t *testing.T) {
+		h, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_all")
+		defer cleanup()
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"grok","input":"hello","stream":false}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		router.ServeHTTP(recorder, req)
+
+		require.Equal(t, http.StatusTooManyRequests, recorder.Code, recorder.Body.String())
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+		require.Empty(t, repo.updatedExtraAccountIDs())
+		metrics := h.gatewayService.SnapshotOpenAIAccountSchedulerMetrics()
+		require.Zero(t, metrics.RuntimeStatsAccountCount, "capacity failures must not enter scheduler health stats")
+		events := upstream.capturedOpsEvents()
+		require.Len(t, events, 5)
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, []int64{
+			events[0].AccountID, events[1].AccountID, events[2].AccountID, events[3].AccountID, events[4].AccountID,
+		})
+		for index, event := range events {
+			require.Equal(t, http.StatusTooManyRequests, event.UpstreamStatusCode)
+			require.Equal(t, index+1, event.RetryAttempt)
+			require.Equal(t, `{"code":"Some resource has been exhausted","error":"The service is temporarily at capacity. Please retry your request shortly."}`, event.UpstreamResponseBody)
+			require.Equal(t, []string{"grok-fast-transient"}, event.UpstreamResponseHeaders["X-Request-Id"])
+		}
+		require.Equal(t, "primary", events[0].RetryPhase)
+		require.Equal(t, "primary", events[3].RetryPhase)
+		require.Equal(t, "account_followup", events[4].RetryPhase)
+	})
+
+	t.Run("connection 503 uses the same bounded immediate retry sequence", func(t *testing.T) {
+		_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "connection_first")
+		defer cleanup()
+		recorder := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/openai/v1/responses", bytes.NewBufferString(`{"model":"grok","input":"hello","stream":false}`))
+		req.Header.Set("Content-Type", "application/json")
+
+		router.ServeHTTP(recorder, req)
+
+		require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+	})
+}
+
+func TestGrokFastTransientPolicyAcrossHTTPHandlers(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	endpoints := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "messages", method: http.MethodPost, path: "/openai/v1/messages", body: `{"model":"grok","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`},
+		{name: "chat completions bridge", method: http.MethodPost, path: "/openai/v1/chat/completions", body: `{"model":"grok","messages":[{"role":"user","content":"hello"}],"stream":false}`},
+		{name: "chat completions raw", method: http.MethodPost, path: "/openai/v1/chat/completions", body: `{"model":"grok","messages":[{"role":"user","content":"hello"}],"stop":["END"],"stream":false}`},
+		{name: "media", method: http.MethodGet, path: "/openai/v1/videos/request-1"},
+	}
+
+	for _, endpoint := range endpoints {
+		t.Run(endpoint.name, func(t *testing.T) {
+			_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_first")
+			defer cleanup()
+			recorder := httptest.NewRecorder()
+			req := httptest.NewRequest(endpoint.method, endpoint.path, bytes.NewBufferString(endpoint.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			router.ServeHTTP(recorder, req)
+
+			require.Equal(t, http.StatusOK, recorder.Code, recorder.Body.String())
+			require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+			require.Empty(t, repo.rateLimitedAccountIDs())
+			require.Empty(t, repo.tempUnschedulableAccountIDs())
+		})
+	}
+}
+
 func TestResponsesGrok429FailoverHandlesMixedStatuses(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -769,6 +934,39 @@ func TestResponsesWebSocketCredentialFailoverLoop(t *testing.T) {
 		require.Equal(t, []int64{802}, upstream.accountHits())
 	})
 
+	t.Run("capacity response retries in place then selects one healthy account", func(t *testing.T) {
+		_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_first")
+		defer cleanup()
+		conn, closeConn := dial(t, router)
+		defer closeConn()
+		writeFirst(t, conn)
+
+		readCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, payload, err := conn.Read(readCtx)
+		cancel()
+		require.NoError(t, err)
+		require.Contains(t, string(payload), "resp_healthy")
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+	})
+
+	t.Run("two capacity accounts close after the single followup", func(t *testing.T) {
+		_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "capacity_all")
+		defer cleanup()
+		conn, closeConn := dial(t, router)
+		defer closeConn()
+		writeFirst(t, conn)
+
+		readCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, _, err := conn.Read(readCtx)
+		cancel()
+		require.Error(t, err)
+		require.Equal(t, []int64{801, 801, 801, 801, 802}, upstream.accountHits())
+		require.Empty(t, repo.rateLimitedAccountIDs())
+		require.Empty(t, repo.tempUnschedulableAccountIDs())
+	})
+
 	t.Run("provider configuration stops", func(t *testing.T) {
 		_, repo, upstream, router, cleanup := newGrokCredentialFailoverHandler(t, "provider")
 		defer cleanup()
@@ -832,10 +1030,10 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 			},
 		},
 	}
-	if mode == "postmap_cancel" || mode == "first_429" || mode == "all_429" || mode == "mixed_429_500" || mode == "mixed_500_429" || mode == "oauth_429_apikey_500" {
+	if mode == "postmap_cancel" || mode == "first_429" || mode == "all_429" || mode == "mixed_429_500" || mode == "mixed_500_429" || mode == "oauth_429_apikey_500" || strings.HasPrefix(mode, "capacity_") || mode == "connection_first" {
 		accounts[0].Credentials["expires_at"] = time.Now().Add(2 * time.Hour).UTC().Format(time.RFC3339)
 	}
-	if mode == "all_429" || mode == "mixed_429_500" || mode == "mixed_500_429" || mode == "oauth_429_apikey_500" {
+	if mode == "all_429" || mode == "mixed_429_500" || mode == "mixed_500_429" || mode == "oauth_429_apikey_500" || mode == "capacity_all" {
 		accounts = append(accounts, service.Account{
 			ID: 803, Name: "untried-healthy", Platform: service.PlatformGrok, Type: service.AccountTypeOAuth,
 			Status: service.StatusActive, Schedulable: true, Concurrency: 1, Priority: 3,
@@ -887,6 +1085,28 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 	case "oauth_429_apikey_500":
 		upstream.rateLimitIDs = map[int64]bool{801: true}
 		upstream.failureStatus = map[int64]int{802: http.StatusInternalServerError}
+	case "capacity_first":
+		upstream.fastFailures = map[int64]*grokFastFailureScript{
+			801: newGrokCapacityFailureScript(-1),
+		}
+	case "capacity_recovers":
+		upstream.fastFailures = map[int64]*grokFastFailureScript{
+			801: newGrokCapacityFailureScript(3),
+		}
+	case "capacity_all":
+		upstream.fastFailures = map[int64]*grokFastFailureScript{
+			801: newGrokCapacityFailureScript(-1),
+			802: newGrokCapacityFailureScript(-1),
+		}
+	case "connection_first":
+		upstream.fastFailures = map[int64]*grokFastFailureScript{
+			801: {
+				statusCode:  http.StatusServiceUnavailable,
+				contentType: "text/plain",
+				body:        "upstream connect error or disconnect/reset before headers. reset reason: remote connection failure, transport failure reason: delayed connect error: Connection refused",
+				remaining:   -1,
+			},
+		}
 	}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
 	cfg.Gateway.MaxAccountSwitches = 3
@@ -911,6 +1131,13 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 		c.Set(string(middleware.ContextKeyAPIKey), apiKey)
 		c.Set(string(middleware.ContextKeyUser), middleware.AuthSubject{UserID: apiKey.User.ID, Concurrency: 1})
 		c.Next()
+		if rawEvents, ok := c.Get(service.OpsUpstreamErrorsKey); ok {
+			if events, valid := rawEvents.([]*service.OpsUpstreamErrorEvent); valid {
+				upstream.mu.Lock()
+				upstream.opsEvents = append([]*service.OpsUpstreamErrorEvent(nil), events...)
+				upstream.mu.Unlock()
+			}
+		}
 	})
 	router.POST("/openai/v1/responses", h.Responses)
 	router.GET("/openai/v1/responses", h.ResponsesWebSocket)
@@ -923,4 +1150,13 @@ func newGrokCredentialFailoverHandler(t *testing.T, mode string) (*OpenAIGateway
 		billingCache.Stop()
 	}
 	return h, repo, upstream, router, cleanup
+}
+
+func newGrokCapacityFailureScript(remaining int) *grokFastFailureScript {
+	return &grokFastFailureScript{
+		statusCode:  http.StatusTooManyRequests,
+		contentType: "application/json",
+		body:        `{"code":"Some resource has been exhausted","error":"The service is temporarily at capacity. Please retry your request shortly."}`,
+		remaining:   remaining,
+	}
 }

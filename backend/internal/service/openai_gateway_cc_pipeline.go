@@ -102,7 +102,7 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		}
 		upstreamDetail = truncateString(string(respBody), maxBytes)
 	}
-	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+	event := OpsUpstreamErrorEvent{
 		Platform:           account.Platform,
 		AccountID:          account.ID,
 		AccountName:        account.Name,
@@ -111,9 +111,22 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 		Kind:               "failover",
 		Message:            upstreamMsg,
 		Detail:             upstreamDetail,
-	})
+	}
+	if account.Platform == PlatformGrok {
+		appendGrokOpsUpstreamError(c, event, resp.Header, respBody)
+	} else {
+		appendOpsUpstreamError(c, event)
+	}
 	if account.Platform != PlatformGrok {
 		s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
+	} else {
+		return newGrokUpstreamFailoverError(
+			account,
+			resp.StatusCode,
+			resp.Header,
+			respBody,
+			account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+		)
 	}
 	return newOpenAIUpstreamFailoverError(
 		resp.StatusCode,

@@ -174,7 +174,7 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	if resp.StatusCode >= 400 {
 		respBody, upstreamMsg := s.readOpenAIUpstreamError(resp)
 		if account.Platform == PlatformGrok {
-			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			appendGrokOpsUpstreamError(c, OpsUpstreamErrorEvent{
 				Platform:           account.Platform,
 				AccountID:          account.ID,
 				AccountName:        account.Name,
@@ -182,15 +182,10 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 				UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
 				Kind:               "failover",
 				Message:            upstreamMsg,
-			})
+			}, resp.Header, respBody)
 			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 			if s.shouldFailoverUpstreamError(resp.StatusCode) {
-				return nil, &UpstreamFailoverError{
-					StatusCode:             resp.StatusCode,
-					ResponseBody:           respBody,
-					ResponseHeaders:        resp.Header.Clone(),
-					RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
-				}
+				return nil, newGrokUpstreamFailoverError(account, resp.StatusCode, resp.Header, respBody, account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode))
 			}
 			return s.handleChatCompletionsErrorResponse(resp, c, account, body, billingModel)
 		}

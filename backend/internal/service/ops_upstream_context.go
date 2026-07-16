@@ -16,6 +16,8 @@ const (
 	OpsUpstreamErrorDetailKey     = "ops_upstream_error_detail"
 	OpsUpstreamErrorsKey          = "ops_upstream_errors"
 	OpsUpstreamRequestSnapshotKey = "ops_upstream_request_snapshot"
+	OpsUpstreamRetryAttemptKey    = "ops_upstream_retry_attempt"
+	OpsUpstreamRetryPhaseKey      = "ops_upstream_retry_phase"
 
 	// Optional stage latencies (milliseconds) for troubleshooting and alerting.
 	OpsAuthLatencyMsKey      = "ops_auth_latency_ms"
@@ -53,6 +55,21 @@ const (
 	OpsClientBusinessLimitedReasonLocalFeatureGate       = "local_feature_gate"
 	OpsClientBusinessLimitedReasonLocalPolicyDenied      = "local_policy_denied"
 )
+
+// SetOpsUpstreamRetryMetadata annotates per-attempt Ops events. Passing a
+// non-positive attempt clears the metadata for subsequent unrelated events.
+func SetOpsUpstreamRetryMetadata(c *gin.Context, attempt int, phase string) {
+	if c == nil {
+		return
+	}
+	if attempt <= 0 {
+		c.Set(OpsUpstreamRetryAttemptKey, 0)
+		c.Set(OpsUpstreamRetryPhaseKey, "")
+		return
+	}
+	c.Set(OpsUpstreamRetryAttemptKey, attempt)
+	c.Set(OpsUpstreamRetryPhaseKey, strings.TrimSpace(phase))
+}
 
 func MarkResponseCommitted(c *gin.Context) { c.Set(ResponseCommittedKey, true) }
 
@@ -184,8 +201,14 @@ type OpsUpstreamErrorEvent struct {
 	// Helps debug 404/routing errors by showing which endpoint was targeted.
 	UpstreamURL string `json:"upstream_url,omitempty"`
 
-	// Best-effort upstream response capture (sanitized+trimmed).
+	// Bounded upstream response capture. Callers decide whether raw retention is safe.
 	UpstreamResponseBody string `json:"upstream_response_body,omitempty"`
+	// Diagnostic response headers are restricted to an explicit allowlist.
+	UpstreamResponseHeaders map[string][]string `json:"upstream_response_headers,omitempty"`
+	// Retry metadata identifies zero-delay same-account attempts and the single
+	// cross-account follow-up in the stored attempt sequence.
+	RetryAttempt int    `json:"retry_attempt,omitempty"`
+	RetryPhase   string `json:"retry_phase,omitempty"`
 
 	// Kind: http_error | request_error | retry_exhausted | failover
 	Kind string `json:"kind,omitempty"`
@@ -210,7 +233,21 @@ func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
 	}
 	ev.Platform = strings.TrimSpace(ev.Platform)
 	ev.UpstreamRequestID = strings.TrimSpace(ev.UpstreamRequestID)
-	ev.UpstreamResponseBody = strings.TrimSpace(ev.UpstreamResponseBody)
+	ev.RetryPhase = strings.TrimSpace(ev.RetryPhase)
+	if ev.RetryAttempt <= 0 {
+		if value, ok := c.Get(OpsUpstreamRetryAttemptKey); ok {
+			if attempt, valid := value.(int); valid && attempt > 0 {
+				ev.RetryAttempt = attempt
+			}
+		}
+	}
+	if ev.RetryPhase == "" {
+		if value, ok := c.Get(OpsUpstreamRetryPhaseKey); ok {
+			if phase, valid := value.(string); valid {
+				ev.RetryPhase = strings.TrimSpace(phase)
+			}
+		}
+	}
 	ev.Kind = strings.TrimSpace(ev.Kind)
 	ev.Stage = strings.TrimSpace(ev.Stage)
 	ev.Scope = strings.TrimSpace(ev.Scope)

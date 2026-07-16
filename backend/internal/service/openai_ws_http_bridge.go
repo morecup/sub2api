@@ -223,29 +223,89 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	}
 
 	turnStart := time.Now()
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
-	if err != nil {
-		safeErr := sanitizeUpstreamErrorMessage(err.Error())
-		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(http.StatusBadGateway, safeErr))
-		return nil, fmt.Errorf("upstream http bridge request failed: %s", safeErr)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, openAIWSHTTPBridgeErrorBodyLimitBytes))
-		if account.Platform == PlatformGrok {
-			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
-		} else if shouldCooldownOpenAITransientUpstreamError(resp.StatusCode, respBody) {
-			canonicalModel := canonicalOpenAIAccountSchedulingModel(account, originalModel)
-			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, canonicalModel)
+	maxAttempts := 1
+	retryPhase := "primary"
+	if account.Platform == PlatformGrok {
+		maxAttempts = 1 + GrokFastSameAccountRetryCount
+		if turn > 1 {
+			retryPhase = "connection_turn"
+		} else if isGrokFastRetryFollowup(c) {
+			maxAttempts = 1
+			retryPhase = "account_followup"
 		}
+		defer SetOpsUpstreamRetryMetadata(c, 0, "")
+	}
+
+	var resp *http.Response
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		requestForAttempt := upstreamReq
+		if attempt > 1 {
+			if upstreamReq.GetBody == nil {
+				return nil, errors.New("upstream http bridge request body cannot be replayed")
+			}
+			requestForAttempt = upstreamReq.Clone(upstreamReq.Context())
+			requestForAttempt.Body, err = upstreamReq.GetBody()
+			if err != nil {
+				return nil, fmt.Errorf("replay upstream http bridge request body: %w", err)
+			}
+		}
+		if account.Platform == PlatformGrok {
+			SetOpsUpstreamRetryMetadata(c, attempt, retryPhase)
+		}
+		resp, err = s.httpUpstream.Do(requestForAttempt, proxyURL, account.ID, account.Concurrency)
+		if err != nil {
+			safeErr := sanitizeUpstreamErrorMessage(err.Error())
+			_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(http.StatusBadGateway, safeErr))
+			return nil, fmt.Errorf("upstream http bridge request failed: %s", safeErr)
+		}
+		if resp.StatusCode < 400 {
+			break
+		}
+
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, openAIWSHTTPBridgeErrorBodyLimitBytes))
 		upstreamMsg := sanitizeUpstreamErrorMessage(strings.TrimSpace(extractUpstreamErrorMessage(respBody)))
 		if upstreamMsg == "" {
 			upstreamMsg = http.StatusText(resp.StatusCode)
 		}
+		if account.Platform == PlatformGrok {
+			kind := "http_error"
+			if s.shouldFailoverUpstreamError(resp.StatusCode) {
+				kind = "failover"
+			}
+			appendGrokOpsUpstreamError(c, OpsUpstreamErrorEvent{
+				Platform:           account.Platform,
+				AccountID:          account.ID,
+				AccountName:        account.Name,
+				UpstreamStatusCode: resp.StatusCode,
+				UpstreamRequestID:  firstNonEmpty(resp.Header.Get("x-request-id"), resp.Header.Get("xai-request-id")),
+				Kind:               kind,
+				Message:            upstreamMsg,
+			}, resp.Header, respBody)
+			s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+			if _, fastTransient := classifyGrokFastTransientFailure(resp.StatusCode, respBody); fastTransient {
+				failoverErr := newGrokUpstreamFailoverError(account, resp.StatusCode, resp.Header, respBody, false)
+				_ = resp.Body.Close()
+				if attempt < maxAttempts {
+					continue
+				}
+				if turn > 1 {
+					// Earlier turns may already be visible to the client, so a late-turn
+					// failure cannot safely replay the connection on another account.
+					failoverErr.NextAccountAction = NextAccountStop
+					_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg))
+				}
+				return nil, failoverErr
+			}
+		} else if shouldCooldownOpenAITransientUpstreamError(resp.StatusCode, respBody) {
+			canonicalModel := canonicalOpenAIAccountSchedulingModel(account, originalModel)
+			s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, canonicalModel)
+		}
+		_ = resp.Body.Close()
 		_ = writeClientMessage(buildOpenAIWSHTTPBridgeErrorEvent(resp.StatusCode, upstreamMsg))
 		return nil, fmt.Errorf("upstream http bridge error: status=%d message=%s", resp.StatusCode, upstreamMsg)
 	}
+	defer func() { _ = resp.Body.Close() }()
+
 	if account.Platform == PlatformGrok {
 		s.updateGrokUsageFromResponse(ctx, account, resp.Header, resp.StatusCode)
 	}

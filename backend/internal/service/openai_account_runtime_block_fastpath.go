@@ -18,11 +18,29 @@ const (
 	openAIOAuth429StormMaxAccountSwitches = 1
 )
 
-// OpenAIOAuth429FailoverState tracks the request-local follow-up budget after
-// the first Grok OAuth 429. Once that 429 occurs, exactly one different account
-// may be attempted; any failure from that follow-up account ends failover.
+// OpenAIOAuth429FailoverState tracks the request-local follow-up budget after a
+// Grok OAuth quota 429 or a classified capacity/connection response. Once armed,
+// exactly one different account may be attempted; any failure there ends failover.
 type OpenAIOAuth429FailoverState struct {
-	grokOAuth429FollowupPending bool
+	grokOAuth429FollowupPending      bool
+	grokFastTransientFollowupPending bool
+	grokUpstreamAttemptCount         int
+}
+
+// GrokFollowupPending reports whether the request is currently spending its
+// single cross-account follow-up. A follow-up account must only be called once.
+func (state *OpenAIOAuth429FailoverState) GrokFollowupPending() bool {
+	return state != nil && (state.grokOAuth429FollowupPending || state.grokFastTransientFollowupPending)
+}
+
+// NextGrokUpstreamAttempt returns a request-local sequence number used by Ops
+// diagnostics to reconstruct every immediate retry and the final account switch.
+func (state *OpenAIOAuth429FailoverState) NextGrokUpstreamAttempt() int {
+	if state == nil {
+		return 1
+	}
+	state.grokUpstreamAttemptCount++
+	return state.grokUpstreamAttemptCount
 }
 
 func openAIAccountStateContext(ctx context.Context) (context.Context, context.CancelFunc) {
@@ -335,4 +353,28 @@ func (s *OpenAIGatewayService) ShouldStopOpenAIOAuth429Failover(account *Account
 		return false
 	}
 	return s.isOpenAIOAuth429Storm()
+}
+
+// ShouldStopOpenAIUpstreamFailover extends the legacy OAuth-429 limiter with
+// the Grok fast-transient contract:
+//   - the first account gets its immediate retries inside the handler slot;
+//   - exactly one different account may then be attempted once;
+//   - any failure from that follow-up account ends failover.
+func (s *OpenAIGatewayService) ShouldStopOpenAIUpstreamFailover(account *Account, failoverErr *UpstreamFailoverError, failedSwitches int, state *OpenAIOAuth429FailoverState) bool {
+	if failoverErr == nil || failedSwitches < openAIOAuth429StormMaxAccountSwitches {
+		return false
+	}
+	if state != nil && state.GrokFollowupPending() {
+		return true
+	}
+	if account != nil && account.Platform == PlatformGrok && failoverErr.IsGrokFastTransient() {
+		if state == nil {
+			// Compatibility for callers that have not adopted request-local state:
+			// one failed switch is allowed, the next failure stops.
+			return failedSwitches >= openAIOAuth429StormMaxAccountSwitches+1
+		}
+		state.grokFastTransientFollowupPending = true
+		return false
+	}
+	return s.ShouldStopOpenAIOAuth429Failover(account, failoverErr.StatusCode, failedSwitches, state)
 }
