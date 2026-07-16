@@ -142,6 +142,7 @@ docs/*
 docs/claude-code-cli-capture/*
 !docs/claude-code-cli-capture/README.md
 !docs/claude-code-cli-capture/PROFILE_NORMALIZATION_GUIDE.md
+!docs/ASYNC_IMAGE_TASKS.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

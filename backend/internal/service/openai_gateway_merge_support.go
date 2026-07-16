@@ -57,7 +57,9 @@ func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
 	if strings.TrimSpace(gjson.GetBytes(payload, "type").String()) != "error" {
 		return false
 	}
-	return openAIStreamFailedEventShouldFailover(payload, message)
+	// type=error 也可能是已经可安全转发给客户端的终止事件；仅对 morecup
+	// 原本要处理的瞬时过载/可重试错误换号，避免把普通 error 事件误判为 failover。
+	return isOpenAITransientProcessingError(http.StatusBadRequest, message, payload)
 }
 
 func openAIStreamEventRetryableOnSameAccount(account *Account, statusCode int, payload []byte, message string) bool {

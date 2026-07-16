@@ -409,8 +409,8 @@ func (s *GatewayService) getBetaHeader(modelID string, clientBetaHeader string) 
 		return claude.BetaOAuth + "," + clientBetaHeader
 	}
 
-	// 客户端没传，根据模型生成
-	// haiku 模型不需要 claude-code beta
+	// OAuth 真实客户端透传且客户端没传 beta 时，根据模型生成默认值。
+	// Haiku 的透传默认值不补 claude-code beta；mimic 路径不会调用本分支。
 	if strings.Contains(strings.ToLower(modelID), "haiku") {
 		return claude.HaikuBetaHeader
 	}
@@ -538,8 +538,10 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 		classification := classifyClaudeMessagesBody(body)
 		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
 		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
-		if shouldMimicClaudeCode && !classification.isClaudeCodeFamily() {
-			requiredBetas = append(claude.ClaudeCodeMainBetasForModel(modelID), requiredBetas...)
+		if shouldMimicClaudeCode {
+			// mimic 路径对所有模型（包括 Haiku）注入完整 Claude Code beta 集合；
+			// body profile 额外需要的能力位仍然合并保留。
+			requiredBetas = append(claude.FullClaudeCodeMimicryBetas(), requiredBetas...)
 		}
 		return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
 	}
@@ -562,8 +564,8 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 // 计算纯函数。语义与 computeFinalAnthropicBeta 对齐，但备份了 count_tokens 独有的
 // 两条特殊规则：
 //
-//   - OAuth mimic：requiredBetas 为 FullClaudeCodeMimicryBetas + BetaTokenCounting
-//     （与 messages 不同的是：不按 haiku 排除；count_tokens 始终携带 token-counting beta）
+//   - OAuth mimic：requiredBetas 为 FullClaudeCodeMimicryBetas + BetaTokenCounting；
+//     count_tokens 另外保留客户端 beta，而 messages mimic 会忽略客户端 beta。
 //   - OAuth 透传 + 客户端未传 anthropic-beta：补齐 CountTokensBetaHeader
 //   - OAuth 透传 + 客户端传了：补齐 BetaTokenCounting（如果未含）
 //
@@ -585,8 +587,8 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 		classification := classifyClaudeMessagesBody(body)
 		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
 		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
-		if shouldMimicClaudeCode && !classification.isClaudeCodeFamily() {
-			requiredBetas = append(claude.ClaudeCodeMainBetasForModel(modelID), requiredBetas...)
+		if shouldMimicClaudeCode {
+			requiredBetas = append(claude.FullClaudeCodeMimicryBetas(), requiredBetas...)
 		}
 		requiredBetas = append(requiredBetas, claude.BetaTokenCounting)
 		return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
