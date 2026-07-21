@@ -1278,26 +1278,31 @@ func ensureCodexReasoningInclude(reqBody map[string]any) bool {
 }
 
 // applyCodexClientMetadata 写入 Desktop 0.144 的 client_metadata 画像。
+// installationID 为按账号派生的安装标识；去空白后为空时，若 turnMetadata 可解析且含
+// installation_id 则用之，否则回退实抓固定值 codexInstallationID。
 // 未提供 turn metadata 时保留旧行为，只注入 installation id；提供时把 header 中的
 // session/thread/turn/window 标识同步进 body，确保同一请求不存在两套身份元数据。
-func applyCodexClientMetadata(reqBody map[string]any, turnMetadata ...string) bool {
+func applyCodexClientMetadata(reqBody map[string]any, installationID string, turnMetadata ...string) bool {
 	if reqBody == nil {
 		return false
 	}
 
-	values := map[string]string{
-		"x-codex-installation-id": codexInstallationID,
-	}
+	installationID = strings.TrimSpace(installationID)
+	values := map[string]string{}
 	if len(turnMetadata) > 0 {
 		metadata := strings.TrimSpace(turnMetadata[0])
 		if metadata != "" {
 			var parsed struct {
-				SessionID string `json:"session_id"`
-				ThreadID  string `json:"thread_id"`
-				TurnID    string `json:"turn_id"`
-				WindowID  string `json:"window_id"`
+				InstallationID string `json:"installation_id"`
+				SessionID      string `json:"session_id"`
+				ThreadID       string `json:"thread_id"`
+				TurnID         string `json:"turn_id"`
+				WindowID       string `json:"window_id"`
 			}
 			if err := json.Unmarshal([]byte(metadata), &parsed); err == nil {
+				if installationID == "" {
+					installationID = strings.TrimSpace(parsed.InstallationID)
+				}
 				values["session_id"] = parsed.SessionID
 				values["thread_id"] = parsed.ThreadID
 				values["turn_id"] = parsed.TurnID
@@ -1306,6 +1311,10 @@ func applyCodexClientMetadata(reqBody map[string]any, turnMetadata ...string) bo
 			}
 		}
 	}
+	if installationID == "" {
+		installationID = codexInstallationID
+	}
+	values["x-codex-installation-id"] = installationID
 
 	var clientMetadata map[string]any
 	switch existing := reqBody["client_metadata"].(type) {
@@ -1343,7 +1352,7 @@ func applyCodexClientMetadataBytes(body []byte, turnMetadata string) ([]byte, bo
 	if err := json.Unmarshal(body, &reqBody); err != nil {
 		return body, false, err
 	}
-	if !applyCodexClientMetadata(reqBody, turnMetadata) {
+	if !applyCodexClientMetadata(reqBody, "", turnMetadata) {
 		return body, false, nil
 	}
 	updated, err := json.Marshal(reqBody)

@@ -555,9 +555,15 @@ func extractOpenAIRequestMetaFromBody(body []byte) (model string, stream bool, p
 // normalizeOpenAIPassthroughOAuthBody 将透传 OAuth 请求体收敛为旧链路关键行为：
 // 1) 删除 ChatGPT internal API 不支持的顶层 Responses 参数
 // 2) store=false 3) 非 compact 保持 stream=true；compact 强制 stream=false
-func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, bool, error) {
+// installationID 为按账号派生的安装标识，为空时回退实抓固定值 codexInstallationID。
+func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool, installationID string) ([]byte, bool, error) {
 	if len(body) == 0 {
 		return body, false, nil
+	}
+
+	installationID = strings.TrimSpace(installationID)
+	if installationID == "" {
+		installationID = codexInstallationID
 	}
 
 	normalized := body
@@ -609,8 +615,8 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool) ([]byte, boo
 			normalized = next
 			changed = true
 		}
-		if installationID := gjson.GetBytes(normalized, "client_metadata.x-codex-installation-id"); !installationID.Exists() || strings.TrimSpace(installationID.String()) != codexInstallationID {
-			next, err := sjson.SetBytes(normalized, "client_metadata.x-codex-installation-id", codexInstallationID)
+		if installationIDValue := gjson.GetBytes(normalized, "client_metadata.x-codex-installation-id"); !installationIDValue.Exists() || strings.TrimSpace(installationIDValue.String()) != installationID {
+			next, err := sjson.SetBytes(normalized, "client_metadata.x-codex-installation-id", installationID)
 			if err != nil {
 				return body, false, fmt.Errorf("normalize passthrough body codex installation id: %w", err)
 			}

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -28,7 +29,8 @@ const (
 	codexResponsesIncludeTimingMetricsValue = "true"
 	// codexDesktopOriginator 对应 originator 头（实抓：Desktop App 为 "Codex Desktop"）。
 	codexDesktopOriginator = "Codex Desktop"
-	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段（实抓固定值）。
+	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段的兜底值（实抓固定值），
+	// 正常路径按账号确定性派生，仅在无法派生时使用。
 	codexInstallationID = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
 	// Windows 桌面端 attestation signals（当前机器实抓画像）。
 	codexAttestationBundleID      = "com.openai.codex"
@@ -131,6 +133,22 @@ var codexMimicStripInboundHeaders = []string{
 	"x-codex-turn-state",
 }
 
+// codexInstallationIDForAccount 按账号确定性派生 installation_id（UUIDv5），
+// 避免所有账号共用同一安装标识形成关联指纹。种子优先取 sub2api 账号 ID，
+// 其次上游 chatgpt-account-id；均不可用时回退实抓固定值 codexInstallationID。
+func codexInstallationIDForAccount(accountID int64, chatgptAccountID string) string {
+	seed := ""
+	if accountID > 0 {
+		seed = fmt.Sprintf("account:%d", accountID)
+	} else if trimmed := strings.TrimSpace(chatgptAccountID); trimmed != "" {
+		seed = "chatgpt:" + trimmed
+	}
+	if seed == "" {
+		return codexInstallationID
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-installation:"+seed)).String()
+}
+
 // generateCodexSessionUUID 由 (apiKeyID, seed) 确定性派生一个合法 UUIDv7 形态的会话标识。
 //
 // 设计目标（与真实 Codex 的进程级 session UUID 对齐）：
@@ -179,13 +197,16 @@ func extractCodexWorkspaces(turnMetadata string) map[string]any {
 // 注意：0.144 新增 thread_source="user"，移除了旧画像中的 workspace_kind。
 // workspaces 优先使用入站 x-codex-turn-metadata 中的客户端值（代理端无法获知本地 git 信息），
 // 未提供时回退空对象 {} 以保持字段集合一致。
-func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any) string {
+func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
 	turnID := sessionUUID
 	if v, err := uuid.NewV7(); err == nil {
 		turnID = v.String()
 	}
 	if workspaces == nil {
 		workspaces = map[string]any{}
+	}
+	if strings.TrimSpace(installationID) == "" {
+		installationID = codexInstallationID
 	}
 	meta := struct {
 		InstallationID      string         `json:"installation_id"`
@@ -199,7 +220,7 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		Workspaces          map[string]any `json:"workspaces"`
 		TurnStartedAtUnixMs int64          `json:"turn_started_at_unix_ms"`
 	}{
-		InstallationID:      codexInstallationID,
+		InstallationID:      installationID,
 		SessionID:           sessionUUID,
 		ThreadID:            sessionUUID,
 		TurnID:              turnID,
@@ -221,9 +242,12 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 // 字段集合与顺序对齐 Codex Desktop App 0.144.0-alpha.4 实抓报文：
 // installation_id, session_id, thread_id, turn_id, window_id, request_kind,
 // thread_source, sandbox, workspaces。prewarm 不含 turn_started_at_unix_ms。
-func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[string]any) string {
+func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
 	if workspaces == nil {
 		workspaces = map[string]any{}
+	}
+	if strings.TrimSpace(installationID) == "" {
+		installationID = codexInstallationID
 	}
 	meta := struct {
 		InstallationID string         `json:"installation_id"`
@@ -236,7 +260,7 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[st
 		Sandbox        string         `json:"sandbox"`
 		Workspaces     map[string]any `json:"workspaces"`
 	}{
-		InstallationID: codexInstallationID,
+		InstallationID: installationID,
 		SessionID:      sessionUUID,
 		ThreadID:       sessionUUID,
 		TurnID:         "",
@@ -264,6 +288,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	}
 	authorization := strings.TrimSpace(req.Header.Get("authorization"))
 	chatgptAccountID := strings.TrimSpace(req.Header.Get("chatgpt-account-id"))
+	installationID := codexInstallationIDForAccount(apiKeyID, chatgptAccountID)
 	inboundTurnMetadata := req.Header.Get("x-codex-turn-metadata")
 	inboundWorkspaces := extractCodexWorkspaces(inboundTurnMetadata)
 	req.Header = make(http.Header)
@@ -308,7 +333,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 	// x-client-request-id 与真实 Codex 一致，取 thread-id（实抓三者同值）。
 	req.Header.Set("x-client-request-id", sessUUID)
 	req.Header.Set("x-codex-window-id", windowID)
-	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces))
+	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces, installationID))
 }
 
 // syncCodexOAuthMimicRequestBody 将非 compact OAuth 请求体中的 client_metadata
@@ -344,6 +369,7 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionS
 	}
 	authorization := strings.TrimSpace(headers.Get("authorization"))
 	chatgptAccountID := strings.TrimSpace(headers.Get("chatgpt-account-id"))
+	installationID := codexInstallationIDForAccount(apiKeyID, chatgptAccountID)
 	for key := range headers {
 		delete(headers, key)
 	}
@@ -378,7 +404,7 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionS
 	headers.Set("x-client-request-id", sessUUID)
 	headers.Set("x-codex-window-id", windowID)
 
-	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID, extractCodexWorkspaces(turnMetadata))
+	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID, extractCodexWorkspaces(turnMetadata), installationID)
 	if metadata != "" {
 		headers.Set("x-codex-turn-metadata", metadata)
 	}

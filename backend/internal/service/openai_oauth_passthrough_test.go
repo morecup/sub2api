@@ -129,7 +129,7 @@ func requireCodexDesktopBodyMetadataMatchesHeaders(t *testing.T, req *http.Reque
 	require.Equal(t, threadID, gjson.GetBytes(body, "client_metadata.thread_id").String())
 	require.Equal(t, gjson.Get(turnMetadata, "turn_id").String(), gjson.GetBytes(body, "client_metadata.turn_id").String())
 	require.Equal(t, windowID, gjson.GetBytes(body, "client_metadata.x-codex-window-id").String())
-	require.Equal(t, codexInstallationID, gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String())
+	require.Equal(t, gjson.Get(turnMetadata, "installation_id").String(), gjson.GetBytes(body, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, turnMetadata, gjson.GetBytes(body, "client_metadata.x-codex-turn-metadata").String())
 }
 
@@ -183,7 +183,8 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, sessionID, gjson.Get(meta, "thread_id").String())
 	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
-	require.Equal(t, codexInstallationID, gjson.Get(meta, "installation_id").String())
+	// installation_id 按账号派生：此处 apiKeyID=0（未设置 api_key），回退 chatgpt-account-id 种子。
+	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.Get(meta, "installation_id").String())
 	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
 	require.Equal(t, "turn", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
@@ -208,7 +209,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID, gjson.GetBytes(decodedBody, "client_metadata.session_id").String())
 	require.Equal(t, sessionID, gjson.GetBytes(decodedBody, "client_metadata.thread_id").String())
 	require.Equal(t, gjson.Get(meta, "turn_id").String(), gjson.GetBytes(decodedBody, "client_metadata.turn_id").String())
-	require.Equal(t, codexInstallationID, gjson.GetBytes(decodedBody, "client_metadata.x-codex-installation-id").String())
+	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.GetBytes(decodedBody, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, sessionID+":0", gjson.GetBytes(decodedBody, "client_metadata.x-codex-window-id").String())
 	require.Equal(t, meta, gjson.GetBytes(decodedBody, "client_metadata.x-codex-turn-metadata").String())
 
@@ -540,7 +541,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	// 其余关键字段保持原值。
 	require.Equal(t, "gpt-5.2", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
-	require.Equal(t, codexInstallationID, gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
+	// installation_id 按账号派生：最终值与 turn metadata 头一致（apiKeyID=0，取 chatgpt-account-id 种子）。
+	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.NotEqual(t, "dev-should-not-leak", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	requireCodexDesktopBodyMetadataMatchesHeaders(t, upstream.lastReq, upstream.lastBody)
 

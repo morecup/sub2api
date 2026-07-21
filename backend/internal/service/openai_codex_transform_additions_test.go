@@ -33,33 +33,33 @@ func TestEnsureCodexReasoningInclude(t *testing.T) {
 	require.Equal(t, []any{"foo", "reasoning.encrypted_content"}, body3["include"])
 }
 
-// applyCodexClientMetadata：用固定 Codex installation id 注入 installation 标识，幂等并覆盖冲突值。
+// applyCodexClientMetadata：注入 installation 标识（默认回退固定值），幂等并覆盖冲突值。
 func TestApplyCodexClientMetadata(t *testing.T) {
 	body := map[string]any{}
-	require.True(t, applyCodexClientMetadata(body))
+	require.True(t, applyCodexClientMetadata(body, ""))
 	cm, ok := body["client_metadata"].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, codexInstallationID, cm["x-codex-installation-id"])
 	// 幂等
-	require.False(t, applyCodexClientMetadata(body))
+	require.False(t, applyCodexClientMetadata(body, ""))
 
 	// 既有 client_metadata（如 turn metadata）保留，补 installation 键
 	body3 := map[string]any{"client_metadata": map[string]any{"x-codex-turn-metadata": "t"}}
-	require.True(t, applyCodexClientMetadata(body3))
+	require.True(t, applyCodexClientMetadata(body3, ""))
 	cm3, _ := body3["client_metadata"].(map[string]any)
 	require.Equal(t, "t", cm3["x-codex-turn-metadata"])
 	require.Equal(t, codexInstallationID, cm3["x-codex-installation-id"])
 
 	// 客户端传入冲突 installation id 时，由伪装层改回固定值。
 	body4 := map[string]any{"client_metadata": map[string]any{"x-codex-installation-id": "client-supplied"}}
-	require.True(t, applyCodexClientMetadata(body4))
+	require.True(t, applyCodexClientMetadata(body4, ""))
 	cm4, _ := body4["client_metadata"].(map[string]any)
 	require.Equal(t, codexInstallationID, cm4["x-codex-installation-id"])
 
 	// 0.144 完整 turn profile 会把 header metadata 同步到 body。
 	turnMetadata := `{"installation_id":"` + codexInstallationID + `","session_id":"session-1","thread_id":"thread-1","turn_id":"turn-1","window_id":"window-1","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1}`
 	body5 := map[string]any{"client_metadata": map[string]any{"keep": "value"}}
-	require.True(t, applyCodexClientMetadata(body5, turnMetadata))
+	require.True(t, applyCodexClientMetadata(body5, "", turnMetadata))
 	cm5, _ := body5["client_metadata"].(map[string]any)
 	require.Equal(t, "value", cm5["keep"])
 	require.Equal(t, "session-1", cm5["session_id"])
@@ -68,10 +68,10 @@ func TestApplyCodexClientMetadata(t *testing.T) {
 	require.Equal(t, codexInstallationID, cm5["x-codex-installation-id"])
 	require.Equal(t, "window-1", cm5["x-codex-window-id"])
 	require.Equal(t, turnMetadata, cm5["x-codex-turn-metadata"])
-	require.False(t, applyCodexClientMetadata(body5, turnMetadata))
+	require.False(t, applyCodexClientMetadata(body5, "", turnMetadata))
 
 	body6 := map[string]any{"client_metadata": map[string]any(nil)}
-	require.True(t, applyCodexClientMetadata(body6))
+	require.True(t, applyCodexClientMetadata(body6, ""))
 	cm6, _ := body6["client_metadata"].(map[string]any)
 	require.Equal(t, codexInstallationID, cm6["x-codex-installation-id"])
 }

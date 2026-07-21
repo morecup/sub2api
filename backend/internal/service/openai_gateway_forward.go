@@ -371,7 +371,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			markDecodedModified()
 		}
 		// 先补 installation 标识；buildUpstreamRequest 生成最终 turn metadata 后再同步完整 body 身份字段。
-		if !isCompactRequest && applyCodexClientMetadata(decoded) {
+		if !isCompactRequest && applyCodexClientMetadata(decoded, codexInstallationIDForAccount(account.ID, "")) {
 			markDecodedModified()
 		}
 		if codexResult.NormalizedModel != "" {

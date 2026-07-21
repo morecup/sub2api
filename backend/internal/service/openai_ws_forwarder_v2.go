@@ -148,9 +148,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			workspaces = extractCodexWorkspaces(wsHeaders.Get(openAIWSTurnMetadataHeader))
 		}
 		if sessionID != "" && windowID != "" {
-			turnMetadata = buildCodexTurnMetadata(sessionID, windowID, workspaces)
+			installationID := codexInstallationIDForAccount(account.ID, "")
+			turnMetadata = buildCodexTurnMetadata(sessionID, windowID, workspaces, installationID)
 			setOpenAIWSTurnMetadata(payload, turnMetadata)
-			applyCodexClientMetadata(payload, turnMetadata)
+			applyCodexClientMetadata(payload, installationID, turnMetadata)
 			payloadBytes = -1
 		}
 	}
