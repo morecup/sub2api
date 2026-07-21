@@ -1027,6 +1027,16 @@ func isolateOpenAISessionID(apiKeyID int64, raw string) string {
 	return fmt.Sprintf("%016x", h.Sum64())
 }
 
+// isolateOpenAISessionIDForAccount 在账号维度进一步隔离 session 标识：
+// 同一 seed 在不同上游账号下派生不同值，避免上游按 session-id 关联多个账号；
+// accountID<=0 时回退为 isolateOpenAISessionID 原行为。
+func isolateOpenAISessionIDForAccount(accountID, apiKeyID int64, raw string) string {
+	if accountID <= 0 {
+		return isolateOpenAISessionID(apiKeyID, raw)
+	}
+	return isolateOpenAISessionID(apiKeyID, fmt.Sprintf("a%d:%s", accountID, raw))
+}
+
 func logCodexCLIOnlyDetection(ctx context.Context, c *gin.Context, account *Account, apiKeyID int64, result CodexClientRestrictionDetectionResult, body []byte) {
 	if !result.Enabled {
 		return

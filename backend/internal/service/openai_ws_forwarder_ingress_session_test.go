@@ -1019,7 +1019,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_PassthroughHeade
 		t.Fatal("等待 passthrough websocket 结束超时")
 	}
 
-	wantSessionID := generateCodexSessionUUID(0, "pcache_passthrough")
+	wantSessionID := generateCodexSessionUUID(account.ID, 0, "pcache_passthrough")
 	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("session-id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get(openAIWSTurnStateHeader))

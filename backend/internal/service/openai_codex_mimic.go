@@ -149,17 +149,20 @@ func codexInstallationIDForAccount(accountID int64, chatgptAccountID string) str
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-installation:"+seed)).String()
 }
 
-// generateCodexSessionUUID 由 (apiKeyID, seed) 确定性派生一个合法 UUIDv7 形态的会话标识。
+// generateCodexSessionUUID 由 (accountID, apiKeyID, seed) 确定性派生一个合法 UUIDv7 形态的会话标识。
 //
 // 设计目标（与真实 Codex 的进程级 session UUID 对齐）：
 //   - 同一会话（同 seed）跨多轮请求恒定，保持粘性路由与上游会话连续性；
 //   - 不同 API Key 即使原始 seed 相同也派生出不同 UUID，避免跨用户会话碰撞；
+//   - 不同上游账号即使 (apiKeyID, seed) 相同也派生出不同 UUID，避免上游按
+//     session-id 关联多个账号；故障转移到别的账号时 session-id 会变
+//     （可接受，粘性路由正常路径不受影响）；
 //   - 零存储：纯哈希派生，无需缓存。
 //
 // 注：UUIDv7 前 48 位本应为生成时间戳，这里为哈希值而非真实时间；实测上游不校验，风险极低。
 // seed 为空返回空串（由调用方决定是否回退随机 UUIDv7）。
-func generateCodexSessionUUID(apiKeyID int64, seed string) string {
-	isolated := isolateOpenAISessionID(apiKeyID, seed)
+func generateCodexSessionUUID(accountID, apiKeyID int64, seed string) string {
+	isolated := isolateOpenAISessionIDForAccount(accountID, apiKeyID, seed)
 	if isolated == "" {
 		return ""
 	}
@@ -282,7 +285,7 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[st
 //
 // sessionSeed 为隔离前的原始会话种子；为空时回退随机 UUIDv7，
 // 以保证 session-id/thread-id 始终存在（与真实 Codex 行为一致）。
-func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed, originator string, isCompact bool) {
+func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, originator string, isCompact bool) {
 	if req == nil {
 		return
 	}
@@ -318,7 +321,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, apiKeyID int64, sessionSeed,
 		req.Header.Set("accept", "text/event-stream")
 	}
 
-	sessUUID := generateCodexSessionUUID(apiKeyID, sessionSeed)
+	sessUUID := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
 	if sessUUID == "" {
 		if v, err := uuid.NewV7(); err == nil {
 			sessUUID = v.String()
@@ -363,7 +366,7 @@ func syncCodexOAuthMimicRequestBody(req *http.Request, body []byte, isCompact bo
 // applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
 // WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
 // Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。
-func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionSeed, originator, turnMetadata string) {
+func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int64, sessionSeed, originator, turnMetadata string) {
 	if headers == nil {
 		return
 	}
@@ -389,7 +392,7 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, apiKeyID int64, sessionS
 	// x-oai-attestation 为 Desktop App 特有的进程级动态证明头。
 	headers.Set("x-oai-attestation", codexOAIAttestation)
 
-	sessUUID := generateCodexSessionUUID(apiKeyID, sessionSeed)
+	sessUUID := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
 	if sessUUID == "" {
 		if v, err := uuid.NewV7(); err == nil {
 			sessUUID = v.String()

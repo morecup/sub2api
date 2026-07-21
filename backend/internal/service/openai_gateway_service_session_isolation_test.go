@@ -48,3 +48,34 @@ func TestIsolateOpenAISessionID(t *testing.T) {
 		assert.NotEqual(t, result, other)
 	})
 }
+
+// isolateOpenAISessionIDForAccount：同 (apiKeyID, raw) 在不同账号下派生不同值，
+// accountID<=0 时与 isolateOpenAISessionID 完全一致。
+func TestIsolateOpenAISessionIDForAccount(t *testing.T) {
+	t.Run("different_accountID_different_result", func(t *testing.T) {
+		a := isolateOpenAISessionIDForAccount(1, 0, "same_session")
+		b := isolateOpenAISessionIDForAccount(2, 0, "same_session")
+		require.NotEqual(t, a, b, "同一 seed 在不同上游账号下应产生不同隔离值")
+	})
+
+	t.Run("zero_accountID_falls_back", func(t *testing.T) {
+		assert.Equal(t, isolateOpenAISessionID(7, "sess_x"), isolateOpenAISessionIDForAccount(0, 7, "sess_x"))
+		assert.Equal(t, isolateOpenAISessionID(7, "sess_x"), isolateOpenAISessionIDForAccount(-1, 7, "sess_x"))
+	})
+
+	t.Run("deterministic", func(t *testing.T) {
+		a := isolateOpenAISessionIDForAccount(42, 1, "sess_abc123")
+		b := isolateOpenAISessionIDForAccount(42, 1, "sess_abc123")
+		assert.Equal(t, a, b)
+	})
+}
+
+// generateCodexSessionUUID：同 seed 不同账号派生不同 UUID，同输入幂等。
+func TestGenerateCodexSessionUUIDAccountIsolation(t *testing.T) {
+	a := generateCodexSessionUUID(1, 0, "seed-1")
+	b := generateCodexSessionUUID(2, 0, "seed-1")
+	require.NotEqual(t, a, b, "同一 seed 在不同上游账号下应派生不同 session UUID")
+	require.Equal(t, a, generateCodexSessionUUID(1, 0, "seed-1"), "同输入应幂等")
+	// accountID=0 时与原 (apiKeyID, seed) 行为一致。
+	require.Equal(t, a, generateCodexSessionUUID(0, 0, "a1:seed-1"))
+}

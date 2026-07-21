@@ -133,7 +133,7 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	require.Equal(t, "account-agent-passthrough", req.Header.Get("chatgpt-account-id"))
 	require.Empty(t, req.Header.Get("session_id"))
 	require.Empty(t, req.Header.Get("conversation_id"))
-	require.Equal(t, generateCodexSessionUUID(0, "cache-agent"), req.Header.Get("Session-Id"))
+	require.Equal(t, generateCodexSessionUUID(account.ID, 0, "cache-agent"), req.Header.Get("Session-Id"))
 	require.Equal(t, req.Header.Get("Session-Id"), req.Header.Get("Thread-Id"))
 	requestBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
@@ -143,8 +143,9 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	// Authentication mode must not affect session isolation or prompt-cache
 	// behavior. Compare the same request with the existing OAuth path instead
 	// of pinning this test to an implementation-specific hash.
+	// 注：session 标识派生混入 account.ID，这里复用同一账号 ID 才能可比。
 	oauthAccount := &Account{
-		ID:       26,
+		ID:       account.ID,
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeOAuth,
 		Credentials: map[string]any{

@@ -722,7 +722,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	// session_id/conversation_id。测试中未设置 api_key 到 context，apiKeyID=0。
 	wantSessionID := captureDialer.lastHeaders.Get("session-id")
 	require.Len(t, wantSessionID, 36)
-	require.NotEqual(t, generateCodexSessionUUID(0, "sess-oauth-1"), wantSessionID)
+	require.NotEqual(t, generateCodexSessionUUID(account.ID, 0, "sess-oauth-1"), wantSessionID)
 	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("thread-id"))
 	require.Equal(t, wantSessionID, captureDialer.lastHeaders.Get("x-client-request-id"))
 	require.Equal(t, wantSessionID+":0", captureDialer.lastHeaders.Get("x-codex-window-id"))
@@ -882,7 +882,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 
 	wantSessionID := headers.Get("session-id")
 	require.Len(t, wantSessionID, 36)
-	require.NotEqual(t, generateCodexSessionUUID(0, "sess-ws-sanitize"), wantSessionID)
+	require.NotEqual(t, generateCodexSessionUUID(0, 0, "sess-ws-sanitize"), wantSessionID)
 	require.Equal(t, "Bearer oauth-token", headers.Get("authorization"))
 	require.Equal(t, "acct-ws-sanitize", headers.Get("chatgpt-account-id"))
 	require.Equal(t, openAIWSBetaV2Value, headers.Get("OpenAI-Beta"))
@@ -964,7 +964,7 @@ func TestOpenAIGatewayService_Forward_WSv2_HeaderSessionFallbackFromPromptCacheK
 	require.Equal(t, "resp_prompt_cache_key", result.RequestID)
 
 	// OAuth WS 握手使用 Codex CLI 的 session-id/thread-id 头形态（apiKeyID=0，未在 context 设置）。
-	require.Equal(t, generateCodexSessionUUID(0, "pcache_123"), captureDialer.lastHeaders.Get("session-id"))
+	require.Equal(t, generateCodexSessionUUID(account.ID, 0, "pcache_123"), captureDialer.lastHeaders.Get("session-id"))
 	require.Equal(t, captureDialer.lastHeaders.Get("session-id"), captureDialer.lastHeaders.Get("thread-id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("session_id"))
 	require.Empty(t, captureDialer.lastHeaders.Get("conversation_id"))

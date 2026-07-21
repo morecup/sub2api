@@ -1073,12 +1073,12 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				if req.Header.Get("version") == "" {
 					req.Header.Set("version", codexDesktopVersion)
 				}
-				req.Header.Set("session_id", isolateOpenAISessionID(apiKeyID, resolveOpenAICompactSessionID(c)))
+				req.Header.Set("session_id", isolateOpenAISessionIDForAccount(account.ID, apiKeyID, resolveOpenAICompactSessionID(c)))
 			} else {
 				req.Header.Set("accept", "text/event-stream")
 			}
 			if promptCacheKey != "" {
-				isolated := isolateOpenAISessionID(apiKeyID, promptCacheKey)
+				isolated := isolateOpenAISessionIDForAccount(account.ID, apiKeyID, promptCacheKey)
 				req.Header.Set("session_id", isolated)
 				if clientConversationID != "" {
 					req.Header.Set("conversation_id", isolated)
@@ -1091,7 +1091,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if seed == "" && isCompact {
 				seed = resolveOpenAICompactMimicSessionID(c)
 			}
-			applyCodexOAuthMimicHeaders(req, apiKeyID, seed, codexDesktopOriginator, isCompact)
+			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)

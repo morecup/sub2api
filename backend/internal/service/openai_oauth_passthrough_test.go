@@ -214,8 +214,8 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, meta, gjson.GetBytes(decodedBody, "client_metadata.x-codex-turn-metadata").String())
 
 	// 确定性派生：相同 (apiKeyID, seed) 复算 session-id 不变。
-	require.Equal(t, sessionID, generateCodexSessionUUID(0, "sess-seed-1"))
-	require.NotEqual(t, sessionID, generateCodexSessionUUID(0, "inbound-session-should-be-ignored"))
+	require.Equal(t, sessionID, generateCodexSessionUUID(0, 0, "sess-seed-1"))
+	require.NotEqual(t, sessionID, generateCodexSessionUUID(0, 0, "inbound-session-should-be-ignored"))
 }
 
 func TestOpenAIGatewayService_ResponsesUnknownModelDoesNotFallbackToGPT54(t *testing.T) {

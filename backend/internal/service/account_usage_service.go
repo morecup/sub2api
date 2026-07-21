@@ -729,7 +729,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	} else {
 		req.Header.Set("Authorization", "Bearer "+accessToken)
 	}
-	applyCodexOAuthMimicHeaders(req, 0, fmt.Sprintf("codex-snapshot:%d", account.ID), codexDesktopOriginator, false)
+	applyCodexOAuthMimicHeaders(req, account.ID, 0, fmt.Sprintf("codex-snapshot:%d", account.ID), codexDesktopOriginator, false)
 	payloadBytes, err = syncCodexOAuthMimicRequestBody(req, payloadBytes, false)
 	if err != nil {
 		return nil, fmt.Errorf("apply codex client metadata: %w", err)
