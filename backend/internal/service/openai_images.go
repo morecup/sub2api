@@ -652,11 +652,11 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 				Kind:               "failover",
 				Message:            upstreamMsg,
 			})
-			s.handleFailoverSideEffectsWithCodexToolFrameSuppression(upstreamCtx, resp, account, respBody, forwardBody, c, false, upstreamMsg, upstreamModel)
+			shouldDisable := s.handleFailoverSideEffectsWithCodexToolFrameSuppression(upstreamCtx, resp, account, respBody, forwardBody, c, false, upstreamMsg, upstreamModel)
 			return nil, &UpstreamFailoverError{
 				StatusCode:             resp.StatusCode,
 				ResponseBody:           respBody,
-				RetryableOnSameAccount: account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+				RetryableOnSameAccount: !shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 			}
 		}
 		return s.handleOpenAIImagesErrorResponse(upstreamCtx, resp, c, account, upstreamModel)

@@ -603,9 +603,10 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 	logOpenAIInstructionsRequiredDebug(ctx, c, account, resp.StatusCode, upstreamMsg, requestBody, body)
 	reqModel, _, _ := extractOpenAIRequestMetaFromBody(requestBody)
 	canonicalModel := canonicalOpenAIAccountSchedulingModel(account, reqModel)
+	shouldDisable := false
 	if !(resp.StatusCode == http.StatusTooManyRequests &&
 		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, true, resp.Header.Get("x-request-id"), upstreamMsg)) {
-		_ = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, canonicalModel)
+		shouldDisable = s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, canonicalModel)
 	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		Platform:             account.Platform,
@@ -625,7 +626,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		resp.Header,
 		failoverBody,
 		upstreamMsg,
-		account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
+		!shouldDisable && account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 	)
 	// API-key 自定义上游和 Agent Identity 在 failover 耗尽后也必须走净化后的
 	// 客户端信封；显式 ClientMessage 让 handler 跳过 morecup 原有的 raw failover

@@ -900,14 +900,14 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 				})
 
 				canonicalModel := canonicalOpenAIAccountSchedulingModel(account, upstreamModel)
-				s.handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx, resp, account, respBody, body, c, false, upstreamMsg, canonicalModel)
+				shouldDisable := s.handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx, resp, account, respBody, body, c, false, upstreamMsg, canonicalModel)
 				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account, body)
 				return nil, newOpenAIUpstreamFailoverError(
 					failoverStatus,
 					resp.Header,
 					failoverBody,
 					upstreamMsg,
-					account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+					!shouldDisable && account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 				)
 			}
 			return s.handleErrorResponse(ctx, resp, c, account, body, billingModel)

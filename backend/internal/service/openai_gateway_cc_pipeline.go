@@ -114,12 +114,6 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 	}
 	if account.Platform == PlatformGrok {
 		appendGrokOpsUpstreamError(c, event, resp.Header, respBody)
-	} else {
-		appendOpsUpstreamError(c, event)
-	}
-	if account.Platform != PlatformGrok {
-		s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
-	} else {
 		return newGrokUpstreamFailoverError(
 			account,
 			resp.StatusCode,
@@ -128,12 +122,14 @@ func (s *OpenAIGatewayService) failoverOpenAIUpstreamHTTPError(
 			account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode),
 		)
 	}
+	appendOpsUpstreamError(c, event)
+	shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
 	return newOpenAIUpstreamFailoverError(
 		resp.StatusCode,
 		resp.Header,
 		respBody,
 		upstreamMsg,
-		account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
+		!shouldDisable && account.IsPoolMode() && (account.IsPoolModeRetryableStatus(resp.StatusCode) || isOpenAITransientProcessingError(resp.StatusCode, upstreamMsg, respBody)),
 	)
 }
 

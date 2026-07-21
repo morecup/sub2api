@@ -45,12 +45,12 @@ func resolveAccountExtraBoolDefault(extra map[string]any, key string, defaultVal
 	return defaultValue
 }
 
-func (s *OpenAIGatewayService) handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx context.Context, resp *http.Response, account *Account, responseBody []byte, requestBody []byte, c *gin.Context, passthrough bool, upstreamMsg string, requestedModel ...string) {
+func (s *OpenAIGatewayService) handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx context.Context, resp *http.Response, account *Account, responseBody []byte, requestBody []byte, c *gin.Context, passthrough bool, upstreamMsg string, requestedModel ...string) bool {
 	if resp != nil && resp.StatusCode == http.StatusTooManyRequests &&
 		s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, requestBody, passthrough, resp.Header.Get("x-request-id"), upstreamMsg) {
-		return
+		return false
 	}
-	s.handleFailoverSideEffects(ctx, resp, account, responseBody, requestedModel...)
+	return s.handleFailoverSideEffects(ctx, resp, account, responseBody, requestedModel...)
 }
 
 func openAIStreamErrorEventShouldFailover(payload []byte, message string) bool {
