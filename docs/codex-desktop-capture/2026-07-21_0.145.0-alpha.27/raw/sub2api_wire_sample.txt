@@ -1,0 +1,79 @@
+================================================================================
+label: unknown
+POST https://chatgpt.com/backend-api/codex/responses
+--- headers ---
+Host: chatgpt.com
+User-Agent: curl/8.16.0
+Accept: */*
+Content-Type: application/json
+Content-Length: 7
+body saved: D:\language\ai\sub2api\tmp\codex_capture\bodies\sub2api_1784653150035_unknown.bin (7 bytes)
+================================================================================
+label: native
+POST https://chatgpt.com/backend-api/codex/responses
+--- headers ---
+x-openai-internal-codex-responses-lite: true
+content-type: application/json
+originator: Codex Desktop
+accept: text/event-stream
+session-id: aec5d31e-6f03-7783-a328-138593c6a554
+thread-id: aec5d31e-6f03-7783-a328-138593c6a554
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+x-codex-turn-metadata: {"installation_id":"31c001db-5fde-5245-9d24-8b625b4fabf3","session_id":"aec5d31e-6f03-7783-a328-138593c6a554","thread_id":"aec5d31e-6f03-7783-a328-138593c6a554","turn_id":"019f859e-592c-7b7f-9a57-4328b2d83197","window_id":"aec5d31e-6f03-7783-a328-138593c6a554:0","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1784653175084}
+x-oai-attestation: {"v":1,"s":1}
+x-capture-label: native
+chatgpt-account-id: acct-capture
+version: 0.145.0-alpha.27
+x-codex-beta-features: remote_compaction_v2
+x-codex-window-id: aec5d31e-6f03-7783-a328-138593c6a554:0
+content-encoding: zstd
+x-client-request-id: aec5d31e-6f03-7783-a328-138593c6a554
+authorization: Bearer fake-token
+content-length: 389
+body saved: D:\language\ai\sub2api\tmp\codex_capture\bodies\sub2api_1784653175104_native.bin (848 bytes)
+================================================================================
+label: passthrough
+POST https://chatgpt.com/backend-api/codex/responses
+--- headers ---
+authorization: Bearer fake-token
+version: 0.145.0-alpha.27
+x-openai-internal-codex-responses-lite: true
+thread-id: 019f859e-5941-7739-a494-c53bae6e9a1b
+x-client-request-id: 019f859e-5941-7739-a494-c53bae6e9a1b
+content-type: application/json
+originator: Codex Desktop
+chatgpt-account-id: acct-capture
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+session-id: 019f859e-5941-7739-a494-c53bae6e9a1b
+content-encoding: zstd
+x-capture-label: passthrough
+x-codex-beta-features: remote_compaction_v2
+x-oai-attestation: {"v":1,"s":1}
+accept: text/event-stream
+x-codex-window-id: 019f859e-5941-7739-a494-c53bae6e9a1b:0
+x-codex-turn-metadata: {"installation_id":"31c001db-5fde-5245-9d24-8b625b4fabf3","session_id":"019f859e-5941-7739-a494-c53bae6e9a1b","thread_id":"019f859e-5941-7739-a494-c53bae6e9a1b","turn_id":"019f859e-5941-773a-8620-4002d07abf61","window_id":"019f859e-5941-7739-a494-c53bae6e9a1b:0","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1784653175105}
+content-length: 378
+body saved: D:\language\ai\sub2api\tmp\codex_capture\bodies\sub2api_1784653175107_passthrough.bin (848 bytes)
+================================================================================
+label: compact
+POST https://chatgpt.com/backend-api/codex/responses/compact
+--- headers ---
+content-type: application/json
+originator: Codex Desktop
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGQevBfs_-AAAAAAAAAZ4JDYyMTU3NTBlLTVmY2EtNDI1Ny1iZTIxLWJjNDliOTZkNTEzZg"}
+session-id: aec5d31e-6f03-7783-a328-138593c6a554
+authorization: Bearer fake-token
+chatgpt-account-id: acct-capture
+accept: application/json
+thread-id: aec5d31e-6f03-7783-a328-138593c6a554
+x-capture-label: compact
+x-client-request-id: aec5d31e-6f03-7783-a328-138593c6a554
+x-codex-turn-metadata: {"installation_id":"31c001db-5fde-5245-9d24-8b625b4fabf3","session_id":"aec5d31e-6f03-7783-a328-138593c6a554","thread_id":"aec5d31e-6f03-7783-a328-138593c6a554","turn_id":"019f859e-5943-7c76-92a1-0bf5a6700c61","window_id":"aec5d31e-6f03-7783-a328-138593c6a554:0","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1784653175107}
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+version: 0.145.0-alpha.27
+x-codex-beta-features: remote_compaction_v2
+x-codex-window-id: aec5d31e-6f03-7783-a328-138593c6a554:0
+content-encoding: zstd
+x-openai-internal-codex-responses-lite: true
+content-length: 119
+body saved: D:\language\ai\sub2api\tmp\codex_capture\bodies\sub2api_1784653175109_compact.bin (106 bytes)

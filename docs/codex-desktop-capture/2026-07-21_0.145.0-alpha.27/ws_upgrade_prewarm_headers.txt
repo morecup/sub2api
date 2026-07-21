@@ -1,0 +1,73 @@
+================================================================================
+Codex Desktop App — 0.145.0-alpha.27 实抓
+================================================================================
+捕获时间: 2026-07-22 00:20 (+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.715.8383.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.145.0-alpha.27
+抓包方式: mitmproxy (upstream 经 Clash) + 拦截 WS 升级返回 426 -> HTTP POST SSE 回退
+账号: josephcase5093@outlook.com (free 计划, chatgpt-account-id 681acc35-fe86-4c98-971e-4915f69da761)
+说明: 测试 free 账号，未脱敏，含原始 authorization / cookie
+
+## WS 升级请求（prewarm，被 426 拦截）
+## 注意 0.145 prewarm 新增 thread_source / sandbox / workspaces 字段
+
+================================================================================
+捕获时间: 2026-07-22T00:20:02.803648+08:00
+备注: WS upgrade intercepted -> 426
+================================================================================
+GET https://chatgpt.com/backend-api/codex/responses
+
+--- Request Headers (wire order) ---
+Host: chatgpt.com
+Connection: Upgrade
+Upgrade: websocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: pkFmzt9meDdJk42U1zUiIg==
+chatgpt-account-id: 681acc35-fe86-4c98-971e-4915f69da761
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IldjNzdXREtWTkN2N1ZYSGxqZUhzZjZZUjFhM3I3MmxYMnhJdG9zaVF4NHciLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJvdHAiLCJ1cm46b3BlbmFpOmFtcjpvdHBfZW1haWwiXSwiY2hhdGdwdF9hY2NvdW50X2lkIjoiNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTl9fNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6ImZyZWUiLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTiIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1jQTk1algzcWJpejVzV1NCVHk5RU9WN04iLCJ1c2VyX2lkIjoidXNlci12akJCMmRrRGNnazdGYWpMT3pVRE1oT04ifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoiam9zZXBoY2FzZTUwOTNAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlNhcmFoIEFuZGVyc29uIn0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4NDY0MTM4ODUyOCwic2NwIjpbIm9wZW5pZCIsImVtYWlsIiwicHJvZmlsZSIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19VRFpmVXVJenpyY210YUZ1SkdRa3hjWWYiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8OWZ2YlVaMDZ5WEl3Tk96RDhsbk84cjM5IiwiaWF0IjoxNzg0NjQxMzkxLCJleHAiOjE3ODU1MDUzOTEsImp0aSI6ImM0MzA3MWNmZGMxZTQwMjRhYjY3Njk2MTc2MzI3ZTczIiwibmJmIjoxNzg0NjQxMzkxfQ.wuW94mRygpdhq7K8LVrJv6Y5USuV-59iVl_ScQ-fHahUvlnHD5geIIHJ_Qt5r1BXJkUMp398eOZpXMmclpeR6f2ndQIbsX6pKf-ip21fBOeTq6tTk7PTihplOh83zFHTqu5Jh8Q1njwzBWVYTQktwM4ZiRoo07t6p1LPuKbIKgzO_044nHjrdKFy5ZGjLKBdAJMPkYiQMe5qU8pLcb9Ejw67osBhc8wA5dezqLbXB_z4nD7kNzSjf3R77ohD8g_d1faLWYlB33Q254dVzGM_iZQZ_qmCTBaJrzT2Pe0mR2nYD9l0YOFWCiJi9UUZ_1C2MtgzV9aVoYF8KMq8V_ddkw
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+originator: Codex Desktop
+openai-beta: responses_websockets=2026-02-06
+version: 0.145.0-alpha.27
+x-codex-beta-features: remote_compaction_v2
+x-client-request-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+session-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+thread-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+x-codex-window-id: 019f857a-1d91-7022-b17f-0a083ca773d3:0
+x-codex-turn-metadata: {"installation_id":"45a2a391-c77b-4255-bd18-ec6585db9187","session_id":"019f857a-1d91-7022-b17f-0a083ca773d3","thread_id":"019f857a-1d91-7022-b17f-0a083ca773d3","turn_id":"","window_id":"019f857a-1d91-7022-b17f-0a083ca773d3:0","request_kind":"prewarm","thread_source":"user","sandbox":"none","workspaces":{"D:\\language\\ai\\grok2api":{"associated_remote_urls":{"origin":"https://github.com/chenyme/grok2api.git"},"latest_git_commit_hash":"8f27a830e6af85228e29a6b386c1bbe2e03cfb9d","has_changes":true}}}
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWE6nAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGRMQBQEGeCRkMDBiNzBhYi0zZDVjLTQzZDMtODI0Mi00ZDhlYmE1YWU2OTc"}
+sec-websocket-extensions: permessage-deflate; client_max_window_bits
+
+--- Request Body ---
+(empty)
+
+================================================================================
+捕获时间: 2026-07-22T00:20:02.948056+08:00
+备注: WS upgrade intercepted -> 426
+================================================================================
+GET https://chatgpt.com/backend-api/codex/responses
+
+--- Request Headers (wire order) ---
+Host: chatgpt.com
+Connection: Upgrade
+Upgrade: websocket
+Sec-WebSocket-Version: 13
+Sec-WebSocket-Key: JRMTibL6ElHz6LsoIdjU9Q==
+chatgpt-account-id: 681acc35-fe86-4c98-971e-4915f69da761
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IldjNzdXREtWTkN2N1ZYSGxqZUhzZjZZUjFhM3I3MmxYMnhJdG9zaVF4NHciLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJvdHAiLCJ1cm46b3BlbmFpOmFtcjpvdHBfZW1haWwiXSwiY2hhdGdwdF9hY2NvdW50X2lkIjoiNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTl9fNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6ImZyZWUiLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTiIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1jQTk1algzcWJpejVzV1NCVHk5RU9WN04iLCJ1c2VyX2lkIjoidXNlci12akJCMmRrRGNnazdGYWpMT3pVRE1oT04ifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoiam9zZXBoY2FzZTUwOTNAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlNhcmFoIEFuZGVyc29uIn0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4NDY0MTM4ODUyOCwic2NwIjpbIm9wZW5pZCIsImVtYWlsIiwicHJvZmlsZSIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19VRFpmVXVJenpyY210YUZ1SkdRa3hjWWYiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8OWZ2YlVaMDZ5WEl3Tk96RDhsbk84cjM5IiwiaWF0IjoxNzg0NjQxMzkxLCJleHAiOjE3ODU1MDUzOTEsImp0aSI6ImM0MzA3MWNmZGMxZTQwMjRhYjY3Njk2MTc2MzI3ZTczIiwibmJmIjoxNzg0NjQxMzkxfQ.wuW94mRygpdhq7K8LVrJv6Y5USuV-59iVl_ScQ-fHahUvlnHD5geIIHJ_Qt5r1BXJkUMp398eOZpXMmclpeR6f2ndQIbsX6pKf-ip21fBOeTq6tTk7PTihplOh83zFHTqu5Jh8Q1njwzBWVYTQktwM4ZiRoo07t6p1LPuKbIKgzO_044nHjrdKFy5ZGjLKBdAJMPkYiQMe5qU8pLcb9Ejw67osBhc8wA5dezqLbXB_z4nD7kNzSjf3R77ohD8g_d1faLWYlB33Q254dVzGM_iZQZ_qmCTBaJrzT2Pe0mR2nYD9l0YOFWCiJi9UUZ_1C2MtgzV9aVoYF8KMq8V_ddkw
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+originator: Codex Desktop
+openai-beta: responses_websockets=2026-02-06
+version: 0.145.0-alpha.27
+x-codex-beta-features: remote_compaction_v2
+x-client-request-id: 019f857a-249b-7e50-a85d-302ed1c434fd
+session-id: 019f857a-249b-7e50-a85d-302ed1c434fd
+thread-id: 019f857a-249b-7e50-a85d-302ed1c434fd
+x-codex-window-id: 019f857a-249b-7e50-a85d-302ed1c434fd:0
+x-codex-turn-metadata: {"installation_id":"45a2a391-c77b-4255-bd18-ec6585db9187","session_id":"019f857a-249b-7e50-a85d-302ed1c434fd","thread_id":"019f857a-249b-7e50-a85d-302ed1c434fd","turn_id":"","window_id":"019f857a-249b-7e50-a85d-302ed1c434fd:0","request_kind":"prewarm","thread_source":"system","sandbox":"windows_elevated"}
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWE6nAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGRMQBQEGeCRkMDBiNzBhYi0zZDVjLTQzZDMtODI0Mi00ZDhlYmE1YWU2OTc"}
+sec-websocket-extensions: permessage-deflate; client_max_window_bits
+
+--- Request Body ---
+(empty)
+

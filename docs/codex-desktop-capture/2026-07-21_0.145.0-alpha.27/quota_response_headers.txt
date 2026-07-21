@@ -1,0 +1,27 @@
+================================================================================
+Codex Desktop App — 0.145.0-alpha.27 实抓
+================================================================================
+捕获时间: 2026-07-22 00:20 (+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.715.8383.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.145.0-alpha.27
+抓包方式: mitmproxy (upstream 经 Clash) + 拦截 WS 升级返回 426 -> HTTP POST SSE 回退
+账号: josephcase5093@outlook.com (free 计划, chatgpt-account-id 681acc35-fe86-4c98-971e-4915f69da761)
+说明: 测试 free 账号，未脱敏，含原始 authorization / cookie
+
+## 额度相关响应头（取自 turn POST 响应，0.145 与 0.142 字段集一致）
+
+x-codex-active-limit: premium
+x-codex-plan-type: free
+x-codex-primary-used-percent: 2
+x-codex-secondary-used-percent: 0
+x-codex-primary-window-minutes: 43200
+x-codex-primary-over-secondary-limit-percent: 0
+x-codex-secondary-window-minutes: 0
+x-codex-primary-reset-after-seconds: 2590694
+x-codex-secondary-reset-after-seconds: 0
+x-codex-primary-reset-at: 1787241505
+x-codex-secondary-reset-at: 
+x-codex-credits-has-credits: False
+x-codex-credits-balance: 
+x-codex-credits-unlimited: False
+x-models-etag: W/"6dfbfc1fc2ab865cd371a944a83b7319"

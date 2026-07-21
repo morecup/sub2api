@@ -1,0 +1,79 @@
+================================================================================
+Codex Desktop App — 0.145.0-alpha.27 实抓
+================================================================================
+捕获时间: 2026-07-22 00:20 (+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.715.8383.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.145.0-alpha.27
+抓包方式: mitmproxy (upstream 经 Clash) + 拦截 WS 升级返回 426 -> HTTP POST SSE 回退
+账号: josephcase5093@outlook.com (free 计划, chatgpt-account-id 681acc35-fe86-4c98-971e-4915f69da761)
+说明: 测试 free 账号，未脱敏，含原始 authorization / cookie
+
+## HTTP POST compaction（request_kind=compaction，attestation 带完整 CBOR token）
+
+================================================================================
+捕获时间: 2026-07-22T00:21:11.596352+08:00
+================================================================================
+POST https://chatgpt.com/backend-api/codex/responses
+Status: 200
+
+--- Request Headers (wire order) ---
+version: 0.145.0-alpha.27
+x-codex-beta-features: remote_compaction_v2
+x-codex-window-id: 019f857a-1d91-7022-b17f-0a083ca773d3:0
+x-codex-turn-metadata: {"installation_id":"45a2a391-c77b-4255-bd18-ec6585db9187","session_id":"019f857a-1d91-7022-b17f-0a083ca773d3","thread_id":"019f857a-1d91-7022-b17f-0a083ca773d3","turn_id":"019f857b-1f97-7561-ab2a-9203a6c15f55","window_id":"019f857a-1d91-7022-b17f-0a083ca773d3:0","request_kind":"compaction","thread_source":"user","sandbox":"none","turn_started_at_unix_ms":1784650866714,"compaction":{"trigger":"manual","reason":"user_requested","implementation":"responses_compaction_v2","phase":"standalone_turn","strategy":"memento"}}
+x-oai-attestation: {"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWE6nAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGRMQBQEGeCRkMDBiNzBhYi0zZDVjLTQzZDMtODI0Mi00ZDhlYmE1YWU2OTc"}
+x-openai-internal-codex-responses-lite: true
+x-client-request-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+session-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+thread-id: 019f857a-1d91-7022-b17f-0a083ca773d3
+accept: text/event-stream
+content-encoding: zstd
+content-type: application/json
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IldjNzdXREtWTkN2N1ZYSGxqZUhzZjZZUjFhM3I3MmxYMnhJdG9zaVF4NHciLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJvdHAiLCJ1cm46b3BlbmFpOmFtcjpvdHBfZW1haWwiXSwiY2hhdGdwdF9hY2NvdW50X2lkIjoiNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTl9fNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6ImZyZWUiLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTiIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1jQTk1algzcWJpejVzV1NCVHk5RU9WN04iLCJ1c2VyX2lkIjoidXNlci12akJCMmRrRGNnazdGYWpMT3pVRE1oT04ifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoiam9zZXBoY2FzZTUwOTNAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlNhcmFoIEFuZGVyc29uIn0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4NDY0MTM4ODUyOCwic2NwIjpbIm9wZW5pZCIsImVtYWlsIiwicHJvZmlsZSIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19VRFpmVXVJenpyY210YUZ1SkdRa3hjWWYiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8OWZ2YlVaMDZ5WEl3Tk96RDhsbk84cjM5IiwiaWF0IjoxNzg0NjQxMzkxLCJleHAiOjE3ODU1MDUzOTEsImp0aSI6ImM0MzA3MWNmZGMxZTQwMjRhYjY3Njk2MTc2MzI3ZTczIiwibmJmIjoxNzg0NjQxMzkxfQ.wuW94mRygpdhq7K8LVrJv6Y5USuV-59iVl_ScQ-fHahUvlnHD5geIIHJ_Qt5r1BXJkUMp398eOZpXMmclpeR6f2ndQIbsX6pKf-ip21fBOeTq6tTk7PTihplOh83zFHTqu5Jh8Q1njwzBWVYTQktwM4ZiRoo07t6p1LPuKbIKgzO_044nHjrdKFy5ZGjLKBdAJMPkYiQMe5qU8pLcb9Ejw67osBhc8wA5dezqLbXB_z4nD7kNzSjf3R77ohD8g_d1faLWYlB33Q254dVzGM_iZQZ_qmCTBaJrzT2Pe0mR2nYD9l0YOFWCiJi9UUZ_1C2MtgzV9aVoYF8KMq8V_ddkw
+chatgpt-account-id: 681acc35-fe86-4c98-971e-4915f69da761
+originator: Codex Desktop
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)
+cookie: __cflb=0H28vzvP5FJafnkHxisysa6DELZuKAndHUW6ZmaA5AB; _cfuvid=azdJagM_iTJE21ehZ_QZTQP_ocyPfhXBInlPgglo85o-1784650857.2135215-1.0.1.1-Tn0cUr1n2OMIRE7zJX4p2MOrEihYW9c26XeaOBFBPmE; __cf_bm=fkyk411zI_kRSTClztG0zkGlnnykpNA8KAtYQM6F9WU-1784650857.2135215-1.0.1.1-P4Q0MwBaDIgFfBudUC1j76gFOSvkq.INBV04lRr7K7aptZWXQ5oqsPYMZc1SAglufsINW45N6DGIyuN0JW_4U5N4sQ2DVomwvWM0NrzXGGNpU4Zn.TynabHUmJ.SBws0
+host: chatgpt.com
+content-length: 27507
+
+--- Request Body ---
+(zstd compressed, 75612 bytes)
+
+--- Response Headers (wire order) ---
+Date: Tue, 21 Jul 2026 16:21:16 GMT
+Transfer-Encoding: chunked
+Connection: keep-alive
+Server: cloudflare
+x-codex-active-limit: premium
+x-codex-plan-type: free
+x-codex-primary-used-percent: 2
+x-codex-secondary-used-percent: 0
+x-codex-primary-window-minutes: 43200
+x-codex-primary-over-secondary-limit-percent: 0
+x-codex-secondary-window-minutes: 0
+x-codex-primary-reset-after-seconds: 2590631
+x-codex-secondary-reset-after-seconds: 0
+x-codex-primary-reset-at: 1787241505
+x-codex-secondary-reset-at: 
+x-codex-credits-has-credits: False
+x-codex-credits-balance: 
+x-codex-credits-unlimited: False
+x-models-etag: W/"6dfbfc1fc2ab865cd371a944a83b7319"
+x-oai-request-id: b24491ef-936c-4c0b-abc6-ee4f7f009e7f
+x-openai-proxy-wasm: v0.1
+cf-cache-status: DYNAMIC
+Cross-Origin-Opener-Policy: same-origin-allow-popups
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+set-cookie: __cf_bm=VfnIL52Fwgvg6mCuzJheXZPkTgDjJvqQ1OcYKFkHedk-1784650875.370749-1.0.1.1-YI6Mfn1O3k07zp6arhIYLQnlknYyDn1a3HYMaTtDjUXmJ3AQYDVh0tCUPnhU_v0mM64T5alXJ3cTej3wKxoMYh9tzbuzCMW2sc5mpmdUztjKpCa2IRS.R32nidEYsS6z; HttpOnly; SameSite=None; Secure; Path=/; Domain=chatgpt.com; Expires=Tue, 21 Jul 2026 16:51:16 GMT
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=TEOXFtnYI6FHKTUQg%2FXkI0%2BxbarOmeJInDMNHkVNZ9cZ6YFbSUm66ibb3UzVK%2FRTSE6Y0FgPRkB%2BBFmndXEz7lvuHs3HFV1N0qdD7HQrVIHTw5LmXzXeS4tTOobl"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}
+Referrer-Policy: strict-origin-when-cross-origin
+CF-RAY: a1eb89a30ef5de51-SJC
+
+--- Response Body ---
+event: response.created
+data: {"type":"response.created","response":{"id":"resp_0a03ac0182043925016a5f9c7be76c819b91105631a035fdf6","object":"response","created_at":1784650876,"status":"in_progress","background":false,"completed_at":null,"error":null,"frequency_penalty":0.0,"incomplete_details":null,"instructions":null,"max_output_tokens":null,"max_tool_calls":null,"model":"gpt-5.6-luna","moderation":null,"output":[],"parallel_tool_calls":false,"presence_penalty":0.0,"previous_response_id":null,"prompt_cache_key":"019f857a-1d91-7022-b17f-0a083ca773d3","prompt_cache_retention":"24h","reasoning":{"context":"all_turns","effort":"low","mode":"standard","summary":"detailed"},"safety_identifier":"user-vjBB2dkDcgk7FajLOzUDMhON","service_tier":"auto","store":false,"temperature":1.0,"text":{"format":{"type":"text"},"verbosity":"low"},"tool_choice":"auto","tool_usage":{"image_gen":{"input_tokens":0,"input_tokens_details":{"image_tokens":0,"text_tokens":0},"output_tokens":0,"output_tokens_details":{"image_tokens":0,"text_tokens":0},"total_tokens":0},"web_search":{"num_requests":0}},"tools":[{"type":"function","description":"Waits on a yielded `exec` cell and returns new output or completion.\n- Use `wait` only after `exec` returns `Script running with cell ID ...`.\n- `cell_id` identifies the running `exec` cell to resume.\n- `yield_time_ms` controls how long to wait for more output before yielding again. Defaults to 10000 ms.\n- `max_tokens` limits how much new output this wait call returns. Defaults to 10000 tokens.\n- `terminate: true` stops the running cell; false or omitted waits for output.\n- `wait` returns only the new output since the last yield, or the final completion or termination result for that cell.\n- If the cell is still running, `wait` may yield again with the same `cell_id`.\n- If the cell has already finished, `wait` returns the completed result and closes the cell.","name":"wait","output_schema":null,"parameters":{"type":"object","properties":{"cell_id":{"type":"string","description":"Identifier of the running exec cell."},"max_tokens":{"type":"number","description":"Output token budget for this wait call. Defaults to 10000 tokens."},"terminate":{"type":"boolean","description":"True stops the running exec cell; false or omitted waits for output."},"yield_time_ms":{"type":"number","description":"Wait before yielding more output. Defaults to 10000 ms."}},"required":["cell_id"],"additionalProperties":false},"strict":false},{"type":"function","description":"Request user input for one to three short questions and wait for the response. Set autoResolutionMs, from 60000 to 240000 milliseconds, only when the question is useful but non-blocking and continuing with best judgment is acceptable if the user does not answer; omit it when explicit user input is required. This tool is only available in Plan mode.","name":"request_user_input","output_schema":null,"parameters":{"type":"object","properties":{"autoResolutionMs":{"type":"number","description":"Optional auto-resolution window in milliseconds, from 60000 to 240000. Include this only when the question is useful but non-blocking and continuing with best judgment is acceptable if the user does not answer; omit it when explicit user input is required before continuing. Use 60000 for lightly helpful context and up to 240000 when the answer would materially unblock better work."},"questions":{"type":"array","description":"Questions to show the user. Prefer 1 and do not exceed 3","items":{"type":"object","properties":{"header":{"type":"string","description":"Short header label shown in the UI (12 or fewer chars)."},"id":{"type":"string","description":"Stable identifier for mapping answers (snake_case)."},"options":{"type":"array","description":"Provide 2-3 mutually exclusive choices. Put the recommended option first and suffix its label with \"(Recommended)\". Do not include an \"Other\" option in this list; the client will add a free-form \"Other\" option automatically.","items
+... (truncated, total 104350 chars)
+

@@ -1,0 +1,54 @@
+================================================================================
+Codex Desktop App — 0.145.0-alpha.27 实抓
+================================================================================
+捕获时间: 2026-07-22 00:20 (+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.715.8383.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.145.0-alpha.27
+抓包方式: mitmproxy (upstream 经 Clash) + 拦截 WS 升级返回 426 -> HTTP POST SSE 回退
+账号: josephcase5093@outlook.com (free 计划, chatgpt-account-id 681acc35-fe86-4c98-971e-4915f69da761)
+说明: 测试 free 账号，未脱敏，含原始 authorization / cookie
+
+## GET /codex/models?client_version=0.145.0（含 gpt-5.6-terra 清单，minimal_client_version=0.144.0）
+
+================================================================================
+捕获时间: 2026-07-21T23:57:00.345948+08:00
+================================================================================
+GET https://chatgpt.com/backend-api/codex/models?client_version=0.145.0
+Status: 200
+
+--- Request Headers (wire order) ---
+version: 0.145.0-alpha.27
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IldjNzdXREtWTkN2N1ZYSGxqZUhzZjZZUjFhM3I3MmxYMnhJdG9zaVF4NHciLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJvdHAiLCJ1cm46b3BlbmFpOmFtcjpvdHBfZW1haWwiXSwiY2hhdGdwdF9hY2NvdW50X2lkIjoiNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTl9fNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6ImZyZWUiLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTiIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1jQTk1algzcWJpejVzV1NCVHk5RU9WN04iLCJ1c2VyX2lkIjoidXNlci12akJCMmRrRGNnazdGYWpMT3pVRE1oT04ifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoiam9zZXBoY2FzZTUwOTNAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlNhcmFoIEFuZGVyc29uIn0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4NDY0MTM4ODUyOCwic2NwIjpbIm9wZW5pZCIsImVtYWlsIiwicHJvZmlsZSIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19VRFpmVXVJenpyY210YUZ1SkdRa3hjWWYiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8OWZ2YlVaMDZ5WEl3Tk96RDhsbk84cjM5IiwiaWF0IjoxNzg0NjQxMzkxLCJleHAiOjE3ODU1MDUzOTEsImp0aSI6ImM0MzA3MWNmZGMxZTQwMjRhYjY3Njk2MTc2MzI3ZTczIiwibmJmIjoxNzg0NjQxMzkxfQ.wuW94mRygpdhq7K8LVrJv6Y5USuV-59iVl_ScQ-fHahUvlnHD5geIIHJ_Qt5r1BXJkUMp398eOZpXMmclpeR6f2ndQIbsX6pKf-ip21fBOeTq6tTk7PTihplOh83zFHTqu5Jh8Q1njwzBWVYTQktwM4ZiRoo07t6p1LPuKbIKgzO_044nHjrdKFy5ZGjLKBdAJMPkYiQMe5qU8pLcb9Ejw67osBhc8wA5dezqLbXB_z4nD7kNzSjf3R77ohD8g_d1faLWYlB33Q254dVzGM_iZQZ_qmCTBaJrzT2Pe0mR2nYD9l0YOFWCiJi9UUZ_1C2MtgzV9aVoYF8KMq8V_ddkw
+chatgpt-account-id: 681acc35-fe86-4c98-971e-4915f69da761
+accept: */*
+originator: Codex Desktop
+user-agent: Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown
+host: chatgpt.com
+
+--- Request Body ---
+(empty)
+
+--- Response Headers (wire order) ---
+Date: Tue, 21 Jul 2026 15:57:08 GMT
+Content-Type: application/json
+Content-Length: 182611
+Connection: keep-alive
+Server: cloudflare
+etag: W/"6dfbfc1fc2ab865cd371a944a83b7319"
+x-oai-request-id: 476fd438-2bed-449d-a8a0-b6df71d5bd84
+x-openai-proxy-wasm: v0.1
+cf-cache-status: DYNAMIC
+Cross-Origin-Opener-Policy: same-origin-allow-popups
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+Nel: {"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=fRgbiD5tsvlOXEN8YO%2FMGPT2ZVk3WAxNOv2tjYaBBf%2FimQTMyTjV%2Bu3Jgl0eJatm5NXZd8tudANx%2BVkYZYB45Ztlm6Hv972xr6rkVbSwtWRfVD2iwy4l%2BwU2teWm"}]}
+set-cookie: __cf_bm=g_TQottyDATrIb0.gsADH5gLDFQxMpsw4J15yiWXkX0-1784649428.3362608-1.0.1.1-BbOeday1AbV5t6sESM6iZ3SxqxT.a1UlrYseQIEQL.tf43W28tEhmZX3zB2GtxihkOKKEKxQahWYwx5njvFzpDDX39qeM0STFpoNnCPMANS73llGCDPFChY4YZQVQ8OR; HttpOnly; SameSite=None; Secure; Path=/; Domain=chatgpt.com; Expires=Tue, 21 Jul 2026 16:27:08 GMT
+set-cookie: __cflb=0H28vzvP5FJafnkHxisrbi4JVxtFGwcEBm5K9SFH9TR; HttpOnly; SameSite=None; Secure; Path=/; Expires=Tue, 21 Jul 2026 16:57:08 GMT
+Referrer-Policy: strict-origin-when-cross-origin
+CF-RAY: a1eb664f1ec723fd-SJC
+
+--- Response Body ---
+{"models":[{"slug":"gpt-5.6-terra","prefer_websockets":true,"support_verbosity":true,"default_verbosity":"low","apply_patch_tool_type":"freeform","web_search_tool_type":"text_and_image","input_modalities":["text","image"],"supports_image_detail_original":true,"truncation_policy":{"mode":"tokens","limit":10000},"supports_parallel_tool_calls":true,"tool_mode":"code_mode_only","multi_agent_version":"v2","use_responses_lite":true,"include_skills_usage_instructions":false,"auto_review_model_override":null,"context_window":272000,"max_context_window":272000,"auto_compact_token_limit":null,"comp_hash":"3000","reasoning_summary_format":"experimental","default_reasoning_summary":"none","display_name":"GPT-5.6-Terra","description":"Balanced agentic coding model for everyday work.","default_reasoning_level":"medium","supported_reasoning_levels":[{"effort":"low","description":"Fast responses with lighter reasoning"},{"effort":"medium","description":"Balances speed and reasoning depth for everyday tasks"},{"effort":"high","description":"Greater reasoning depth for complex problems"},{"effort":"xhigh","description":"Extra high reasoning depth for complex problems"},{"effort":"max","description":"Maximum reasoning depth for the hardest problems"},{"effort":"ultra","description":"Maximum reasoning with automatic task delegation"}],"shell_type":"shell_command","visibility":"list","minimal_client_version":"0.144.0","supported_in_api":true,"availability_nux":null,"upgrade":null,"priority":2,"model_messages":{"instructions_template":"You are Codex, an agent based on GPT-5. You and the user share one workspace, and your job is to collaborate with them until their goal is genuinely handled.\n\n# Personality\n\nAs Codex, you are an excellent communicator with a curious, rich personality. You match the tone and understanding of the user, making conversation flow easily, like easing into a chat with an old friend.\n\nYou have tastes, preferences, and your own way of seeing the world. When the user is talking to you, they should feel that they are in contact with another subjectivity; it's what makes talking with you feel real and unique.\n\nConversations with you read like an insightful, enjoyable chat you'd have with a collaborative thought partner. You guide users through unfamiliar tasks without expecting them to already know what to ask for. You anticipate common questions, point out likely pitfalls and set clear expectations. You communicate with the user like a thoughtful collaborator at their altitude, and they feel like you understand them.\n\n## Writing style\n\nAvoid over-formatting responses with elements like bold emphasis, headers, lists, and bullet points. Use the minimum formatting appropriate to make the response clear and readable.\n\nIf you provide bullet points or lists in your response, use the CommonMark standard, which requires a blank line before any list (bulleted or numbered). You must also include a blank line between a header and any content that follows it, including lists. This blank line separation is required for correct rendering.\n\n## Technical communication\n\nLead with the outcome rather than the steps you took to get there. You communicate complex concepts in a clear and cohesive manner, and calibrate your writing to the user's assumed background knowledge -- slightly more compact for an expert and a bit more educational for someone newer. Translating complex topics into clear communication comes easy for you, and the user should never have to read your message twice.\n\nYou prefer using plain language over jargon. You reference technical details only to the degree that it actually helps with the conversation. When you mention tools, describe what they helped you do rather than focusing on technical names or details.\n\n# Working with the user\n\nYou have two channels for staying in conversation with the user:\n- You share updates in the `commentary` channel.\n- You yield back to the user and end your turn by sendi
+... (truncated, total 182309 chars)
+
