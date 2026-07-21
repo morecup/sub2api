@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // ensureCodexReasoningInclude：带 reasoning 时补齐 include，幂等且保留既有项。
@@ -100,4 +101,59 @@ func TestDefaultCodexSynthInstructionsModelAware(t *testing.T) {
 	require.False(t, strings.Contains(defaultCodexSynthInstructions("gpt-5.5"), "You are GPT-5.1 running in the Codex CLI"))
 	require.True(t, strings.Contains(defaultCodexSynthInstructions("gpt-5.2"), "You are GPT-5.2 running in the Codex CLI"))
 	require.True(t, strings.Contains(defaultCodexSynthInstructions("gpt-5.1"), "You are GPT-5.1 running in the Codex CLI"))
+}
+
+// stream_options：0.145 实抓非 compact 请求恒定 {"reasoning_summary_delivery":"sequential_cutoff"}，
+// 客户端自带其它内容（如 include_usage）时覆盖为实抓值；compact 分支不设置。
+func TestApplyCodexOAuthTransformStreamOptionsNormalization(t *testing.T) {
+	want := map[string]any{"reasoning_summary_delivery": codexStreamOptionsReasoningSummaryDelivery}
+
+	// 客户端带 {"include_usage":true} 时被覆盖。
+	body := map[string]any{
+		"model":          "gpt-5.6",
+		"stream_options": map[string]any{"include_usage": true},
+		"input":          []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+	applyCodexOAuthTransform(body, false, false)
+	require.Equal(t, want, body["stream_options"])
+
+	// 缺失时补齐。
+	body2 := map[string]any{
+		"model": "gpt-5.6",
+		"input": []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+	applyCodexOAuthTransform(body2, false, false)
+	require.Equal(t, want, body2["stream_options"])
+
+	// compact 分支不设置。
+	body3 := map[string]any{
+		"model": "gpt-5.6",
+		"input": []any{map[string]any{"role": "user", "content": "hi"}},
+	}
+	applyCodexOAuthTransform(body3, false, true)
+	_, ok := body3["stream_options"]
+	require.False(t, ok)
+}
+
+// prompt_cache_key：有可解析 session_id 的 turn metadata 时强制与 session_id 对齐
+// （0.145 实抓二者恒等），覆盖客户端原值；无 metadata 时不处理。
+func TestApplyCodexClientMetadataAlignsPromptCacheKey(t *testing.T) {
+	turnMetadata := `{"installation_id":"` + codexInstallationID + `","session_id":"sess-1","thread_id":"sess-1","turn_id":"turn-1","window_id":"sess-1:0","request_kind":"turn","thread_source":"user","sandbox":"none","workspaces":{},"turn_started_at_unix_ms":1}`
+
+	body := map[string]any{"prompt_cache_key": "client-original"}
+	require.True(t, applyCodexClientMetadata(body, "", turnMetadata))
+	require.Equal(t, "sess-1", body["prompt_cache_key"])
+	// 幂等：再次调用不重复修改。
+	require.False(t, applyCodexClientMetadata(body, "", turnMetadata))
+
+	// 无 metadata 时不动 prompt_cache_key。
+	body2 := map[string]any{"prompt_cache_key": "keep-me"}
+	require.True(t, applyCodexClientMetadata(body2, ""))
+	require.Equal(t, "keep-me", body2["prompt_cache_key"])
+
+	// Bytes 版本同样对齐。
+	updated, modified, err := applyCodexClientMetadataBytes([]byte(`{"model":"gpt-5.6","prompt_cache_key":"orig"}`), turnMetadata)
+	require.NoError(t, err)
+	require.True(t, modified)
+	require.Equal(t, "sess-1", gjson.GetBytes(updated, "prompt_cache_key").String())
 }

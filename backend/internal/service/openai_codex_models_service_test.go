@@ -198,7 +198,7 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotOriginator != codexDesktopOriginator {
 		t.Errorf("originator header: got %q", gotOriginator)
 	}
-	if gotClientVersion != codexDesktopVersion {
+	if gotClientVersion != codexDesktopClientVersion() {
 		t.Errorf("client_version query: got %q", gotClientVersion)
 	}
 	if gotVersion != codexDesktopVersion {
@@ -355,8 +355,8 @@ func TestFetchCodexModelsManifestUsesFixedDesktopVersion(t *testing.T) {
 	if _, err := s.FetchCodexModelsManifest(context.Background(), newCodexModelsTestAccount(), "ignored-client-version", ""); err != nil {
 		t.Fatalf("FetchCodexModelsManifest returned error: %v", err)
 	}
-	if gotClientVersion != codexDesktopVersion {
-		t.Errorf("client_version: got %q, want %q", gotClientVersion, codexDesktopVersion)
+	if gotClientVersion != codexDesktopClientVersion() {
+		t.Errorf("client_version: got %q, want %q", gotClientVersion, codexDesktopClientVersion())
 	}
 }
 

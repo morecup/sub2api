@@ -18,6 +18,9 @@ func TestNormalizeOpenAIPassthroughOAuthBody_RemovesUnsupportedUser(t *testing.T
 	}
 	require.True(t, gjson.GetBytes(normalized, "stream").Bool())
 	require.False(t, gjson.GetBytes(normalized, "store").Bool())
+	// 0.145 实抓：非 compact 的 stream_options 规范化为 sequential_cutoff（覆盖客户端原值）。
+	require.Equal(t, codexStreamOptionsReasoningSummaryDelivery, gjson.GetBytes(normalized, "stream_options.reasoning_summary_delivery").String())
+	require.False(t, gjson.GetBytes(normalized, "stream_options.include_usage").Exists())
 }
 
 func TestNormalizeOpenAIPassthroughOAuthBody_CompactRemovesUnsupportedUser(t *testing.T) {

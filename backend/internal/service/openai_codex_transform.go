@@ -129,8 +129,11 @@ var openAIChatGPTInternalUnsupportedFields = []string{
 	"metadata",
 	"prompt_cache_retention",
 	"safety_identifier",
-	"stream_options",
 }
+
+// codexStreamOptionsReasoningSummaryDelivery 对应 0.145.0-alpha.27 实抓 body 的
+// stream_options.reasoning_summary_delivery（turn/compaction 非 compact 请求恒定为该值）。
+const codexStreamOptionsReasoningSummaryDelivery = "sequential_cutoff"
 
 var openAICodexOAuthUnsupportedFields = append([]string{
 	"max_output_tokens",
@@ -184,6 +187,13 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		}
 		if v, ok := reqBody["stream"].(bool); !ok || !v {
 			reqBody["stream"] = true
+			result.Modified = true
+		}
+		// 0.145 实抓：非 compact 请求恒定携带
+		// stream_options={"reasoning_summary_delivery":"sequential_cutoff"}；
+		// 客户端自带其它内容（如 include_usage）时覆盖为实抓值。compact 分支不设置。
+		if v, ok := reqBody["stream_options"].(map[string]any); !ok || len(v) != 1 || v["reasoning_summary_delivery"] != codexStreamOptionsReasoningSummaryDelivery {
+			reqBody["stream_options"] = map[string]any{"reasoning_summary_delivery": codexStreamOptionsReasoningSummaryDelivery}
 			result.Modified = true
 		}
 	}
@@ -1281,7 +1291,8 @@ func ensureCodexReasoningInclude(reqBody map[string]any) bool {
 // installationID 为按账号派生的安装标识；去空白后为空时，若 turnMetadata 可解析且含
 // installation_id 则用之，否则回退实抓固定值 codexInstallationID。
 // 未提供 turn metadata 时保留旧行为，只注入 installation id；提供时把 header 中的
-// session/thread/turn/window 标识同步进 body，确保同一请求不存在两套身份元数据。
+// session/thread/turn/window 标识同步进 body，并把 prompt_cache_key 对齐为 session_id
+// （0.145 实抓二者恒等），确保同一请求不存在两套身份元数据。
 func applyCodexClientMetadata(reqBody map[string]any, installationID string, turnMetadata ...string) bool {
 	if reqBody == nil {
 		return false
@@ -1339,6 +1350,14 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 		}
 		clientMetadata[key] = value
 		modified = true
+	}
+	// 0.145 实抓：prompt_cache_key 与 session-id 头恒等；有可解析的 session_id 时
+	// 强制把 body 的 prompt_cache_key 对齐（覆盖客户端原值）。无 metadata 时不处理。
+	if sessionID := strings.TrimSpace(values["session_id"]); sessionID != "" {
+		if existing, ok := reqBody["prompt_cache_key"].(string); !ok || existing != sessionID {
+			reqBody["prompt_cache_key"] = sessionID
+			modified = true
+		}
 	}
 	if !modified {
 		return false

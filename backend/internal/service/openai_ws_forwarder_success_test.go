@@ -734,7 +734,8 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, wantSessionID, gjson.Get(meta, "thread_id").String())
 	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
-	require.Equal(t, codexInstallationID, gjson.Get(meta, "installation_id").String())
+	// 握手 prewarm 的 installation_id 同样按账号派生（account.ID=29）。
+	require.Equal(t, codexInstallationIDForAccount(29, ""), gjson.Get(meta, "installation_id").String())
 	require.Empty(t, gjson.Get(meta, "turn_id").String())
 	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
 	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())

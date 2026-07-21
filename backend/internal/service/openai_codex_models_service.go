@@ -254,7 +254,8 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	case credAccount.IsOpenAIOAuth():
 		// OAuth 模型清单继续使用 morecup 固定的 Codex Desktop 画像，不能被
 		// 入站 client_version 改写；API Key 自定义上游则保留客户端版本。
-		clientVersion = codexDesktopVersion
+		// 实抓：query 中的 client_version 为三段式（0.145.0），不带 alpha 后缀。
+		clientVersion = codexDesktopClientVersion()
 		authToken = strings.TrimSpace(credAccount.GetOpenAIAccessToken())
 		if authToken == "" && !credAccount.IsOpenAIAgentIdentity() {
 			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")

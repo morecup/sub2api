@@ -615,6 +615,17 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool, installation
 			normalized = next
 			changed = true
 		}
+		// 0.145 实抓：非 compact 请求恒定携带
+		// stream_options={"reasoning_summary_delivery":"sequential_cutoff"}；
+		// 客户端自带其它内容（如 include_usage）时覆盖为实抓值。compact 分支不设置。
+		if so := gjson.GetBytes(normalized, "stream_options"); !so.IsObject() || len(so.Map()) != 1 || so.Get("reasoning_summary_delivery").String() != codexStreamOptionsReasoningSummaryDelivery {
+			next, err := sjson.SetBytes(normalized, "stream_options", map[string]any{"reasoning_summary_delivery": codexStreamOptionsReasoningSummaryDelivery})
+			if err != nil {
+				return body, false, fmt.Errorf("normalize passthrough body stream_options: %w", err)
+			}
+			normalized = next
+			changed = true
+		}
 		if installationIDValue := gjson.GetBytes(normalized, "client_metadata.x-codex-installation-id"); !installationIDValue.Exists() || strings.TrimSpace(installationIDValue.String()) != installationID {
 			next, err := sjson.SetBytes(normalized, "client_metadata.x-codex-installation-id", installationID)
 			if err != nil {

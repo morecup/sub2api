@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 func TestAccountTestServiceOpenAICompactAgentIdentityUsesFreshAssertion(t *testing.T) {
@@ -138,7 +139,8 @@ func TestOpenAIAgentIdentityPassthroughKeepsSessionAndPromptCacheHeaders(t *test
 	requestBody, err := io.ReadAll(req.Body)
 	require.NoError(t, err)
 	requestBody = decodeRecorderRequestBody(req.Header.Get("Content-Encoding"), requestBody)
-	require.Contains(t, string(requestBody), `"prompt_cache_key":"cache-agent"`)
+	// 0.145 实抓：prompt_cache_key 与 session-id 头恒等（客户端原值被对齐覆盖）。
+	require.Equal(t, req.Header.Get("Session-Id"), gjson.GetBytes(requestBody, "prompt_cache_key").String())
 
 	// Authentication mode must not affect session isolation or prompt-cache
 	// behavior. Compare the same request with the existing OAuth path instead

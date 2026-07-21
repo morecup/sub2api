@@ -11,8 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/gin-gonic/gin"
+	"github.com/klauspost/compress/zstd"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const (
@@ -371,7 +374,69 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 	// Desktop header/body metadata 同步；再剥离 Responses 专用状态头，保持
 	// SearchClient 的独立线协议。
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
+	// passthrough 构造器会把 body 的 prompt_cache_key 对齐为 session-id（0.145
+	// /responses 实抓行为），但 alpha/search 上游对该字段返回 Unknown parameter，
+	// 这里必须在最终 body 中剥除。
+	if err := stripOpenAIAlphaSearchPromptCacheKey(req); err != nil {
+		return nil, fmt.Errorf("strip alpha search prompt_cache_key: %w", err)
+	}
 	return req, nil
+}
+
+// stripOpenAIAlphaSearchPromptCacheKey 从 alpha/search 上游请求体中删除
+// prompt_cache_key（同步 client_metadata 时被对齐注入），保持 SearchClient 协议形态。
+// passthrough 构造器可能已对 body 做 zstd 压缩，需先解码、删除后重压。
+func stripOpenAIAlphaSearchPromptCacheKey(req *http.Request) error {
+	if req == nil || req.Body == nil {
+		return nil
+	}
+	raw, err := io.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+	resetBody := func(data []byte) {
+		req.Body = io.NopCloser(bytes.NewReader(data))
+		req.ContentLength = int64(len(data))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		}
+	}
+	compressed := false
+	if strings.EqualFold(strings.TrimSpace(req.Header.Get("Content-Encoding")), "zstd") && len(raw) > 0 {
+		dec, decErr := zstd.NewReader(nil)
+		if decErr != nil {
+			resetBody(raw)
+			return decErr
+		}
+		defer dec.Close()
+		plain, decErr := dec.DecodeAll(raw, nil)
+		if decErr != nil {
+			resetBody(raw)
+			return decErr
+		}
+		raw = plain
+		compressed = true
+	}
+	if len(raw) == 0 || !gjson.GetBytes(raw, "prompt_cache_key").Exists() {
+		if compressed {
+			raw = httputil.CompressZstd(raw)
+		}
+		resetBody(raw)
+		return nil
+	}
+	next, err := sjson.DeleteBytes(raw, "prompt_cache_key")
+	if err != nil {
+		if compressed {
+			raw = httputil.CompressZstd(raw)
+		}
+		resetBody(raw)
+		return err
+	}
+	if compressed {
+		next = httputil.CompressZstd(next)
+	}
+	resetBody(next)
+	return nil
 }
 
 // stripOpenAIAlphaSearchResponsesHeaders 让独立搜索请求与官方 Codex

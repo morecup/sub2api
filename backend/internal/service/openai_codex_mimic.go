@@ -11,22 +11,27 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/google/uuid"
 )
 
-// 真实 Codex Desktop App 固定头值（基准：Desktop 26.707.31123 / codex-rs 0.144.0-alpha.4 实抓报文）。
+// 真实 Codex Desktop App 固定头值（基准：Desktop 26.715.61943 / codex-rs 0.145.0-alpha.27 实抓报文）。
 const (
 	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（实抓：Desktop App 恒定发送该值）。
 	codexBetaFeaturesValue = "remote_compaction_v2"
 	// codexTurnMetadataSandbox 对应 HTTP POST x-codex-turn-metadata.sandbox 字段（实抓：Desktop App HTTP POST 为 none）。
 	codexTurnMetadataSandbox = "none"
-	// codexDesktopThreadSource 对应 0.144 turn/prewarm metadata 的 thread_source。
+	// codexDesktopThreadSource 对应 0.145 turn/prewarm metadata 的 thread_source。
 	codexDesktopThreadSource = "user"
-	// codexResponsesIncludeTimingMetricsValue 对应 0.144 HTTP 请求新增的 timing metrics 开关。
-	codexResponsesIncludeTimingMetricsValue = "true"
+	// codexResponsesLiteValue 对应 x-openai-internal-codex-responses-lite 头
+	// （0.145 实抓：turn 与 compaction POST 均恒定发送）。
+	codexResponsesLiteValue = "true"
+	// codexOAIAttestationLite 对应 0.145 turn POST 的 x-oai-attestation
+	// （实抓：turn 不再携带 CBOR token，仅 {"v":1,"s":1}；compaction 与 WS prewarm 仍发完整 token）。
+	codexOAIAttestationLite = `{"v":1,"s":1}`
 	// codexDesktopOriginator 对应 originator 头（实抓：Desktop App 为 "Codex Desktop"）。
 	codexDesktopOriginator = "Codex Desktop"
 	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段的兜底值（实抓固定值），
@@ -41,7 +46,7 @@ const (
 )
 
 // Windows 端不使用 Apple DeviceCheck，而是为每个桌面进程生成带 app_session_id 的
-// error_code=1 CBOR envelope。保持进程内稳定、进程间变化，比复用旧抓包 token 更贴近 0.144。
+// error_code=1 CBOR envelope。保持进程内稳定、进程间变化，比复用旧抓包 token 更贴近 0.145。
 var codexOAIAttestation = buildCodexOAIAttestation(uuid.NewString())
 
 func appendCodexCBORHead(dst []byte, major byte, value uint64) []byte {
@@ -133,20 +138,52 @@ var codexMimicStripInboundHeaders = []string{
 	"x-codex-turn-state",
 }
 
+// codexAccountSeed 返回账号维度派生种子：优先 sub2api 账号 ID，其次上游
+// chatgpt-account-id；均不可用时返回空串（由调用方决定回退行为）。
+func codexAccountSeed(accountID int64, chatgptAccountID string) string {
+	if accountID > 0 {
+		return fmt.Sprintf("account:%d", accountID)
+	}
+	if trimmed := strings.TrimSpace(chatgptAccountID); trimmed != "" {
+		return "chatgpt:" + trimmed
+	}
+	return ""
+}
+
 // codexInstallationIDForAccount 按账号确定性派生 installation_id（UUIDv5），
 // 避免所有账号共用同一安装标识形成关联指纹。种子优先取 sub2api 账号 ID，
 // 其次上游 chatgpt-account-id；均不可用时回退实抓固定值 codexInstallationID。
 func codexInstallationIDForAccount(accountID int64, chatgptAccountID string) string {
-	seed := ""
-	if accountID > 0 {
-		seed = fmt.Sprintf("account:%d", accountID)
-	} else if trimmed := strings.TrimSpace(chatgptAccountID); trimmed != "" {
-		seed = "chatgpt:" + trimmed
-	}
+	seed := codexAccountSeed(accountID, chatgptAccountID)
 	if seed == "" {
 		return codexInstallationID
 	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-installation:"+seed)).String()
+}
+
+// codexProcessSalt 为网关进程级随机盐：app_session_id 由它参与派生，
+// 保证其随网关进程重启而变化（贴近真实桌面应用重启后 app_session_id 变化的语义）。
+var codexProcessSalt = uuid.NewString()
+
+// codexAttestationForAccountCache 缓存按账号派生的 attestation envelope，避免每请求重建 CBOR。
+var codexAttestationForAccountCache sync.Map
+
+// codexOAIAttestationForAccount 按账号派生 attestation：app_session_id 为
+// UUIDv5(进程盐 + 账号种子)，同账号在网关进程生命周期内恒定，跨账号、跨进程均不同，
+// 与按账号派生的 installation_id 语义一致（每个账号看起来是独立的一台设备）。
+// 无账号种子时回退进程级全局值 codexOAIAttestation。
+func codexOAIAttestationForAccount(accountID int64, chatgptAccountID string) string {
+	seed := codexAccountSeed(accountID, chatgptAccountID)
+	if seed == "" {
+		return codexOAIAttestation
+	}
+	if v, ok := codexAttestationForAccountCache.Load(seed); ok {
+		return v.(string)
+	}
+	appSessionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-app-session:"+codexProcessSalt+":"+seed)).String()
+	attestation := buildCodexOAIAttestation(appSessionID)
+	codexAttestationForAccountCache.Store(seed, attestation)
+	return attestation
 }
 
 // generateCodexSessionUUID 由 (accountID, apiKeyID, seed) 确定性派生一个合法 UUIDv7 形态的会话标识。
@@ -193,11 +230,12 @@ func extractCodexWorkspaces(turnMetadata string) map[string]any {
 }
 
 // buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合与顺序严格对齐真实 Codex
-// Desktop App 0.144.0-alpha.4 实抓报文（普通一轮 request_kind=turn）：
+// Desktop App 0.145.0-alpha.27 实抓报文（普通一轮 request_kind=turn）：
 // installation_id, session_id, thread_id, turn_id, window_id, request_kind, thread_source,
-// sandbox, workspaces, turn_started_at_unix_ms。
+// sandbox, workspaces, turn_started_at_unix_ms, workspace_kind。
 // turn_id 为每请求新生成的 UUIDv7；session_id/thread_id 复用会话 UUID。
-// 注意：0.144 新增 thread_source="user"，移除了旧画像中的 workspace_kind。
+// 注意：workspace_kind 仅在 workspaces 非空时出现（实抓恒为 "project"），
+// 系统 turn / compaction 等无 workspaces 的场景不发送该字段。
 // workspaces 优先使用入站 x-codex-turn-metadata 中的客户端值（代理端无法获知本地 git 信息），
 // 未提供时回退空对象 {} 以保持字段集合一致。
 func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
@@ -222,6 +260,7 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		Sandbox             string         `json:"sandbox"`
 		Workspaces          map[string]any `json:"workspaces"`
 		TurnStartedAtUnixMs int64          `json:"turn_started_at_unix_ms"`
+		WorkspaceKind       string         `json:"workspace_kind,omitempty"`
 	}{
 		InstallationID:      installationID,
 		SessionID:           sessionUUID,
@@ -234,6 +273,10 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		Workspaces:          workspaces,
 		TurnStartedAtUnixMs: time.Now().UnixMilli(),
 	}
+	// 0.145 实抓：workspaces 非空时末尾带 workspace_kind="project"；空 workspaces 不出现该字段。
+	if len(workspaces) > 0 {
+		meta.WorkspaceKind = "project"
+	}
 	b, err := json.Marshal(meta)
 	if err != nil {
 		return ""
@@ -242,9 +285,9 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 }
 
 // buildCodexWSPrewarmMetadata 生成 WS prewarm 的 x-codex-turn-metadata 头 JSON 值，
-// 字段集合与顺序对齐 Codex Desktop App 0.144.0-alpha.4 实抓报文：
+// 字段集合与顺序对齐 Codex Desktop App 0.145.0-alpha.27 实抓报文：
 // installation_id, session_id, thread_id, turn_id, window_id, request_kind,
-// thread_source, sandbox, workspaces。prewarm 不含 turn_started_at_unix_ms。
+// thread_source, sandbox, workspaces。prewarm 不含 turn_started_at_unix_ms 与 workspace_kind。
 func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
 	if workspaces == nil {
 		workspaces = map[string]any{}
@@ -280,6 +323,81 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[st
 	return string(b)
 }
 
+// codexDefaultCompactionProfile 为 0.145.0-alpha.27 实抓手动压缩请求的默认 compaction 对象
+// （入站 metadata 未携带 compaction 字段时回退使用）。
+const codexDefaultCompactionProfile = `{"trigger":"manual","reason":"user_requested","implementation":"responses_compaction_v2","phase":"standalone_turn","strategy":"memento"}`
+
+// extractCodexCompactionRequest 解析入站 x-codex-turn-metadata 是否为手动压缩请求
+// （request_kind="compaction"）；是则返回其 compaction 对象原值（缺省或为 null 时返回 nil，
+// 由调用方回退默认画像）。
+func extractCodexCompactionRequest(turnMetadata string) (json.RawMessage, bool) {
+	if turnMetadata == "" {
+		return nil, false
+	}
+	var payload struct {
+		RequestKind string          `json:"request_kind"`
+		Compaction  json.RawMessage `json:"compaction"`
+	}
+	if err := json.Unmarshal([]byte(turnMetadata), &payload); err != nil {
+		return nil, false
+	}
+	if payload.RequestKind != "compaction" {
+		return nil, false
+	}
+	compaction := payload.Compaction
+	if len(compaction) == 0 || string(compaction) == "null" {
+		compaction = nil
+	}
+	return compaction, true
+}
+
+// buildCodexCompactionMetadata 生成手动压缩请求的 x-codex-turn-metadata 头 JSON 值，
+// 字段集合与顺序对齐 Codex Desktop App 0.145.0-alpha.27 实抓报文：
+// installation_id, session_id, thread_id, turn_id, window_id, request_kind="compaction",
+// thread_source, sandbox, turn_started_at_unix_ms, compaction。compaction 请求不含 workspaces。
+// turn_id 为每请求新生成的 UUIDv7；compaction 对象原样保留入站值，为空时回退实抓默认画像。
+func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, compaction json.RawMessage) string {
+	turnID := ""
+	if v, err := uuid.NewV7(); err == nil {
+		turnID = v.String()
+	}
+	if strings.TrimSpace(installationID) == "" {
+		installationID = codexInstallationID
+	}
+	if len(compaction) == 0 {
+		compaction = json.RawMessage(codexDefaultCompactionProfile)
+	}
+	meta := struct {
+		InstallationID      string          `json:"installation_id"`
+		SessionID           string          `json:"session_id"`
+		ThreadID            string          `json:"thread_id"`
+		TurnID              string          `json:"turn_id"`
+		WindowID            string          `json:"window_id"`
+		RequestKind         string          `json:"request_kind"`
+		ThreadSource        string          `json:"thread_source"`
+		Sandbox             string          `json:"sandbox"`
+		TurnStartedAtUnixMs int64           `json:"turn_started_at_unix_ms"`
+		Compaction          json.RawMessage `json:"compaction"`
+	}{
+		InstallationID:      installationID,
+		SessionID:           sessionUUID,
+		ThreadID:            sessionUUID,
+		TurnID:              turnID,
+		WindowID:            windowID,
+		RequestKind:         "compaction",
+		ThreadSource:        codexDesktopThreadSource,
+		Sandbox:             codexTurnMetadataSandbox,
+		TurnStartedAtUnixMs: time.Now().UnixMilli(),
+		Compaction:          compaction,
+	}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+// （字段集合 + 取值 + 实抓基准），完全无视入站客户端传入的对应头。不处理 HTTP/2 头发送顺序（按既定范围）。
+//
 // applyCodexOAuthMimicHeaders 将 OAuth 上游请求头无条件重建为与真实 Codex Desktop App HTTP POST 一致
 // （字段集合 + 取值 + 实抓基准），完全无视入站客户端传入的对应头。不处理 HTTP/2 头发送顺序（按既定范围）。
 //
@@ -291,7 +409,7 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	}
 	authorization := strings.TrimSpace(req.Header.Get("authorization"))
 	chatgptAccountID := strings.TrimSpace(req.Header.Get("chatgpt-account-id"))
-	installationID := codexInstallationIDForAccount(apiKeyID, chatgptAccountID)
+	installationID := codexInstallationIDForAccount(accountID, chatgptAccountID)
 	inboundTurnMetadata := req.Header.Get("x-codex-turn-metadata")
 	inboundWorkspaces := extractCodexWorkspaces(inboundTurnMetadata)
 	req.Header = make(http.Header)
@@ -308,12 +426,19 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
 	req.Header.Set("version", codexDesktopVersion)
 	req.Header.Set("x-codex-beta-features", codexBetaFeaturesValue)
-	req.Header.Set("x-responsesapi-include-timing-metrics", codexResponsesIncludeTimingMetricsValue)
+	// 0.145 实抓：所有 /codex/responses POST 恒定携带 responses-lite 头；
+	// 0.144 的 x-responsesapi-include-timing-metrics 已在新版移除，不再发送。
+	req.Header.Set("x-openai-internal-codex-responses-lite", codexResponsesLiteValue)
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("originator", codexDesktopOriginator)
-	// x-oai-attestation 为 Desktop App 特有的进程级动态证明头。
-	req.Header.Set("x-oai-attestation", codexOAIAttestation)
+	// x-oai-attestation：0.145 实抓 turn POST 仅发 {"v":1,"s":1}；
+	// compact POST 与 WS prewarm 仍发完整 CBOR token（app_session_id 按账号派生）。
+	if isCompact {
+		req.Header.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
+	} else {
+		req.Header.Set("x-oai-attestation", codexOAIAttestationLite)
+	}
 
 	if isCompact {
 		req.Header.Set("accept", "application/json")
@@ -336,7 +461,13 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	// x-client-request-id 与真实 Codex 一致，取 thread-id（实抓三者同值）。
 	req.Header.Set("x-client-request-id", sessUUID)
 	req.Header.Set("x-codex-window-id", windowID)
-	req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces, installationID))
+	// 0.145 实抓：手动压缩请求的 metadata request_kind="compaction"、无 workspaces，
+	// compaction 对象原样保留入站值；普通一轮仍走 turn 画像。
+	if compaction, isCompaction := extractCodexCompactionRequest(inboundTurnMetadata); isCompaction {
+		req.Header.Set("x-codex-turn-metadata", buildCodexCompactionMetadata(sessUUID, windowID, installationID, compaction))
+	} else {
+		req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces, installationID))
+	}
 }
 
 // syncCodexOAuthMimicRequestBody 将非 compact OAuth 请求体中的 client_metadata
@@ -372,7 +503,7 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int6
 	}
 	authorization := strings.TrimSpace(headers.Get("authorization"))
 	chatgptAccountID := strings.TrimSpace(headers.Get("chatgpt-account-id"))
-	installationID := codexInstallationIDForAccount(apiKeyID, chatgptAccountID)
+	installationID := codexInstallationIDForAccount(accountID, chatgptAccountID)
 	for key := range headers {
 		delete(headers, key)
 	}
@@ -389,8 +520,8 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int6
 	headers.Set("openai-beta", openAIWSBetaV2Value)
 	headers.Set("originator", codexDesktopOriginator)
 	headers.Set("x-codex-beta-features", codexBetaFeaturesValue)
-	// x-oai-attestation 为 Desktop App 特有的进程级动态证明头。
-	headers.Set("x-oai-attestation", codexOAIAttestation)
+	// x-oai-attestation 为 Desktop App 特有的证明头（app_session_id 按账号派生）。
+	headers.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
 
 	sessUUID := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
 	if sessUUID == "" {

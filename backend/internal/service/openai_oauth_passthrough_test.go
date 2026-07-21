@@ -164,7 +164,9 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
 	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=remote_compaction_v2。
 	require.Equal(t, "remote_compaction_v2", req.Header.Get("X-Codex-Beta-Features"))
-	require.Equal(t, "true", req.Header.Get("X-Responsesapi-Include-Timing-Metrics"))
+	// 0.145 实抓：POST 恒定发送 responses-lite 头；0.144 的 timing-metrics 头已移除。
+	require.Equal(t, "true", req.Header.Get("X-Openai-Internal-Codex-Responses-Lite"))
+	require.Empty(t, req.Header.Get("X-Responsesapi-Include-Timing-Metrics"))
 	require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
 	require.Equal(t, "Codex Desktop", req.Header.Get("Originator"))
 	// UA 无条件强制为 Codex Desktop 画像（忽略入站 UA）。
@@ -178,7 +180,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Empty(t, req.Header.Get("X-Codex-Turn-State"))
 	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
-	// x-codex-turn-metadata：字段与 Desktop 26.707.31123 / codex-rs 0.144.0-alpha.4 对齐。
+	// x-codex-turn-metadata：字段与 Desktop 26.715.61943 / codex-rs 0.145.0-alpha.27 对齐。
 	meta := req.Header.Get("X-Codex-Turn-Metadata")
 	require.Equal(t, sessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, sessionID, gjson.Get(meta, "thread_id").String())
@@ -190,13 +192,14 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
 	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
-	require.False(t, gjson.Get(meta, "workspace_kind").Exists())
+	// 0.145 实抓：workspaces 非空时带 workspace_kind="project"。
+	require.Equal(t, "project", gjson.Get(meta, "workspace_kind").String())
 	require.True(t, gjson.Get(meta, "workspaces").IsObject())
 	require.Equal(t, "https://github.com/foo/bar", gjson.Get(meta, "workspaces./foo/bar.associated_remote_urls.origin").String())
 	require.Equal(t, "abc123", gjson.Get(meta, "workspaces./foo/bar.latest_git_commit_hash").String())
 	require.True(t, gjson.Get(meta, "workspaces./foo/bar.has_changes").Bool())
-	// x-oai-attestation 为 Desktop App 特有的远程证明头。
-	require.NotEmpty(t, req.Header.Get("X-Oai-Attestation"))
+	// 0.145 实抓：turn POST 的 attestation 简化为 {"v":1,"s":1}（不带 CBOR token）。
+	require.Equal(t, `{"v":1,"s":1}`, req.Header.Get("X-Oai-Attestation"))
 
 	// 请求体 zstd 压缩，解压后包含与 header 同源的完整 client_metadata。
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
@@ -541,8 +544,8 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	// 其余关键字段保持原值。
 	require.Equal(t, "gpt-5.2", gjson.GetBytes(upstream.lastBody, "model").String())
 	require.Equal(t, "hi", gjson.GetBytes(upstream.lastBody, "input.0.text").String())
-	// installation_id 按账号派生：最终值与 turn metadata 头一致（apiKeyID=0，取 chatgpt-account-id 种子）。
-	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
+	// installation_id 按账号派生：最终值与 turn metadata 头一致（account.ID=123，账号种子优先）。
+	require.Equal(t, codexInstallationIDForAccount(123, "chatgpt-acc"), gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	require.NotEqual(t, "dev-should-not-leak", gjson.GetBytes(upstream.lastBody, "client_metadata.x-codex-installation-id").String())
 	requireCodexDesktopBodyMetadataMatchesHeaders(t, upstream.lastReq, upstream.lastBody)
 
