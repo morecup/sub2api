@@ -36,6 +36,8 @@ func TestCodexDesktopResetCreditRequestsUseLatestWebviewProfile(t *testing.T) {
 		require.Equal(t, codexDesktopWebviewSecFetchMode, r.Header.Get("sec-fetch-mode"))
 		require.Equal(t, codexDesktopWebviewSecFetchDest, r.Header.Get("sec-fetch-dest"))
 		require.Equal(t, codexDesktopWebviewPriority, r.Header.Get("priority"))
+		require.Equal(t, codexDesktopWebviewSentryTrace, r.Header.Get("sentry-trace"))
+		require.Equal(t, codexDesktopWebviewBaggage, r.Header.Get("baggage"))
 		require.Equal(t, "session=test-session", r.Header.Get("cookie"))
 		require.Empty(t, r.Header.Get("accept"))
 		require.Empty(t, r.Header.Get("openai-beta"))

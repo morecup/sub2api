@@ -1,0 +1,68 @@
+================================================================================
+Codex Desktop App — 0.145.0-alpha.27 wham rate-limit-reset-credits 补充抓包
+================================================================================
+捕获时间: 2026-07-22 21:33-21:40 (+08:00)
+来源: Codex 独立桌面应用 (UWP: OpenAI.Codex_26.715.8383.0_x64__2p2nqsd0c76g0)
+内置 codex.exe 版本: 0.145.0-alpha.27
+抓包方式: mitmproxy (upstream 经 Clash) + 系统代理; 工具 tmp/codex_capture/
+账号: josephcase5093@outlook.com (free 计划, chatgpt-account-id 681acc35-fe86-4c98-971e-4915f69da761)
+说明: 测试 free 账号，未脱敏，含原始 authorization / cookie
+
+## POST /wham/rate-limit-reset-credits/consume -> 200 no_credit（手工构造, 非应用流量）
+## body {"redeem_request_id":"<uuid v4>"} 符合 codex 源码格式; 账号无券, 服务端回 no_credit。
+## 响应结构与源码 ConsumeRateLimitResetCreditResponse 一致: code / credit / windows_reset。
+## 构造瑕疵: cookie 头重复发送了一遍(提取范围串块所致), 不代表应用行为。
+
+================================================================================
+捕获时间: 2026-07-22T21:40:34.314891+08:00
+================================================================================
+POST https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume
+Status: 200
+
+--- Request Headers (wire order) ---
+Host: chatgpt.com
+Accept: */*
+authorization: Bearer eyJhbGciOiJSUzI1NiIsImtpZCI6IldjNzdXREtWTkN2N1ZYSGxqZUhzZjZZUjFhM3I3MmxYMnhJdG9zaVF4NHciLCJ0eXAiOiJKV1QifQ.eyJhdWQiOlsiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS92MSJdLCJjbGllbnRfaWQiOiJhcHBfRU1vYW1FRVo3M2YwQ2tYYVhwN2hyYW5uIiwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9hdXRoIjp7ImFtciI6WyJvdHAiLCJ1cm46b3BlbmFpOmFtcjpvdHBfZW1haWwiXSwiY2hhdGdwdF9hY2NvdW50X2lkIjoiNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9hY2NvdW50X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTl9fNjgxYWNjMzUtZmU4Ni00Yzk4LTk3MWUtNDkxNWY2OWRhNzYxIiwiY2hhdGdwdF9jb21wdXRlX3Jlc2lkZW5jeSI6Im5vX2NvbnN0cmFpbnQiLCJjaGF0Z3B0X3BsYW5fdHlwZSI6ImZyZWUiLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLXZqQkIyZGtEY2drN0ZhakxPelVETWhPTiIsImxvY2FsaG9zdCI6dHJ1ZSwicG9pZCI6Im9yZy1jQTk1algzcWJpejVzV1NCVHk5RU9WN04iLCJ1c2VyX2lkIjoidXNlci12akJCMmRrRGNnazdGYWpMT3pVRE1oT04ifSwiaHR0cHM6Ly9hcGkub3BlbmFpLmNvbS9wcm9maWxlIjp7ImVtYWlsIjoiam9zZXBoY2FzZTUwOTNAb3V0bG9vay5jb20iLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IlNhcmFoIEFuZGVyc29uIn0sImlzcyI6Imh0dHBzOi8vYXV0aC5vcGVuYWkuY29tIiwicHdkX2F1dGhfdGltZSI6MTc4NDY0MTM4ODUyOCwic2NwIjpbIm9wZW5pZCIsImVtYWlsIiwicHJvZmlsZSIsIm9mZmxpbmVfYWNjZXNzIl0sInNlc3Npb25faWQiOiJhdXRoc2Vzc19VRFpmVXVJenpyY210YUZ1SkdRa3hjWWYiLCJzbCI6dHJ1ZSwic3ViIjoiYXV0aDB8OWZ2YlVaMDZ5WEl3Tk96RDhsbk84cjM5IiwiaWF0IjoxNzg0NjQxMzkxLCJleHAiOjE3ODU1MDUzOTEsImp0aSI6ImM0MzA3MWNmZGMxZTQwMjRhYjY3Njk2MTc2MzI3ZTczIiwibmJmIjoxNzg0NjQxMzkxfQ.wuW94mRygpdhq7K8LVrJv6Y5USuV-59iVl_ScQ-fHahUvlnHD5geIIHJ_Qt5r1BXJkUMp398eOZpXMmclpeR6f2ndQIbsX6pKf-ip21fBOeTq6tTk7PTihplOh83zFHTqu5Jh8Q1njwzBWVYTQktwM4ZiRoo07t6p1LPuKbIKgzO_044nHjrdKFy5ZGjLKBdAJMPkYiQMe5qU8pLcb9Ejw67osBhc8wA5dezqLbXB_z4nD7kNzSjf3R77ohD8g_d1faLWYlB33Q254dVzGM_iZQZ_qmCTBaJrzT2Pe0mR2nYD9l0YOFWCiJi9UUZ_1C2MtgzV9aVoYF8KMq8V_ddkw
+chatgpt-account-id: 681acc35-fe86-4c98-971e-4915f69da761
+content-type: application/json
+originator: Codex Desktop
+oai-language: zh-CN
+user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+cookie: oai-sc=0gAAAAABqX5NaQvIn5PfemcLPOQHALdoQp06uVcb1bb6gDsDR0_dsrJ7cVR7AMyab-yNwvlTYhppgfdUUP1fVwhnoHJxQBWxjli8iXvGPrKAtyF-JUlDd3kq1l_hqm6grnpGvLey0m8Ak1L799jo1G3H_shicqTJSwgKq8JfKjO9g597Z8-bRmHHFCXH5ucCzWfaNNYaslm-KLiHqqlRrVndEsSA_B7wwBcoHhouH4YnGYR1cTGgS0aM
+cookie: __cflb=0H28vzvP5FJafnkHxj4PeYs3u9fqZw8nbTzPPrtXnN7
+cookie: __cf_bm=j.MwXFpKQqe4lc.6KQ72dKbBpn7LlW7WcwictrDrep0-1784726550.7538452-1.0.1.1-XBs.sR8eVAm7R6h2q7f3_nuGBTErebr99btiRIQtxnkL.bVzdN4gsllw0BcSdGtloI1_A_fcpogP7EVwwpo039iBY0Rn8DcuC6RXuXjohyUHAqB.E7eOtJ.5gSQGurXc
+cookie: _cfuvid=UTd0ILPVHiis014kodx8Hhu_tTzMOXJjTRiWFp.4oH4-1784726632.2249324-1.0.1.1-jSnPZfOKTKJsFnIy4oaG1POhPkCKIQTeg9NdKTvNcX8
+cookie: oai-sc=0gAAAAABqX5NaQvIn5PfemcLPOQHALdoQp06uVcb1bb6gDsDR0_dsrJ7cVR7AMyab-yNwvlTYhppgfdUUP1fVwhnoHJxQBWxjli8iXvGPrKAtyF-JUlDd3kq1l_hqm6grnpGvLey0m8Ak1L799jo1G3H_shicqTJSwgKq8JfKjO9g597Z8-bRmHHFCXH5ucCzWfaNNYaslm-KLiHqqlRrVndEsSA_B7wwBcoHhouH4YnGYR1cTGgS0aM
+cookie: __cflb=0H28vzvP5FJafnkHxj4PeYs3u9fqZw8nbTzPPrtXnN7
+cookie: __cf_bm=j.MwXFpKQqe4lc.6KQ72dKbBpn7LlW7WcwictrDrep0-1784726550.7538452-1.0.1.1-XBs.sR8eVAm7R6h2q7f3_nuGBTErebr99btiRIQtxnkL.bVzdN4gsllw0BcSdGtloI1_A_fcpogP7EVwwpo039iBY0Rn8DcuC6RXuXjohyUHAqB.E7eOtJ.5gSQGurXc
+cookie: _cfuvid=UTd0ILPVHiis014kodx8Hhu_tTzMOXJjTRiWFp.4oH4-1784726632.2249324-1.0.1.1-jSnPZfOKTKJsFnIy4oaG1POhPkCKIQTeg9NdKTvNcX8
+Content-Length: 60
+
+--- Request Body ---
+{"redeem_request_id":"30cf320e-f2d0-4879-a8f5-b1c13828d7c2"}
+
+--- Response Headers (wire order) ---
+Date: Wed, 22 Jul 2026 13:40:34 GMT
+Content-Type: application/json
+Content-Length: 65
+Connection: keep-alive
+Server: cloudflare
+x-oai-request-id: b1118dc4-a6f6-408e-abb3-74d23cd4bb80
+x-openai-proxy-wasm: v0.1
+cf-cache-status: DYNAMIC
+Cross-Origin-Opener-Policy: same-origin-allow-popups
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
+X-Content-Type-Options: nosniff
+set-cookie: __cf_bm=hpmf1IgcbflBQ2M6OT87.AuR27nDhyL71uRY7u6HCBk-1784727633.8470957-1.0.1.1-Ve9HMFbOmFobKUkX_9zn0g.3X5K1oXvkhK0dXAFw3Y7Zi6GCrznwVGIOwzOL066YysFFeIGOEKyLH2WSC9AnQrWY6ReKkqLLpHT3Qj906IiBOjpuEa9JDHpUMCxHDl_5; HttpOnly; SameSite=None; Secure; Path=/; Domain=chatgpt.com; Expires=Wed, 22 Jul 2026 14:10:34 GMT
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=XXeyzZ80nMR4P%2BG9cBM9GpV4vq9Y8dQkp7NVQcgliHyqmVZvrkqVVHVgB3m4hlDhVFlaVn1myIKeyp%2B%2BTs9GDYqvJsumc7V5hdRIai400z6qaTtjOAtepIgIUg0z"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.01,"max_age":604800}
+Referrer-Policy: strict-origin-when-cross-origin
+CF-RAY: a1f2db9f8d304d21-SJC
+
+--- Response Body ---
+{
+  "code": "no_credit",
+  "credit": null,
+  "windows_reset": 0
+}
+

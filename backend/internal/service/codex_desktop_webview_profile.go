@@ -9,15 +9,22 @@ import (
 
 const (
 	// Stable wire values captured from Codex Desktop 26.715.61943's Electron
-	// WebView (Chrome 150). Session cookies and Sentry tracing values are
-	// intentionally not synthesized.
+	// WebView (Chrome 150). Session cookies are intentionally not synthesized.
+	// Sentry values are static per release on every webview request (trace ids
+	// are zeroed, no session correlation), so they are part of the wire profile.
 	codexDesktopWebviewUserAgent      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
 	codexDesktopWebviewAcceptEncoding = "gzip, deflate, br, zstd"
-	codexDesktopWebviewAcceptLanguage = "zh-CN,zh;q=0.9"
+	// US English webview locale; keep in lockstep with oai-language / attestation.
+	codexDesktopWebviewAcceptLanguage = "en-US,en;q=0.9"
 	codexDesktopWebviewPriority       = "u=4, i"
 	codexDesktopWebviewSecFetchSite   = "none"
 	codexDesktopWebviewSecFetchMode   = "no-cors"
 	codexDesktopWebviewSecFetchDest   = "empty"
+	// codexDesktopWebviewSentryTrace / codexDesktopWebviewBaggage: captured
+	// 2026-07-22 from 26.715.61943 webview requests (single unique value each
+	// across the whole capture). sentry-release tracks the desktop app build.
+	codexDesktopWebviewSentryTrace = "00000000000000000000000000000000-0000000000000000"
+	codexDesktopWebviewBaggage     = "sentry-environment=prod,sentry-release=codex%4026.715.61943,sentry-public_key=6719eaa18601933a26ac21499dcaba2f,sentry-trace_id=00000000000000000000000000000000,sentry-org_id=33249,sentry-sampled=false"
 )
 
 func buildCodexDesktopWebviewHeaders(accessToken, chatGPTAccountID, language string, fedRAMP bool) map[string]string {
@@ -74,6 +81,8 @@ func withCodexDesktopWebviewProfile(client *req.Client) *req.Client {
 	}
 	profiled := client.Clone()
 	profiled.Headers = http.Header{
+		"Sentry-Trace":    {codexDesktopWebviewSentryTrace},
+		"Baggage":         {codexDesktopWebviewBaggage},
 		"User-Agent":      {codexDesktopWebviewUserAgent},
 		"Accept-Encoding": {codexDesktopWebviewAcceptEncoding},
 		"Accept-Language": {codexDesktopWebviewAcceptLanguage},
@@ -83,6 +92,8 @@ func withCodexDesktopWebviewProfile(client *req.Client) *req.Client {
 		"Priority":        {codexDesktopWebviewPriority},
 	}
 	profiled.SetCommonHeaderOrder(
+		"sentry-trace",
+		"baggage",
 		"content-length",
 		"authorization",
 		"chatgpt-account-id",

@@ -2,6 +2,12 @@
 
 从 Codex 桌面端 Electron 应用（`app.asar`，版本 26.616.6631.0）中提取的四个管理接口。
 
+> **2026-07-22 更新**（依据 26.715.61943 实抓，见 `codex-desktop-capture/2026-07-22_0.145.0-alpha.27/`）：
+> 1. 实抓请求中**未出现** `X-OpenAI-Attach-Auth` / `X-OpenAI-Attach-Integrity-State`，26.715 疑似已移除这两个头。
+> 2. 「CLI 没有这些接口」已过时：0.145 的 codex-rs 新增 `backend-client/src/client/rate_limit_resets.rs`
+>    （GET/consume 均支持，`credit_id` 可选），并有 TUI 兑换流程与 app-server JSONRPC 处理器
+>    （`account/rateLimits/read` 并发拉取 `/wham/usage` + `/wham/rate-limit-reset-credits`）。
+
 Base URL: `https://chatgpt.com/backend-api`
 
 ## 通用请求头

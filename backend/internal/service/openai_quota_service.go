@@ -28,7 +28,8 @@ const (
 	chatGPTRateLimitCreditsURL  = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	chatGPTRateLimitResetURL    = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout  = 20 * time.Second
-	openaiQuotaCodexLanguageTag = "zh-CN"
+	// Keep aligned with codexDesktopAPILanguage / webview accept-language (US profile).
+	openaiQuotaCodexLanguageTag = "en-US"
 )
 
 // OpenAIRateLimitWindow describes a single rate-limit window returned by

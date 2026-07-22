@@ -37,10 +37,11 @@ const (
 	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段的兜底值（实抓固定值），
 	// 正常路径按账号确定性派生，仅在无法派生时使用。
 	codexInstallationID = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
-	// Windows 桌面端 attestation signals（当前机器实抓画像）。
+	// Windows 桌面端 attestation signals（美区英文画像；与 oai-language /
+	// accept-language 保持一致，避免 locale 组合穿帮）。
 	codexAttestationBundleID      = "com.openai.codex"
-	codexAttestationLanguage      = "zh-CN"
-	codexAttestationTimezone      = "Asia/Shanghai"
+	codexAttestationLanguage      = "en-US"
+	codexAttestationTimezone      = "America/New_York"
 	codexAttestationScreenSizeSum = 1967
 	codexAttestationScreenScale   = 1.5
 )

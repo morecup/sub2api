@@ -45,7 +45,10 @@ func codexDesktopAPIWebviewHeaders(account *Account, accessToken, chatgptAccount
 const (
 	codexDesktopAPIBaseURL     = "https://chatgpt.com/backend-api"
 	codexDesktopAPIReferralKey = "codex_referral_persistent_invite"
-	codexDesktopAPILanguage    = "en"
+	// oai-language 跟随应用 UI 语言。当前固定为美区英文画像，
+	// 与 webview profile 的 accept-language (en-US,en;q=0.9)
+	// 以及 attestation locale 保持一致。
+	codexDesktopAPILanguage = "en-US"
 )
 
 // InviteEligibility represents the eligibility response for referral invite.
