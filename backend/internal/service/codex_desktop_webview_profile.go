@@ -75,6 +75,11 @@ func applyCodexDesktopSessionHeaders(headers map[string]string, account *Account
 // transport while replacing req/v3's generic macOS Chrome defaults. The order
 // is the stable subset visible on the wire; omitted dynamic headers retain
 // their relative positions when a real session supplies them.
+//
+// Accept-Encoding is part of the wire profile (gzip/br/zstd). req/v3 only
+// auto-decodes gzip when it injects Accept-Encoding itself; once we set the
+// header explicitly, AutoDecompression must be enabled or JSON decode hits
+// the raw compressed body (e.g. "invalid character '\\x1b'...").
 func withCodexDesktopWebviewProfile(client *req.Client) *req.Client {
 	if client == nil {
 		return nil
@@ -109,5 +114,7 @@ func withCodexDesktopWebviewProfile(client *req.Client) *req.Client {
 		"cookie",
 		"priority",
 	)
+	// Keep wire Accept-Encoding while still decoding compressed responses.
+	profiled.EnableAutoDecompress()
 	return profiled
 }

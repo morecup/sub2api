@@ -1,6 +1,8 @@
 package service
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -8,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/klauspost/compress/zstd"
 )
 
 func TestParseOpenAIRateLimitResetCreditDetails_PreservesAvailableCreditOrder(t *testing.T) {
@@ -266,6 +269,77 @@ func TestQueryUsageKeepsAggregationWithDesktopRequestProfile(t *testing.T) {
 	require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
 	require.Len(t, usage.RateLimitResetCredits.Credits, 2)
 	require.Equal(t, 1, listCalls)
+}
+
+// Regression: desktop profile advertises br/zstd; without AutoDecompression
+// SetSuccessResult tries to JSON-decode the raw compressed body and fails with
+// e.g. invalid character '\x1b'.
+func TestQueryUsageDecodesCompressedUpstreamBodies(t *testing.T) {
+	account := &Account{
+		ID:       100,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		Credentials: map[string]any{
+			"chatgpt_account_id": "account-100",
+		},
+	}
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{
+		OpenAITokenCacheKey(account): "access-token",
+	}}
+	tokenProvider := NewOpenAITokenProvider(repo, tokenCache, nil)
+
+	usageJSON := []byte(`{"rate_limit_reset_credits":{"available_count":3}}`)
+	creditsJSON := []byte(`{"available_count":2,"credits":[{"status":"available","expires_at":"2026-07-25T00:00:00Z"},{"status":"available","expires_at":"2026-07-26T00:00:00Z"}]}`)
+
+	mustGzip := func(raw []byte) []byte {
+		var buf bytes.Buffer
+		zw := gzip.NewWriter(&buf)
+		_, err := zw.Write(raw)
+		require.NoError(t, err)
+		require.NoError(t, zw.Close())
+		return buf.Bytes()
+	}
+	mustZstd := func(raw []byte) []byte {
+		enc, err := zstd.NewWriter(nil)
+		require.NoError(t, err)
+		return enc.EncodeAll(raw, nil)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		encoding string
+		encode   func([]byte) []byte
+	}{
+		{name: "gzip", encoding: "gzip", encode: mustGzip},
+		{name: "zstd", encoding: "zstd", encode: mustZstd},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, codexDesktopWebviewAcceptEncoding, r.Header.Get("accept-encoding"))
+				w.Header().Set("content-type", "application/json")
+				w.Header().Set("content-encoding", tc.encoding)
+				switch r.URL.Path {
+				case "/backend-api/wham/usage":
+					_, _ = w.Write(tc.encode(usageJSON))
+				case "/backend-api/wham/rate-limit-reset-credits":
+					_, _ = w.Write(tc.encode(creditsJSON))
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+
+			svc := NewOpenAIQuotaService(repo, nil, tokenProvider, newQuotaRedirectingFactory(srv))
+			usage, err := svc.QueryUsage(context.Background(), account.ID)
+			require.NoError(t, err)
+			require.NotNil(t, usage)
+			require.NotNil(t, usage.RateLimitResetCredits)
+			require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
+			require.Len(t, usage.RateLimitResetCredits.Credits, 2)
+		})
+	}
 }
 
 func TestOpenAIQuotaUsageDecodesLatestCodexDesktopShape(t *testing.T) {
