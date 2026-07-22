@@ -386,6 +386,44 @@ func TestOpenAIQuotaUsageDecodesObjectRateLimitReachedType(t *testing.T) {
 	require.Equal(t, "codex", reachedType["metered_feature"])
 }
 
+// Regression: some /wham/usage plans encode credits.balance (and related counters)
+// as JSON strings. Strict float64/int decode previously 502'd with
+// "cannot unmarshal string into Go struct field ... of type float64".
+func TestOpenAIQuotaUsageDecodesStringNumericFields(t *testing.T) {
+	var usage OpenAIQuotaUsage
+	err := json.Unmarshal([]byte(`{
+		"credits":{
+			"has_credits":true,
+			"unlimited":false,
+			"overage_limit_reached":false,
+			"balance":"12.5",
+			"approx_local_messages":"3",
+			"approx_cloud_messages":"4.0"
+		},
+		"spend_control":{"reached":false,"individual_limit":"100"},
+		"rate_limit_reset_credits":{"available_count":"2","applicable_available_count":"1"}
+	}`), &usage)
+	require.NoError(t, err)
+
+	require.NotNil(t, usage.Credits)
+	require.True(t, usage.Credits.HasCredits)
+	require.NotNil(t, usage.Credits.Balance)
+	require.Equal(t, 12.5, *usage.Credits.Balance)
+	require.NotNil(t, usage.Credits.ApproxLocalMessages)
+	require.Equal(t, 3, *usage.Credits.ApproxLocalMessages)
+	require.NotNil(t, usage.Credits.ApproxCloudMessages)
+	require.Equal(t, 4, *usage.Credits.ApproxCloudMessages)
+
+	require.NotNil(t, usage.SpendControl)
+	require.NotNil(t, usage.SpendControl.IndividualLimit)
+	require.Equal(t, 100.0, *usage.SpendControl.IndividualLimit)
+
+	require.NotNil(t, usage.RateLimitResetCredits)
+	require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
+	require.NotNil(t, usage.RateLimitResetCredits.ApplicableAvailableCount)
+	require.Equal(t, 1, *usage.RateLimitResetCredits.ApplicableAvailableCount)
+}
+
 func TestResetCreditMatchesDesktopAutomaticRequest(t *testing.T) {
 	account := &Account{
 		ID:       100,

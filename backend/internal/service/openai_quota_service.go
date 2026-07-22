@@ -1,12 +1,15 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +74,28 @@ type OpenAIRateLimitResetCredits struct {
 	Credits                  []OpenAIRateLimitResetCreditDetail `json:"credits,omitempty"`
 }
 
+// UnmarshalJSON accepts available_count fields as JSON numbers or numeric strings.
+// Some /wham/usage payloads encode counters as strings; a strict int decode would 502.
+func (c *OpenAIRateLimitResetCredits) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return fmt.Errorf("OpenAIRateLimitResetCredits: UnmarshalJSON on nil pointer")
+	}
+	var raw struct {
+		AvailableCount           json.RawMessage                    `json:"available_count"`
+		ApplicableAvailableCount json.RawMessage                    `json:"applicable_available_count"`
+		Credits                  []OpenAIRateLimitResetCreditDetail `json:"credits"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if n := parseOpenAIResetCreditAvailableCount(raw.AvailableCount); n != nil {
+		c.AvailableCount = *n
+	}
+	c.ApplicableAvailableCount = parseOpenAIResetCreditAvailableCount(raw.ApplicableAvailableCount)
+	c.Credits = raw.Credits
+	return nil
+}
+
 // OpenAICredits is the credits section returned by the latest Codex Desktop
 // /wham/usage response. Balance/message estimates are nullable for free plans.
 type OpenAICredits struct {
@@ -82,10 +107,117 @@ type OpenAICredits struct {
 	ApproxCloudMessages *int     `json:"approx_cloud_messages"`
 }
 
+// UnmarshalJSON accepts balance / message estimate fields as numbers or strings.
+// Upstream has been observed returning balance as a JSON string for some plans.
+func (c *OpenAICredits) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return fmt.Errorf("OpenAICredits: UnmarshalJSON on nil pointer")
+	}
+	var raw struct {
+		HasCredits          bool            `json:"has_credits"`
+		Unlimited           bool            `json:"unlimited"`
+		OverageLimitReached bool            `json:"overage_limit_reached"`
+		Balance             json.RawMessage `json:"balance"`
+		ApproxLocalMessages json.RawMessage `json:"approx_local_messages"`
+		ApproxCloudMessages json.RawMessage `json:"approx_cloud_messages"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	c.HasCredits = raw.HasCredits
+	c.Unlimited = raw.Unlimited
+	c.OverageLimitReached = raw.OverageLimitReached
+	c.Balance = parseOpenAIOptionalFloat(raw.Balance)
+	c.ApproxLocalMessages = parseOpenAIOptionalInt(raw.ApproxLocalMessages)
+	c.ApproxCloudMessages = parseOpenAIOptionalInt(raw.ApproxCloudMessages)
+	return nil
+}
+
 // OpenAISpendControl is the spend-control section returned by /wham/usage.
 type OpenAISpendControl struct {
 	Reached         bool     `json:"reached"`
 	IndividualLimit *float64 `json:"individual_limit"`
+}
+
+// UnmarshalJSON accepts individual_limit as a JSON number or numeric string.
+func (c *OpenAISpendControl) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return fmt.Errorf("OpenAISpendControl: UnmarshalJSON on nil pointer")
+	}
+	var raw struct {
+		Reached         bool            `json:"reached"`
+		IndividualLimit json.RawMessage `json:"individual_limit"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	c.Reached = raw.Reached
+	c.IndividualLimit = parseOpenAIOptionalFloat(raw.IndividualLimit)
+	return nil
+}
+
+// parseOpenAIOptionalFloat decodes JSON null/number/numeric-string into *float64.
+// Empty or null input yields nil without error (field omitted / free-plan shape).
+func parseOpenAIOptionalFloat(raw json.RawMessage) *float64 {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	if trimmed[0] == '"' {
+		var text string
+		if err := json.Unmarshal(trimmed, &text); err != nil {
+			return nil
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil
+		}
+		parsed, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return nil
+		}
+		return &parsed
+	}
+	var value float64
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil
+	}
+	return &value
+}
+
+// parseOpenAIOptionalInt decodes JSON null/number/numeric-string into *int.
+func parseOpenAIOptionalInt(raw json.RawMessage) *int {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		return nil
+	}
+	if trimmed[0] == '"' {
+		var text string
+		if err := json.Unmarshal(trimmed, &text); err != nil {
+			return nil
+		}
+		text = strings.TrimSpace(text)
+		if text == "" {
+			return nil
+		}
+		parsed, err := strconv.Atoi(text)
+		if err != nil {
+			// Some payloads may encode whole-number counts as "1.0".
+			f, ferr := strconv.ParseFloat(text, 64)
+			if ferr != nil {
+				return nil
+			}
+			n := int(f)
+			return &n
+		}
+		return &parsed
+	}
+	var value float64
+	if err := json.Unmarshal(trimmed, &value); err != nil {
+		return nil
+	}
+	n := int(value)
+	return &n
 }
 
 // OpenAIQuotaUsage is the typed projection of the latest Codex Desktop
