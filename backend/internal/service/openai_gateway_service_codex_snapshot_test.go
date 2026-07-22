@@ -1,6 +1,7 @@
 package service
 
 import (
+	"net/http"
 	"testing"
 	"time"
 )
@@ -101,6 +102,71 @@ func TestBuildCodexUsageExtraUpdates_UsesSnapshotUpdatedAt(t *testing.T) {
 	}
 	if got := updates["codex_7d_reset_at"]; got != "2026-02-17T10:00:00Z" {
 		t.Fatalf("codex_7d_reset_at = %v, want %s", got, "2026-02-17T10:00:00Z")
+	}
+}
+
+func TestBuildCodexUsageExtraUpdates_LatestDesktop30DayWindowIsNot5hOr7d(t *testing.T) {
+	// Codex Desktop 0.145.0-alpha.27 实抓响应头：primary=43200 分钟（30 天），
+	// secondary=0（未启用）。二者都不能被旧的大小比较逻辑误标成 7d/5h。
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "2")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	headers.Set("x-codex-primary-window-minutes", "43200")
+	headers.Set("x-codex-secondary-window-minutes", "0")
+	headers.Set("x-codex-primary-reset-after-seconds", "2590694")
+	headers.Set("x-codex-secondary-reset-after-seconds", "0")
+
+	snapshot := ParseCodexRateLimitHeaders(headers)
+	if snapshot == nil {
+		t.Fatal("expected parsed snapshot")
+	}
+	if normalized := snapshot.Normalize(); normalized != nil {
+		t.Fatalf("30-day/disabled windows must not normalize to 5h/7d: %+v", normalized)
+	}
+
+	updates := buildCodexUsageExtraUpdates(snapshot, time.Date(2026, 7, 21, 16, 20, 12, 0, time.UTC))
+	if got := updates["codex_primary_window_minutes"]; got != 43200 {
+		t.Fatalf("codex_primary_window_minutes = %v, want 43200", got)
+	}
+	if got := updates["codex_secondary_window_minutes"]; got != 0 {
+		t.Fatalf("codex_secondary_window_minutes = %v, want 0", got)
+	}
+	for _, key := range codexCanonicalUsageExtraKeys {
+		value, ok := updates[key]
+		if !ok || value != nil {
+			t.Fatalf("%s = %v (present=%v), want cleanup marker nil", key, value, ok)
+		}
+	}
+}
+
+func TestBuildCodexUsageProgressFromExtra_RejectsMislabeled30DayWindow(t *testing.T) {
+	extra := map[string]any{
+		"codex_7d_used_percent":   2.0,
+		"codex_7d_window_minutes": 43200,
+	}
+	if got := buildCodexUsageProgressFromExtra(extra, "7d", time.Now()); got != nil {
+		t.Fatalf("30-day window must not be rendered as 7d: %+v", got)
+	}
+}
+
+func TestMergeAccountExtra_RemovesCanonicalCleanupMarkers(t *testing.T) {
+	account := &Account{Extra: map[string]any{
+		"codex_5h_used_percent": 12.0,
+		"codex_7d_used_percent": 34.0,
+	}}
+	mergeAccountExtra(account, map[string]any{
+		"codex_primary_window_minutes": 43200,
+		"codex_5h_used_percent":        nil,
+		"codex_7d_used_percent":        nil,
+	})
+	if _, ok := account.Extra["codex_5h_used_percent"]; ok {
+		t.Fatal("codex_5h_used_percent cleanup marker must delete the in-memory alias")
+	}
+	if _, ok := account.Extra["codex_7d_used_percent"]; ok {
+		t.Fatal("codex_7d_used_percent cleanup marker must delete the in-memory alias")
+	}
+	if got := account.Extra["codex_primary_window_minutes"]; got != 43200 {
+		t.Fatalf("codex_primary_window_minutes = %v, want 43200", got)
 	}
 }
 

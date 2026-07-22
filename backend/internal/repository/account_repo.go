@@ -66,6 +66,17 @@ var schedulerNeutralExtraKeys = map[string]struct{}{
 	"session_window_utilization": {},
 }
 
+var removableCodexCanonicalExtraKeys = [...]string{
+	"codex_5h_used_percent",
+	"codex_5h_reset_after_seconds",
+	"codex_5h_window_minutes",
+	"codex_5h_reset_at",
+	"codex_7d_used_percent",
+	"codex_7d_reset_after_seconds",
+	"codex_7d_window_minutes",
+	"codex_7d_reset_at",
+}
+
 const postgresParameterBatchSize = 50000
 
 // NewAccountRepository 创建账户仓储实例。
@@ -2396,10 +2407,18 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 	if clearProbeSnapshot {
 		extraExpression = "(" + extraExpression + ") - 'upstream_billing_probe'"
 	}
+	args := []any{string(payload), id}
+	for _, key := range removableCodexCanonicalExtraKeys {
+		if value, ok := updates[key]; !ok || value != nil {
+			continue
+		}
+		args = append(args, key)
+		extraExpression = "(" + extraExpression + ") - $" + strconv.Itoa(len(args)) + "::text"
+	}
 	result, err := client.ExecContext(
 		ctx,
 		"UPDATE accounts SET extra = "+extraExpression+", updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL",
-		string(payload), id,
+		args...,
 	)
 
 	if err != nil {

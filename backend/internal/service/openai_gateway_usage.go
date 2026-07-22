@@ -686,7 +686,8 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		return nil
 	}
 
-	// Primary (weekly) limits
+	// Primary limit. The period is defined only by x-codex-primary-window-minutes;
+	// newer Desktop versions may use a non-weekly primary window.
 	if v := parseFloat("x-codex-primary-used-percent"); v != nil {
 		snapshot.PrimaryUsedPercent = v
 		hasData = true
@@ -700,7 +701,7 @@ func ParseCodexRateLimitHeaders(headers http.Header) *OpenAICodexUsageSnapshot {
 		hasData = true
 	}
 
-	// Secondary (5h) limits
+	// Secondary limit. A zero-minute window means that this slot is inactive.
 	if v := parseFloat("x-codex-secondary-used-percent"); v != nil {
 		snapshot.SecondaryUsedPercent = v
 		hasData = true
@@ -785,6 +786,14 @@ func buildCodexUsageExtraUpdates(snapshot *OpenAICodexUsageSnapshot, fallbackNow
 		updates["codex_primary_over_secondary_percent"] = *snapshot.PrimaryOverSecondaryPercent
 	}
 	updates["codex_usage_updated_at"] = baseTime.Format(time.RFC3339)
+
+	// 显式窗口头代表上游已经声明了周期。先清理旧的 5h/7d 别名，再仅回填
+	// Normalize 能明确识别的周期，避免历史 43200/0 误标值长期残留在 Extra。
+	if snapshot.PrimaryWindowMinutes != nil || snapshot.SecondaryWindowMinutes != nil {
+		for _, key := range codexCanonicalUsageExtraKeys {
+			updates[key] = nil
+		}
+	}
 
 	// 归一化到 5h/7d 规范字段
 	if normalized := snapshot.Normalize(); normalized != nil {
