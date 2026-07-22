@@ -28,12 +28,7 @@ const (
 	chatGPTRateLimitCreditsURL  = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
 	chatGPTRateLimitResetURL    = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
 	openaiQuotaUpstreamTimeout  = 20 * time.Second
-	openaiQuotaCodexBeta        = "codex-1"
-	openaiQuotaCodexOriginator  = "Codex Desktop"
 	openaiQuotaCodexLanguageTag = "zh-CN"
-	openaiQuotaSecFetchSite     = "none"
-	openaiQuotaSecFetchMode     = "no-cors"
-	openaiQuotaSecFetchDest     = "empty"
 )
 
 // OpenAIRateLimitWindow describes a single rate-limit window returned by
@@ -141,6 +136,7 @@ type OpenAIQuotaService struct {
 	proxyRepo            ProxyRepository
 	tokenProvider        *OpenAITokenProvider
 	privacyClientFactory PrivacyClientFactory
+	desktopClientCache   sync.Map
 	agentIdentityTaskMu  sync.Mutex
 	agentIdentityWS      agentIdentityWSConnectionInvalidator
 }
@@ -171,7 +167,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 		return nil, err
 	}
 
-	client, err := s.privacyClientFactory(proxyURL)
+	client, err := s.desktopClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
@@ -298,7 +294,7 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_QUOTA_REDEEM_ID_FAILED", "failed to generate redeem id: %v", err)
 	}
 
-	client, err := s.privacyClientFactory(proxyURL)
+	client, err := s.desktopClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
@@ -478,6 +474,7 @@ func (s *OpenAIQuotaService) buildCodexQuotaHeaders(ctx context.Context, account
 			return nil, "", fmt.Errorf("agent identity shadow credentials are unavailable")
 		}
 	}
+	applyCodexDesktopSessionHeaders(headers, account)
 	if !account.IsOpenAIAgentIdentity() {
 		return headers, "", nil
 	}
@@ -507,25 +504,36 @@ func (s *OpenAIQuotaService) redactQuotaErrorBody(ctx context.Context, accountID
 	return string(redactAgentIdentitySensitiveBodyForAccount(ctx, s.accountRepo, account, []byte(body)))
 }
 
-// buildCodexCommonHeaders sets the request headers expected by the chatgpt.com
-// backend so calls succeed past Cloudflare/WASM checks.
+// buildCodexCommonHeaders contains the business headers shared by the latest
+// Desktop webview's /wham requests. Browser transport headers are applied by
+// withCodexDesktopWebviewProfile.
 func buildCodexCommonHeaders(accessToken, chatGPTAccountID string, fedRAMP bool) map[string]string {
-	headers := map[string]string{
-		"authorization":      "Bearer " + accessToken,
-		"chatgpt-account-id": chatGPTAccountID,
-		"openai-beta":        openaiQuotaCodexBeta,
-		"oai-language":       openaiQuotaCodexLanguageTag,
-		"originator":         openaiQuotaCodexOriginator,
-		"accept":             "application/json",
-		"sec-fetch-site":     openaiQuotaSecFetchSite,
-		"sec-fetch-mode":     openaiQuotaSecFetchMode,
-		"sec-fetch-dest":     openaiQuotaSecFetchDest,
-		"priority":           "u=4, i",
+	return buildCodexDesktopWebviewHeaders(accessToken, chatGPTAccountID, openaiQuotaCodexLanguageTag, fedRAMP)
+}
+
+// desktopClient obtains one per-proxy Desktop profile. Caching the cloned client
+// retains the profile's transport connection pool while keeping it isolated from
+// other ChatGPT callers that use req/v3's generic browser headers.
+func (s *OpenAIQuotaService) desktopClient(proxyURL string) (*req.Client, error) {
+	key := strings.TrimSpace(proxyURL)
+	if cached, ok := s.desktopClientCache.Load(key); ok {
+		if client, ok := cached.(*req.Client); ok && client != nil {
+			return client, nil
+		}
 	}
-	if fedRAMP {
-		headers["x-openai-fedramp"] = "true"
+	base, err := s.privacyClientFactory(proxyURL)
+	if err != nil {
+		return nil, err
 	}
-	return headers
+	profiled := withCodexDesktopWebviewProfile(base)
+	if profiled == nil {
+		return nil, fmt.Errorf("desktop quota client is unavailable")
+	}
+	actual, _ := s.desktopClientCache.LoadOrStore(key, profiled)
+	if client, ok := actual.(*req.Client); ok && client != nil {
+		return client, nil
+	}
+	return profiled, nil
 }
 
 // generateRedeemRequestID produces a UUID-v4-shaped string without pulling in a

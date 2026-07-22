@@ -206,6 +206,66 @@ func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
 	}
 }
 
+func TestQueryUsageKeepsAggregationWithDesktopRequestProfile(t *testing.T) {
+	account := &Account{
+		ID:       100,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		Credentials: map[string]any{
+			"chatgpt_account_id": "account-100",
+			"chatgpt_cookie":     "session=test-session",
+		},
+	}
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{
+		OpenAITokenCacheKey(account): "access-token",
+	}}
+	tokenProvider := NewOpenAITokenProvider(repo, tokenCache, nil)
+	var listCalls int
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Equal(t, "Bearer access-token", r.Header.Get("authorization"))
+		require.Equal(t, "account-100", r.Header.Get("chatgpt-account-id"))
+		require.Empty(t, r.Header.Get("accept"))
+		require.Equal(t, openaiQuotaCodexLanguageTag, r.Header.Get("oai-language"))
+		require.Equal(t, codexDesktopOriginator, r.Header.Get("originator"))
+		require.Equal(t, codexDesktopWebviewUserAgent, r.Header.Get("user-agent"))
+		require.Equal(t, codexDesktopWebviewAcceptEncoding, r.Header.Get("accept-encoding"))
+		require.Equal(t, codexDesktopWebviewAcceptLanguage, r.Header.Get("accept-language"))
+		require.Equal(t, codexDesktopWebviewSecFetchSite, r.Header.Get("sec-fetch-site"))
+		require.Equal(t, codexDesktopWebviewSecFetchMode, r.Header.Get("sec-fetch-mode"))
+		require.Equal(t, codexDesktopWebviewSecFetchDest, r.Header.Get("sec-fetch-dest"))
+		require.Equal(t, codexDesktopWebviewPriority, r.Header.Get("priority"))
+		require.Equal(t, "session=test-session", r.Header.Get("cookie"))
+		require.Empty(t, r.Header.Get("openai-beta"))
+		require.Empty(t, r.Header.Get("x-openai-attach-auth"))
+		require.Empty(t, r.Header.Get("x-openai-attach-integrity-state"))
+		require.Empty(t, r.Header.Get("sec-ch-ua"))
+		switch r.URL.Path {
+		case "/backend-api/wham/usage":
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"rate_limit_reset_credits":{"available_count":3}}`))
+		case "/backend-api/wham/rate-limit-reset-credits":
+			listCalls++
+			w.Header().Set("content-type", "application/json")
+			_, _ = w.Write([]byte(`{"available_count":2,"credits":[{"status":"available","expires_at":"2026-07-25T00:00:00Z"},{"status":"available","expires_at":"2026-07-26T00:00:00Z"}]}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	svc := NewOpenAIQuotaService(repo, nil, tokenProvider, newQuotaRedirectingFactory(srv))
+	usage, err := svc.QueryUsage(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.NotNil(t, usage.RateLimitResetCredits)
+	require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
+	require.Len(t, usage.RateLimitResetCredits.Credits, 2)
+	require.Equal(t, 1, listCalls)
+}
+
 func TestOpenAIQuotaUsageDecodesLatestCodexDesktopShape(t *testing.T) {
 	var usage OpenAIQuotaUsage
 	err := json.Unmarshal([]byte(`{
@@ -248,4 +308,54 @@ func TestOpenAIQuotaUsageDecodesObjectRateLimitReachedType(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "primary_window", reachedType["type"])
 	require.Equal(t, "codex", reachedType["metered_feature"])
+}
+
+func TestResetCreditMatchesDesktopAutomaticRequest(t *testing.T) {
+	account := &Account{
+		ID:       100,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Status:   StatusActive,
+		Credentials: map[string]any{
+			"chatgpt_account_id": "account-100",
+		},
+	}
+	repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{account.ID: account}}
+	tokenCache := &stubQuotaTokenCache{tokens: map[string]string{
+		OpenAITokenCacheKey(account): "access-token",
+	}}
+	tokenProvider := NewOpenAITokenProvider(repo, tokenCache, nil)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodPost, r.Method)
+		require.Equal(t, "/backend-api/wham/rate-limit-reset-credits/consume", r.URL.Path)
+		require.Equal(t, "Bearer access-token", r.Header.Get("authorization"))
+		require.Equal(t, "account-100", r.Header.Get("chatgpt-account-id"))
+		require.Empty(t, r.Header.Get("accept"))
+		require.Equal(t, openaiQuotaCodexLanguageTag, r.Header.Get("oai-language"))
+		require.Equal(t, codexDesktopOriginator, r.Header.Get("originator"))
+		require.Equal(t, codexDesktopWebviewUserAgent, r.Header.Get("user-agent"))
+		require.Equal(t, codexDesktopWebviewAcceptEncoding, r.Header.Get("accept-encoding"))
+		require.Equal(t, codexDesktopWebviewAcceptLanguage, r.Header.Get("accept-language"))
+		require.Equal(t, codexDesktopWebviewPriority, r.Header.Get("priority"))
+		require.Empty(t, r.Header.Get("openai-beta"))
+		require.Empty(t, r.Header.Get("x-openai-attach-auth"))
+		require.Empty(t, r.Header.Get("x-openai-attach-integrity-state"))
+		require.Empty(t, r.Header.Get("sec-ch-ua"))
+
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`, body["redeem_request_id"])
+		_, hasCreditID := body["credit_id"]
+		require.False(t, hasCreditID, "automatic mode must omit credit_id")
+
+		w.Header().Set("content-type", "application/json")
+		_, _ = w.Write([]byte(`{"code":"reset","windows_reset":2}`))
+	}))
+	defer srv.Close()
+
+	svc := NewOpenAIQuotaService(repo, nil, tokenProvider, newQuotaRedirectingFactory(srv))
+	result, err := svc.ResetCredit(context.Background(), account.ID)
+	require.NoError(t, err)
+	require.Equal(t, "reset", result.Code)
+	require.Equal(t, 2, result.WindowsReset)
 }

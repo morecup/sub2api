@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/imroc/req/v3"
 )
 
 // CodexDesktopAPIService handles Codex Desktop App management API calls
@@ -27,12 +28,24 @@ func NewCodexDesktopAPIService(clientFactory PrivacyClientFactory, proxyRepo Pro
 	}
 }
 
+func (s *CodexDesktopAPIService) webviewClient(proxyURL string) (*req.Client, error) {
+	client, err := s.clientFactory(proxyURL)
+	if err != nil {
+		return nil, err
+	}
+	return withCodexDesktopWebviewProfile(client), nil
+}
+
+func codexDesktopAPIWebviewHeaders(account *Account, accessToken, chatgptAccountID string) map[string]string {
+	headers := buildCodexDesktopWebviewHeaders(accessToken, chatgptAccountID, codexDesktopAPILanguage, false)
+	applyCodexDesktopSessionHeaders(headers, account)
+	return headers
+}
+
 const (
-	codexDesktopAPIBaseURL        = "https://chatgpt.com/backend-api"
-	codexDesktopAPIReferralKey    = "codex_referral_persistent_invite"
-	codexDesktopAPIAttachAuth     = "1"
-	codexDesktopAPIIntegrityState = "1"
-	codexDesktopAPILanguage       = "en"
+	codexDesktopAPIBaseURL     = "https://chatgpt.com/backend-api"
+	codexDesktopAPIReferralKey = "codex_referral_persistent_invite"
+	codexDesktopAPILanguage    = "en"
 )
 
 // InviteEligibility represents the eligibility response for referral invite.
@@ -67,40 +80,6 @@ type ConsumeCreditResult struct {
 	Raw     any  `json:"raw,omitempty"`
 }
 
-func (s *CodexDesktopAPIService) setDesktopHeaders(req *http.Request, accessToken, chatgptAccountID string) {
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("ChatGPT-Account-Id", chatgptAccountID)
-	req.Header.Set("User-Agent", codexDesktopUserAgent)
-	req.Header.Set("OAI-Language", codexDesktopAPILanguage)
-	req.Header.Set("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth)
-	req.Header.Set("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState)
-	req.Header.Set("originator", codexDesktopOriginator)
-}
-
-func codexDesktopOptionalCookie(account *Account) string {
-	if account == nil {
-		return ""
-	}
-	for _, key := range []string{"chatgpt_cookie", "chatgpt_browser_cookie", "browser_cookie", "cookie"} {
-		if value := strings.TrimSpace(account.GetCredential(key)); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func codexDesktopOptionalBrowserUserAgent(account *Account) string {
-	if account == nil {
-		return codexDesktopUserAgent
-	}
-	for _, key := range []string{"chatgpt_user_agent", "chatgpt_browser_user_agent", "browser_user_agent"} {
-		if value := strings.TrimSpace(account.GetCredential(key)); value != "" {
-			return value
-		}
-	}
-	return codexDesktopUserAgent
-}
-
 func (s *CodexDesktopAPIService) resolveProxyURL(ctx context.Context, account *Account) string {
 	if account.ProxyID == nil {
 		return ""
@@ -132,26 +111,17 @@ func (s *CodexDesktopAPIService) GetInviteEligibility(ctx context.Context, accou
 	}
 	proxyURL := s.resolveProxyURL(ctx, account)
 
-	client, err := s.clientFactory(proxyURL)
+	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
 	}
 
 	url := fmt.Sprintf("%s/referrals/invite/eligibility?referral_key=%s", codexDesktopAPIBaseURL, codexDesktopAPIReferralKey)
 
+	headers := codexDesktopAPIWebviewHeaders(account, accessToken, chatgptAccountID)
 	request := client.R().
 		SetContext(ctx).
-		SetHeader("Authorization", "Bearer "+accessToken).
-		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
-		SetHeader("User-Agent", codexDesktopOptionalBrowserUserAgent(account)).
-		SetHeader("OAI-Language", codexDesktopAPILanguage).
-		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
-		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
-		SetHeader("originator", codexDesktopOriginator).
-		SetHeader("Accept", "application/json")
-	if cookie := codexDesktopOptionalCookie(account); cookie != "" {
-		request.SetHeader("Cookie", cookie)
-	}
+		SetHeaders(headers)
 	resp, err := request.Get(url)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_REQUEST_FAILED", "request failed: %v", err)
@@ -182,7 +152,7 @@ func (s *CodexDesktopAPIService) InviteFriends(ctx context.Context, account *Acc
 	}
 	proxyURL := s.resolveProxyURL(ctx, account)
 
-	client, err := s.clientFactory(proxyURL)
+	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
 	}
@@ -198,21 +168,12 @@ func (s *CodexDesktopAPIService) InviteFriends(ctx context.Context, account *Acc
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_MARSHAL_ERROR", "failed to marshal request body: %v", err)
 	}
 
+	headers := codexDesktopAPIWebviewHeaders(account, accessToken, chatgptAccountID)
+	headers["content-type"] = "application/json"
 	request := client.R().
 		SetContext(ctx).
-		SetHeader("Authorization", "Bearer "+accessToken).
-		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
-		SetHeader("User-Agent", codexDesktopOptionalBrowserUserAgent(account)).
-		SetHeader("OAI-Language", codexDesktopAPILanguage).
-		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
-		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
-		SetHeader("originator", codexDesktopOriginator).
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Accept", "application/json").
+		SetHeaders(headers).
 		SetBody(bodyBytes)
-	if cookie := codexDesktopOptionalCookie(account); cookie != "" {
-		request.SetHeader("Cookie", cookie)
-	}
 	resp, err := request.Post(url)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_REQUEST_FAILED", "request failed: %v", err)
@@ -234,23 +195,17 @@ func (s *CodexDesktopAPIService) GetRateLimitResetCredits(ctx context.Context, a
 	}
 	proxyURL := s.resolveProxyURL(ctx, account)
 
-	client, err := s.clientFactory(proxyURL)
+	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
 	}
 
 	url := fmt.Sprintf("%s/wham/rate-limit-reset-credits", codexDesktopAPIBaseURL)
 
+	headers := codexDesktopAPIWebviewHeaders(account, accessToken, chatgptAccountID)
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("Authorization", "Bearer "+accessToken).
-		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
-		SetHeader("User-Agent", codexDesktopUserAgent).
-		SetHeader("OAI-Language", codexDesktopAPILanguage).
-		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
-		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
-		SetHeader("originator", codexDesktopOriginator).
-		SetHeader("Accept", "application/json").
+		SetHeaders(headers).
 		Get(url)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_REQUEST_FAILED", "request failed: %v", err)
@@ -277,9 +232,15 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 	if strings.TrimSpace(creditID) == "" {
 		return nil, infraerrors.New(http.StatusBadRequest, "CODEX_DESKTOP_NO_CREDIT_ID", "credit_id is required")
 	}
+	if strings.TrimSpace(redeemRequestID) == "" {
+		redeemRequestID, err = generateRedeemRequestID()
+		if err != nil {
+			return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_REDEEM_ID_FAILED", "failed to generate redeem id: %v", err)
+		}
+	}
 	proxyURL := s.resolveProxyURL(ctx, account)
 
-	client, err := s.clientFactory(proxyURL)
+	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
 	}
@@ -295,17 +256,11 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_MARSHAL_ERROR", "failed to marshal request body: %v", err)
 	}
 
+	headers := codexDesktopAPIWebviewHeaders(account, accessToken, chatgptAccountID)
+	headers["content-type"] = "application/json"
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("Authorization", "Bearer "+accessToken).
-		SetHeader("ChatGPT-Account-Id", chatgptAccountID).
-		SetHeader("User-Agent", codexDesktopUserAgent).
-		SetHeader("OAI-Language", codexDesktopAPILanguage).
-		SetHeader("X-OpenAI-Attach-Auth", codexDesktopAPIAttachAuth).
-		SetHeader("X-OpenAI-Attach-Integrity-State", codexDesktopAPIIntegrityState).
-		SetHeader("originator", codexDesktopOriginator).
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Accept", "application/json").
+		SetHeaders(headers).
 		SetBody(bodyBytes).
 		Post(url)
 	if err != nil {
