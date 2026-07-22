@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -28,6 +29,18 @@ func TestParseOpenAIRateLimitResetCreditDetails_PreservesAvailableCreditOrder(t 
 		{ExpiresAt: "2026-07-04T04:05:06Z"},
 		{ExpiresAt: "2026-07-03T04:05:06Z"},
 	}, details.Credits)
+}
+
+func TestParseOpenAIRateLimitResetCreditDetailsReadsApplicableCount(t *testing.T) {
+	details, err := parseOpenAIRateLimitResetCreditDetails([]byte(`{
+		"available_count":4,
+		"applicable_available_count":1
+	}`))
+	require.NoError(t, err)
+	require.NotNil(t, details.AvailableCount)
+	require.Equal(t, 4, *details.AvailableCount)
+	require.NotNil(t, details.ApplicableAvailableCount)
+	require.Equal(t, 1, *details.ApplicableAvailableCount)
 }
 
 func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
@@ -185,4 +198,32 @@ func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
 			require.Len(t, usage.RateLimitResetCredits.Credits, tt.wantCredits)
 		})
 	}
+}
+
+func TestOpenAIQuotaUsageDecodesLatestCodexDesktopShape(t *testing.T) {
+	var usage OpenAIQuotaUsage
+	err := json.Unmarshal([]byte(`{
+		"user_id":"user-1",
+		"account_id":"user-1",
+		"email":"user@example.com",
+		"plan_type":"free",
+		"rate_limit":{"allowed":true,"limit_reached":false,"primary_window":{"used_percent":4,"limit_window_seconds":2592000,"reset_after_seconds":2576406,"reset_at":1787241505},"secondary_window":null},
+		"code_review_rate_limit":null,
+		"additional_rate_limits":null,
+		"credits":{"has_credits":false,"unlimited":false,"overage_limit_reached":false,"balance":null,"approx_local_messages":null,"approx_cloud_messages":null},
+		"spend_control":{"reached":false,"individual_limit":null},
+		"rate_limit_reached_type":null,
+		"promo":null,
+		"rate_limit_reset_credits":{"available_count":2,"applicable_available_count":1}
+	}`), &usage)
+	require.NoError(t, err)
+	require.NotNil(t, usage.RateLimit)
+	require.NotNil(t, usage.RateLimit.PrimaryWindow)
+	require.Equal(t, int64(2592000), usage.RateLimit.PrimaryWindow.LimitWindowSeconds)
+	require.NotNil(t, usage.Credits)
+	require.NotNil(t, usage.SpendControl)
+	require.NotNil(t, usage.RateLimitResetCredits)
+	require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
+	require.NotNil(t, usage.RateLimitResetCredits.ApplicableAvailableCount)
+	require.Equal(t, 1, *usage.RateLimitResetCredits.ApplicableAvailableCount)
 }

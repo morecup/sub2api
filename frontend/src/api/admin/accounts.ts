@@ -817,7 +817,22 @@ export interface OpenAIRateLimitResetCreditDetail {
 
 export interface OpenAIRateLimitResetCredits {
   available_count: number
+  applicable_available_count?: number | null
   credits?: OpenAIRateLimitResetCreditDetail[]
+}
+
+export interface OpenAICredits {
+  has_credits: boolean
+  unlimited: boolean
+  overage_limit_reached: boolean
+  balance?: number | null
+  approx_local_messages?: number | null
+  approx_cloud_messages?: number | null
+}
+
+export interface OpenAISpendControl {
+  reached: boolean
+  individual_limit?: number | null
 }
 
 export interface OpenAIQuotaUsage {
@@ -826,7 +841,12 @@ export interface OpenAIQuotaUsage {
   email?: string
   plan_type?: string
   rate_limit?: OpenAIRateLimit | null
+  code_review_rate_limit?: OpenAIRateLimit | null
   additional_rate_limits?: OpenAIAdditionalRateLimit[]
+  credits?: OpenAICredits | null
+  spend_control?: OpenAISpendControl | null
+  rate_limit_reached_type?: string | null
+  promo?: unknown
   rate_limit_reset_credits?: OpenAIRateLimitResetCredits | null
   fetched_at: number
 }

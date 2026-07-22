@@ -164,7 +164,14 @@ const showResetCreditDetails = ref(false)
 // 重置必须在母账号上进行。前端据此禁用影子的重置入口(外审 F6)。
 const isShadow = computed(() => props.account.parent_account_id != null)
 
-const availableResetCount = computed(() => data.value?.rate_limit_reset_credits?.available_count ?? 0)
+// 最新 Codex Desktop 会同时返回 available_count（总授权次数）和
+// applicable_available_count（当前账号/窗口实际可消费次数）。重置按钮应以
+// applicable 为准；旧响应没有该字段时回退到 available_count。
+const availableResetCount = computed(() => {
+  const credits = data.value?.rate_limit_reset_credits
+  if (!credits) return 0
+  return credits.applicable_available_count ?? credits.available_count ?? 0
+})
 const resetCreditExpirations = computed(() =>
   (data.value?.rate_limit_reset_credits?.credits ?? [])
     .map((credit) => credit.expires_at?.trim() ?? '')

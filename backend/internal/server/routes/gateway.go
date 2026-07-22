@@ -261,6 +261,46 @@ func RegisterGatewayRoutes(
 		})
 		codexDirect.GET("/models", h.OpenAIGateway.CodexModels)
 	}
+
+	// Codex Desktop 0.145.x also performs account-scoped REST calls for its
+	// plugin/MCP catalog, usage panel, analytics and remote-control bootstrap.
+	// Keep Responses/models on the specialized routes above; these endpoints are
+	// forwarded verbatim through an OpenAI OAuth account without Responses body
+	// normalization. Paths are explicit to avoid turning /backend-api into an
+	// unrestricted proxy.
+	codexDesktop := r.Group("/backend-api")
+	codexDesktop.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic)
+	{
+		codexDesktop.GET("/plugins/featured", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/ps/plugins/*path", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/ps/mcp", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/models", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/codex/analytics-events/events", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/codex/remote/control/environments", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/f/conversation", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/f/conversation/prepare", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/sentinel/chat-requirements/prepare", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/system_hints", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/subscriptions/auto_top_up/settings", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/checkout_pricing_config/configs/:country", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/payments/payment_methods", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/wham/remote/control/server/enroll", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/accounts/check", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/wham/analytics-events/events", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/onboarding/context", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/wham/onboarding/desktop/complete", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/profiles/me", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/wham/statsig/bootstrap", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/usage", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/rate-limit-reset-credits", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.POST("/wham/rate-limit-reset-credits/consume", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/wham/tasks/list", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/connectors/directory/list", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/settings/user", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/beacons/home", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/referrals/invite/eligibility", h.OpenAIGateway.CodexDesktopProxy)
+		codexDesktop.GET("/accounts/check/*path", h.OpenAIGateway.CodexDesktopProxy)
+	}
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
 	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupAnthropic, func(c *gin.Context) {
 		if isOpenAIResponsesCompatibleGatewayPlatform(c) {

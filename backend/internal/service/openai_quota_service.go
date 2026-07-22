@@ -70,20 +70,44 @@ type OpenAIRateLimitResetCreditDetail struct {
 // OpenAIRateLimitResetCredits captures the "available_count" surfaced for the
 // rate_limit_reset_credit grant type, which the reset action consumes.
 type OpenAIRateLimitResetCredits struct {
-	AvailableCount int                                `json:"available_count"`
-	Credits        []OpenAIRateLimitResetCreditDetail `json:"credits,omitempty"`
+	AvailableCount           int                                `json:"available_count"`
+	ApplicableAvailableCount *int                               `json:"applicable_available_count,omitempty"`
+	Credits                  []OpenAIRateLimitResetCreditDetail `json:"credits,omitempty"`
 }
 
-// OpenAIQuotaUsage is the typed projection of /wham/usage we expose to the UI.
-// Fields not relevant to the quota card are intentionally omitted to keep the
-// surface narrow; full upstream payload preservation is unnecessary.
+// OpenAICredits is the credits section returned by the latest Codex Desktop
+// /wham/usage response. Balance/message estimates are nullable for free plans.
+type OpenAICredits struct {
+	HasCredits          bool     `json:"has_credits"`
+	Unlimited           bool     `json:"unlimited"`
+	OverageLimitReached bool     `json:"overage_limit_reached"`
+	Balance             *float64 `json:"balance"`
+	ApproxLocalMessages *int     `json:"approx_local_messages"`
+	ApproxCloudMessages *int     `json:"approx_cloud_messages"`
+}
+
+// OpenAISpendControl is the spend-control section returned by /wham/usage.
+type OpenAISpendControl struct {
+	Reached         bool     `json:"reached"`
+	IndividualLimit *float64 `json:"individual_limit"`
+}
+
+// OpenAIQuotaUsage is the typed projection of the latest Codex Desktop
+// /wham/usage response. Keep nullable/optional fields so the proxy can track
+// upstream shape changes without confusing an omitted value with an explicit
+// null or zero.
 type OpenAIQuotaUsage struct {
 	UserID                string                       `json:"user_id,omitempty"`
 	AccountID             string                       `json:"account_id,omitempty"`
 	Email                 string                       `json:"email,omitempty"`
 	PlanType              string                       `json:"plan_type,omitempty"`
 	RateLimit             *OpenAIRateLimit             `json:"rate_limit,omitempty"`
+	CodeReviewRateLimit   *OpenAIRateLimit             `json:"code_review_rate_limit,omitempty"`
 	AdditionalRateLimits  []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
+	Credits               *OpenAICredits               `json:"credits,omitempty"`
+	SpendControl          *OpenAISpendControl          `json:"spend_control,omitempty"`
+	RateLimitReachedType  *string                      `json:"rate_limit_reached_type,omitempty"`
+	Promo                 any                          `json:"promo,omitempty"`
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
 }
@@ -201,6 +225,10 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 			payload.RateLimitResetCredits.AvailableCount = *details.AvailableCount
 		case details.CreditListPresent:
 			payload.RateLimitResetCredits.AvailableCount = details.AvailableCreditCount
+		}
+		if payload.RateLimitResetCredits.ApplicableAvailableCount == nil && details.ApplicableAvailableCount != nil {
+			count := *details.ApplicableAvailableCount
+			payload.RateLimitResetCredits.ApplicableAvailableCount = &count
 		}
 	}
 	return &payload, nil
