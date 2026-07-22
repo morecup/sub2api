@@ -1094,6 +1094,25 @@ func normalizeOpenAIModelForUpstream(account *Account, model string) string {
 	return strings.TrimSpace(model)
 }
 
+// resolveOpenAIForwardUpstreamModel 按 Forward 合成路径的 mapping 链（账号映射 →
+// compact 映射 → 上游归一化）预报出站模型，供需要在 transform 之前按出站模型判定
+// 的门控使用（如 namespace 摊平的 lite 跳过）；与 Forward 内的解析保持同序。
+func resolveOpenAIForwardUpstreamModel(account *Account, reqModel string, isCompactRequest bool) string {
+	model := account.GetMappedModel(reqModel)
+	if isCompactRequest {
+		if compactMapped := resolveOpenAICompactForwardModel(account, model); compactMapped != "" && compactMapped != model {
+			return compactMapped
+		}
+	}
+	if strings.TrimSpace(model) == "" {
+		model = reqModel
+	}
+	if normalized := normalizeOpenAIModelForUpstream(account, model); normalized != "" {
+		return normalized
+	}
+	return model
+}
+
 func SupportsVerbosity(model string) bool {
 	if !strings.HasPrefix(model, "gpt-") {
 		return true

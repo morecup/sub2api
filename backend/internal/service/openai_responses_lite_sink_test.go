@@ -1,12 +1,15 @@
 package service
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
 	"github.com/stretchr/testify/require"
+	"github.com/tidwall/gjson"
 )
 
 // lite 模型名单：codex-rs models-manager/models.json @ c5eb33aed（2026-07-22 核实）。
@@ -277,4 +280,36 @@ func TestDetectOpenAIPassthroughInstructionsRejectReasonResponsesLiteExempt(t *t
 	// 非 codex 模型本来不检查，两种模式都放行。
 	require.Empty(t, detectOpenAIPassthroughInstructionsRejectReason("gpt-5.5", body, false))
 	require.Empty(t, detectOpenAIPassthroughInstructionsRejectReason("gpt-5.5", body, true))
+}
+
+// 探针 body 下沉：lite 探测模型的 instructions/tools 下沉、reasoning 补 context 且
+// 保留已有 effort/summary；非 lite 探测模型 body 逐字节不动（与 lite 头条件发送一致）。
+func TestSinkOpenAIResponsesLiteProbeBody(t *testing.T) {
+	payload := createOpenAITestPayload("gpt-5.6-terra", true)
+	body, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	out := sinkOpenAIResponsesLiteProbeBody(body, "gpt-5.6-terra")
+	require.False(t, gjson.GetBytes(out, "instructions").Exists())
+	require.Equal(t, "additional_tools", gjson.GetBytes(out, "input.0.type").String())
+	require.Equal(t, "developer", gjson.GetBytes(out, "input.0.role").String())
+	require.True(t, gjson.GetBytes(out, "input.0.tools").IsArray())
+	require.Equal(t, "message", gjson.GetBytes(out, "input.1.type").String())
+	require.Equal(t, "developer", gjson.GetBytes(out, "input.1.role").String())
+	require.Equal(t, openai.DefaultInstructions, gjson.GetBytes(out, "input.1.content.0.text").String())
+	require.Equal(t, "user", gjson.GetBytes(out, "input.2.role").String())
+	require.Equal(t, "all_turns", gjson.GetBytes(out, "reasoning.context").String())
+	require.False(t, gjson.GetBytes(out, "parallel_tool_calls").Bool())
+
+	// 已有 reasoning effort/summary 保留，只补 context。
+	custom := []byte(`{"model":"gpt-5.6-luna","instructions":"i","input":[],"reasoning":{"effort":"high","summary":"detailed"}}`)
+	out = sinkOpenAIResponsesLiteProbeBody(custom, "gpt-5.6-luna")
+	require.Equal(t, "high", gjson.GetBytes(out, "reasoning.effort").String())
+	require.Equal(t, "detailed", gjson.GetBytes(out, "reasoning.summary").String())
+	require.Equal(t, "all_turns", gjson.GetBytes(out, "reasoning.context").String())
+
+	// 非 lite 探测模型：逐字节不动。
+	body55, err := json.Marshal(createOpenAITestPayload("gpt-5.5", true))
+	require.NoError(t, err)
+	require.Equal(t, body55, sinkOpenAIResponsesLiteProbeBody(body55, "gpt-5.5"))
 }

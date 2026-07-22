@@ -602,6 +602,10 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 			codexToolFrameAppliedByQuota = true
 		}
 	}
+	if isOAuth {
+		// lite 探测模型的 body 同步下沉，与 lite 头契约一致（非 lite 原样返回）。
+		requestBody = sinkOpenAIResponsesLiteProbeBody(requestBody, upstreamTestModelID)
+	}
 
 	// Send test_start event once. A task-invalid Agent Identity response may
 	// restart this probe after registering a replacement task.
@@ -946,6 +950,10 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	c.Writer.Flush()
 
 	payloadBytes, _ := json.Marshal(createOpenAICompactProbePayload(testModelID))
+	if isOAuth {
+		// lite 探测模型的 compact body 同步下沉，与 lite 头契约一致。
+		payloadBytes = sinkOpenAIResponsesLiteProbeBody(payloadBytes, testModelID)
+	}
 	if !agentIdentityTaskRecoveryWasTried(ctx) {
 		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
 	}
@@ -1864,6 +1872,8 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 			s.sendEvent(c, TestEvent{Type: "status", Text: "已根据 Codex 5h 配额状态启用 Tool Frame"})
 		}
 	}
+	// lite 探测模型的 body 同步下沉，与 lite 头契约一致（非 lite 原样返回）。
+	requestBody = sinkOpenAIResponsesLiteProbeBody(requestBody, parsed.Model)
 
 	buildRequest := func(body []byte) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatgptCodexAPIURL, bytes.NewReader(body))

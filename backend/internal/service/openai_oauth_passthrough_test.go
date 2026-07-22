@@ -575,67 +575,101 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 func TestOpenAIGatewayService_OAuthPassthrough_NamespaceRequestAndStreamResponse(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
-	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+	for _, liteMarker := range []bool{false, true} {
+		name := "无 lite 标记保持摊平"
+		if liteMarker {
+			name = "带 lite 标记走 additional_tools"
+		}
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+			if liteMarker {
+				c.Request.Header.Set(responsesLiteHeader, "true")
+			}
 
-	originalBody := []byte(`{
-		"model":"gpt-5.5",
-		"stream":true,
-		"instructions":"local-test-instructions",
-		"tools":[
-			{"type":"function","name":"plain","description":"keep","parameters":{"type":"object"}},
-			{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","description":"spawn","parameters":{"type":"object"}}]}
-		],
-		"tool_choice":{"type":"function","name":"spawn_agent","namespace":"collaboration"},
-		"input":[{"type":"function_call","call_id":"call_old","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}]
-	}`)
+			originalBody := []byte(`{
+				"model":"gpt-5.5",
+				"stream":true,
+				"instructions":"local-test-instructions",
+				"tools":[
+					{"type":"function","name":"plain","description":"keep","parameters":{"type":"object"}},
+					{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","description":"spawn","parameters":{"type":"object"}}]}
+				],
+				"tool_choice":{"type":"function","name":"spawn_agent","namespace":"collaboration"},
+				"input":[{"type":"function_call","call_id":"call_old","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}]
+			}`)
 
-	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":""}}`,
-		"",
-		`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}}`,
-		"",
-		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
-		"",
-		"data: [DONE]",
-		"",
-	}, "\n")
-	upstream := &httpUpstreamRecorder{resp: &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_namespace"}},
-		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
-	}}
-	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
-	account := &Account{
-		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
-		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
-		Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+			upstreamToolName := "collaboration__spawn_agent"
+			upstreamToolNamespace := ""
+			if liteMarker {
+				upstreamToolName = "spawn_agent"
+				upstreamToolNamespace = `,"namespace":"collaboration"`
+			}
+			upstreamSSE := strings.Join([]string{
+				`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"` + upstreamToolName + `"` + upstreamToolNamespace + `,"arguments":""}}`,
+				"",
+				`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"` + upstreamToolName + `"` + upstreamToolNamespace + `,"arguments":"{}"}}`,
+				"",
+				`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"` + upstreamToolName + `"` + upstreamToolNamespace + `,"arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+				"",
+				"data: [DONE]",
+				"",
+			}, "\n")
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_namespace"}},
+				Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{
+				ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+				Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+			}
+
+			result, err := svc.Forward(context.Background(), c, account, originalBody)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			if liteMarker {
+				// 入站带 lite 标记：透传按 Lite 合约归一化，namespace 工具走
+				// input.additional_tools 载体，顶层 tools 仅保留普通 function。
+				require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+				require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 1)
+				require.Equal(t, "plain", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+				require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+				require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.type`).String())
+				require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+				// tool_choice / input 中的 namespace 限定引用保持原样，由上游按 Lite 合约解析。
+				require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
+				require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, "tool_choice.namespace").String())
+				require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").name`).String())
+				require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").namespace`).String())
+			} else {
+				// 入站无 lite 标记：不做任何 lite 归一化（无 reasoning.context、无 lite 头），
+				// namespace 工具维持既有摊平行为（collaboration__spawn_agent）。
+				require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeader))
+				require.False(t, gjson.GetBytes(upstream.lastBody, "reasoning.context").Exists())
+				require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 2)
+				require.Equal(t, "plain", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+				require.Equal(t, "function", gjson.GetBytes(upstream.lastBody, "tools.1.type").String())
+				require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.1.name").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "tools.1.tools").Exists())
+				require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice.namespace").Exists())
+				require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "input.0.name").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "input.0.namespace").Exists())
+			}
+
+			downstream := rec.Body.String()
+			require.NotContains(t, downstream, "collaboration__spawn_agent")
+			require.Contains(t, downstream, `"name":"spawn_agent"`)
+			require.Contains(t, downstream, `"namespace":"collaboration"`)
+		})
 	}
-
-	result, err := svc.Forward(context.Background(), c, account, originalBody)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// OAuth 账号上行 body 无条件套用 Lite 合约归一化：namespace 工具走
-	// input.additional_tools 载体，顶层 tools 仅保留普通 function。
-	require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 1)
-	require.Equal(t, "plain", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
-	require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.type`).String())
-	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
-	// tool_choice / input 中的 namespace 限定引用保持原样，由上游按 Lite 合约解析。
-	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, "tool_choice.namespace").String())
-	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").name`).String())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").namespace`).String())
-
-	downstream := rec.Body.String()
-	require.NotContains(t, downstream, "collaboration__spawn_agent")
-	require.Contains(t, downstream, `"name":"spawn_agent"`)
-	require.Contains(t, downstream, `"namespace":"collaboration"`)
 }
 
 func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *testing.T) {
@@ -650,9 +684,9 @@ func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *t
 		"input":[{"type":"function_call","call_id":"call_old","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}]
 	}`)
 	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":""}}`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":""}}`,
 		"",
-		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
 		"",
 		"data: [DONE]",
 		"",
@@ -672,14 +706,14 @@ func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *t
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	// OAuth 账号上行 body 无条件套用 Lite 合约归一化：namespace 工具走
-	// input.additional_tools 载体，不再摊平为 collaboration__spawn_agent。
-	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
-	require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.type`).String())
-	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
-	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").name`).String())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").namespace`).String())
+	// 非 lite 出站模型（gpt-5.5）不做任何 lite 归一化：无 reasoning.context、无 lite 头；
+	// namespace 工具维持既有摊平行为（collaboration__spawn_agent），下行再映射回 namespace 形态。
+	require.False(t, gjson.GetBytes(upstream.lastBody, "reasoning.context").Exists())
+	require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeader))
+	require.Equal(t, "function", gjson.GetBytes(upstream.lastBody, "tools.0.type").String())
+	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "input.0.name").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "input.0.namespace").Exists())
 	require.NotContains(t, rec.Body.String(), "collaboration__spawn_agent")
 	require.Contains(t, rec.Body.String(), `"name":"spawn_agent"`)
 	require.Contains(t, rec.Body.String(), `"namespace":"collaboration"`)
@@ -737,48 +771,72 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceNonStreamingResponse(t *
 	require.Contains(t, rec.Body.String(), `"namespace":"collaboration"`)
 }
 
-func TestOpenAIGatewayService_OAuthPassthrough_NamespaceConflictAcceptedAsAdditionalTools(t *testing.T) {
+// namespace 摊平冲突按入站 lite 标记分支：无标记时维持本地 400（摊平后的
+// collaboration__spawn_agent 与既有顶层 function 冲突）；带标记时按 Lite 合约
+// 把 namespace 迁入 input.additional_tools，不再产生摊平冲突。
+func TestOpenAIGatewayService_OAuthPassthrough_NamespaceConflictByLiteMarker(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	rec := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(rec)
-	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
-	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
-	body := []byte(`{
-		"model":"gpt-5.5","stream":true,"instructions":"test",
-		"tools":[
-			{"type":"function","name":"collaboration__spawn_agent","parameters":{"type":"object"}},
-			{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}]}
-		],"input":"hi"
-	}`)
-	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
-		"",
-		"data: [DONE]",
-		"",
-	}, "\n")
-	upstream := &httpUpstreamRecorder{resp: &http.Response{
-		StatusCode: http.StatusOK,
-		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_namespace_carrier"}},
-		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
-	}}
-	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
-	account := &Account{
-		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
-		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
-		Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
-	}
 
-	// Lite 合约下 namespace 声明总是先搬到 input.additional_tools，顶层不会再出现
-	// flatten 冲突；顶层名为 collaboration__spawn_agent 的 function 与 namespace 内
-	// 的 spawn_agent 对上游是两个不同工具，请求不再被本地 400 拒绝。
-	result, err := svc.Forward(context.Background(), c, account, body)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, upstream.lastReq)
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
-	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
-	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+	for _, liteMarker := range []bool{false, true} {
+		name := "无 lite 标记摊平冲突 400"
+		if liteMarker {
+			name = "带 lite 标记迁入 additional_tools 放行"
+		}
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+			if liteMarker {
+				c.Request.Header.Set(responsesLiteHeader, "true")
+			}
+			body := []byte(`{
+				"model":"gpt-5.5","stream":true,"instructions":"test",
+				"tools":[
+					{"type":"function","name":"collaboration__spawn_agent","parameters":{"type":"object"}},
+					{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}]}
+				],"input":"hi"
+			}`)
+			upstreamSSE := strings.Join([]string{
+				`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+				"",
+				"data: [DONE]",
+				"",
+			}, "\n")
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_namespace_carrier"}},
+				Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{
+				ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
+				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+				Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+			}
+
+			result, err := svc.Forward(context.Background(), c, account, body)
+			if !liteMarker {
+				require.Error(t, err)
+				require.Nil(t, result)
+				require.Nil(t, upstream.lastReq)
+				require.Equal(t, http.StatusBadRequest, rec.Code)
+				require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
+				require.Equal(t, "tools", gjson.Get(rec.Body.String(), "error.param").String())
+				require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), "conflicts with a top-level tool")
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.NotNil(t, upstream.lastReq)
+			require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+			require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+			require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+			require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+			require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+		})
+	}
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreaming(t *testing.T) {

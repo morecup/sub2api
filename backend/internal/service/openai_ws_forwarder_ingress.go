@@ -232,9 +232,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
-		// OAuth 账号上行的 Lite body 归一化保持无条件（对非 lite 模型逐字节兼容），
-		// 与入站是否携带 lite 标记无关；responses-lite 头按出站模型条件发送。
-		if account.IsOpenAIOAuth() {
+		// Lite body 归一化按入站 WS lite metadata 触发（lite 模式只与 lite 客户端
+		// 标记有关；非 lite 模型不支持 reasoning.context=all_turns，不强加）。
+		if account.IsOpenAIOAuth() && isOpenAIResponsesLiteWebSocketPayload(normalized) {
 			litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(normalized)
 			if liteErr != nil {
 				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(

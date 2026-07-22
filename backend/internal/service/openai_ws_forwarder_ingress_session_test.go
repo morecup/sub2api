@@ -597,9 +597,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_CodexImageBridge
 	require.Equal(t, "png", gjson.Get(nonLitePayload, `tools.#(type=="image_generation").output_format`).String())
 	require.Equal(t, "auto", gjson.Get(nonLitePayload, "tool_choice").String())
 	require.Contains(t, gjson.Get(nonLitePayload, "instructions").String(), "image_generation")
-	// OAuth 账号上行无条件套用 Lite 合约：即使入站 payload 不带 lite 标记，
-	// 转发体也必须注入 reasoning.context=all_turns。
-	require.Equal(t, "all_turns", gjson.Get(nonLitePayload, "reasoning.context").String())
+	// 非 lite 模型不做 lite 归一化：入站无 lite 标记时不注入 reasoning.context。
+	require.False(t, gjson.Get(nonLitePayload, "reasoning.context").Exists())
 
 	litePayload := requestToJSONString(captureConn.writes[1])
 	require.False(t, gjson.Get(litePayload, `tools.#(type=="image_generation")`).Exists())
@@ -620,10 +619,10 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_CodexImageBridge
 	require.NotContains(t, gjson.Get(functionPayload, "instructions").String(), codexImageGenerationBridgeMarker)
 }
 
-// OAuth 账号走 WS 入站时，即使客户端 payload 不带 lite 标记、也没有 reasoning
-// 字段，转发到上游的 response.create 仍必须注入 reasoning.context=all_turns
-// （body 的 Lite 合约归一化对 OAuth 上行保持无条件）。
-func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_OAuthWithoutLiteMarkerInjectsReasoningContext(t *testing.T) {
+// OAuth 账号走 WS 入站时，lite body 归一化按入站 WS lite metadata 触发：
+// 客户端 payload 不带 lite 标记时（非 lite 模型 gpt-5.5），转发的 response.create
+// 不注入 reasoning.context，body 保持原样。
+func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_OAuthWithoutLiteMarkerLeavesBodyUnnormalized(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	cfg := &config.Config{}
@@ -748,7 +747,7 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_OAuthWithoutLite
 
 	require.Len(t, captureConn.writes, 1)
 	forwarded := requestToJSONString(captureConn.writes[0])
-	require.Equal(t, "all_turns", gjson.Get(forwarded, "reasoning.context").String())
+	require.False(t, gjson.Get(forwarded, "reasoning").Exists())
 }
 
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_DedicatedModeDoesNotReuseConnAcrossSessions(t *testing.T) {

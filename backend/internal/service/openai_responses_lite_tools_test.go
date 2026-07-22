@@ -334,10 +334,12 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteToolsForOAuth(t *tes
 	}
 }
 
-// 入站不带 lite 头、body 也没有 reasoning 字段时，转发体仍必须注入
-// reasoning.context=all_turns（managed 与 passthrough 两条路径一致）；
-// responses-lite 头：managed 按出站 lite 模型发送，passthrough 按入站保留（无则不发）。
-func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteHeader(t *testing.T) {
+// Lite 归一化是 lite-only：合成路径由 lite 出站模型触发 sink（无需入站标记），
+// 透传路径必须由入站 lite 头触发。入站不带 lite 头时：managed（lite 模型 terra）
+// 仍由 sink 注入 reasoning.context=all_turns、下沉 instructions 并发送 lite 头；
+// passthrough 的 body 不做任何 lite 归一化（无 reasoning.context、顶层
+// instructions 保留），头也不发。
+func TestOpenAIGatewayServiceForward_ResponsesLiteNormalizationIsLiteOnly(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	for _, passthrough := range []bool{false, true} {
@@ -367,7 +369,7 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteH
 				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
 				Extra:       map[string]any{"openai_passthrough": passthrough},
 			}
-			// body 不带 reasoning 字段，验证 Lite 归一化无条件注入。
+			// body 不带 reasoning 字段。
 			body := []byte(`{
 				"model":"gpt-5.6-terra","stream":true,"instructions":"test",
 				"input":[{"type":"message","role":"user","content":"hello"}]
@@ -378,14 +380,23 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteH
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			if passthrough {
-				// 透传按入站保留：入站无 lite 头，上行也不发送。
+				// 透传无入站标记：不做任何 lite 归一化——无 lite 头、无 reasoning，
+				// 顶层 instructions 与 input 原样透传。
 				require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeader))
+				require.False(t, gjson.GetBytes(upstream.lastBody, "reasoning").Exists())
+				require.Equal(t, "test", gjson.GetBytes(upstream.lastBody, "instructions").String())
+				require.Equal(t, "user", gjson.GetBytes(upstream.lastBody, "input.0.role").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools")`).Exists())
 			} else {
-				// managed 按出站 lite 模型发送 lite 头。
+				// managed 按出站 lite 模型触发 sink：发送 lite 头，reasoning.context=all_turns，
+				// instructions 下沉为 developer message，顶层 instructions 省略。
 				require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+				require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
+				require.Equal(t, "additional_tools", gjson.GetBytes(upstream.lastBody, "input.0.type").String())
+				require.Equal(t, "developer", gjson.GetBytes(upstream.lastBody, "input.1.role").String())
+				require.Equal(t, "test", gjson.GetBytes(upstream.lastBody, "input.1.content.0.text").String())
 			}
-			// 上行 body 必须满足 Lite 合约。
-			require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
 		})
 	}
 }

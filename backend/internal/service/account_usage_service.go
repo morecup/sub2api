@@ -708,6 +708,8 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	if err != nil {
 		return nil, fmt.Errorf("marshal openai probe payload: %w", err)
 	}
+	// lite 探测模型的 body 同步下沉，与 lite 头契约一致（非 lite 原样返回）。
+	payloadBytes = sinkOpenAIResponsesLiteProbeBody(payloadBytes, modelID)
 
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()

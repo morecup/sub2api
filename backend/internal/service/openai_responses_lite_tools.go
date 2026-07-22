@@ -291,6 +291,28 @@ func sinkOpenAIResponsesLiteRequestBody(reqBody map[string]any) bool {
 	return true
 }
 
+// sinkOpenAIResponsesLiteProbeBody 对 lite 探测模型的探针 body 执行 responses lite
+// 下沉，保持探针侧 lite 头与 body 契约一致（否则 lite 头 + 普通 body 会被上游 400）。
+// 非 lite 模型或解析失败时原样返回；已有 reasoning 的 effort/summary 由 sink 保留，
+// 仅补齐 context=all_turns。
+func sinkOpenAIResponsesLiteProbeBody(body []byte, model string) []byte {
+	if !isCodexResponsesLiteModel(model) {
+		return body
+	}
+	var reqBody map[string]any
+	if err := json.Unmarshal(body, &reqBody); err != nil {
+		return body
+	}
+	if !sinkOpenAIResponsesLiteRequestBody(reqBody) {
+		return body
+	}
+	rebuilt, err := marshalOpenAIUpstreamJSON(reqBody)
+	if err != nil {
+		return body
+	}
+	return rebuilt
+}
+
 func normalizeOpenAIResponsesLiteToolsPayload(body []byte) ([]byte, bool, error) {
 	var requestBody map[string]any
 	if err := json.Unmarshal(body, &requestBody); err != nil {

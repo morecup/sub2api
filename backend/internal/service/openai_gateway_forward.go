@@ -44,10 +44,13 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if normalized {
 		body = normalizedBody
 	}
-	// body 的 Lite 合约归一化（reasoning.context=all_turns、namespace 工具迁移到
-	// input.additional_tools）对 OAuth 上行保持无条件：该行为早已上线且对非 lite
-	// 模型逐字节兼容，responses-lite 头改为按出站模型条件发送后不再以头为前提。
-	if account.IsOpenAIOAuth() {
+	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
+	// Lite body 归一化（reasoning.context=all_turns、namespace 工具迁入
+	// input.additional_tools）仅服务透传路径且按入站 lite 头触发——与透传保留
+	// lite 头同源，头体契约一致。合成路径不执行：lite 出站模型由 transform 的
+	// sink 全权处理（含 tools 全量下沉与 reasoning.context），非 lite 模型不支持
+	// reasoning.context=all_turns、真实客户端也不发送，不做任何 lite 归一化。
+	if account.IsOpenAIOAuth() && passthroughEnabled && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLiteToolsPayload(body)
 		if liteErr != nil {
 			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")
@@ -63,8 +66,11 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	wsDecision := s.getOpenAIWSProtocolResolver().Resolve(account)
 	// 仅允许 WS 入站请求走 WS 上游，避免出现 HTTP -> WS 协议混用。
 	wsDecision = resolveOpenAIWSDecisionByClientTransport(wsDecision, GetOpenAIClientTransport(c))
-	passthroughEnabled := account.IsOpenAIPassthroughEnabled()
-	if shouldFlattenOpenAIResponsesNamespaces(account, wsDecision.Transport, passthroughEnabled) {
+	// 合成路径且出站为 lite 模型时跳过摊平：namespace 工具由 transform 的 sink 原样
+	// 归并进 additional_tools 载体（上游 lite 合约），提前摊平会破坏载体形态；
+	// 非 lite 出站模型与透传路径维持既有摊平行为。
+	skipFlattenForLiteSink := !passthroughEnabled && isCodexResponsesLiteModel(resolveOpenAIForwardUpstreamModel(account, strings.TrimSpace(gjson.GetBytes(body, "model").String()), isOpenAIResponsesCompactPath(c)))
+	if shouldFlattenOpenAIResponsesNamespaces(account, wsDecision.Transport, passthroughEnabled) && !skipFlattenForLiteSink {
 		body, err = flattenOpenAIResponsesNamespaces(c, body)
 		if err != nil {
 			setOpsUpstreamError(c, http.StatusBadRequest, err.Error(), "")
