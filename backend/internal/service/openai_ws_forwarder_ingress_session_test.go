@@ -621,8 +621,8 @@ func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_CodexImageBridge
 }
 
 // OAuth 账号走 WS 入站时，即使客户端 payload 不带 lite 标记、也没有 reasoning
-// 字段，转发到上游的 response.create 仍必须注入 reasoning.context=all_turns，
-// 与伪装层恒定发送的 responses-lite 画像保持一致。
+// 字段，转发到上游的 response.create 仍必须注入 reasoning.context=all_turns
+// （body 的 Lite 合约归一化对 OAuth 上行保持无条件）。
 func TestOpenAIGatewayService_ProxyResponsesWebSocketFromClient_OAuthWithoutLiteMarkerInjectsReasoningContext(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

@@ -52,7 +52,7 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.6","input":"compact me","prompt_cache_key":"client-original"}`)
 	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(string(body)))
 	req.Header.Set("x-codex-turn-metadata", inboundMeta)
-	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", codexDesktopOriginator, false)
+	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", codexDesktopOriginator, false, false)
 
 	meta := req.Header.Get("x-codex-turn-metadata")
 	sessionID := req.Header.Get("session-id")

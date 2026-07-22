@@ -639,7 +639,13 @@ func normalizeOpenAIPassthroughOAuthBody(body []byte, compact bool, installation
 	return normalized, changed, nil
 }
 
-func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte) string {
+// detectOpenAIPassthroughInstructionsRejectReason 检测透传请求缺失/空 instructions 的
+// 拦截原因。responsesLite 为 true（透传：入站带 lite 头）时豁免：lite 请求的
+// instructions 合法地下沉在 input 中，顶层本就没有 instructions 字段。
+func detectOpenAIPassthroughInstructionsRejectReason(reqModel string, body []byte, responsesLite bool) string {
+	if responsesLite {
+		return ""
+	}
 	model := strings.ToLower(strings.TrimSpace(reqModel))
 	if !strings.Contains(model, "codex") {
 		return ""

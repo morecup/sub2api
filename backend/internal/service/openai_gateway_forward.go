@@ -44,9 +44,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if normalized {
 		body = normalizedBody
 	}
-	// Codex 伪装层对所有 OAuth 账号的上行请求无条件发送 responses-lite 头
-	// （applyCodexOAuthMimicHeaders），因此 body 也必须无条件满足 Lite 合约
-	// （reasoning.context=all_turns 等），不再以入站是否带 lite 头为条件。
+	// body 的 Lite 合约归一化（reasoning.context=all_turns、namespace 工具迁移到
+	// input.additional_tools）对 OAuth 上行保持无条件：该行为早已上线且对非 lite
+	// 模型逐字节兼容，responses-lite 头改为按出站模型条件发送后不再以头为前提。
 	if account.IsOpenAIOAuth() {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLiteToolsPayload(body)
 		if liteErr != nil {
@@ -364,7 +364,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		}
 		codexResult := codexTransformResult{}
 		if compatMessagesBridge {
-			codexResult = applyCodexOAuthTransformWithOptions(decoded, codexOAuthTransformOptions{IsCodexCLI: isCodexCLI, IsCompact: isCompactRequest, SkipDefaultInstructions: true, PreserveToolCallIDs: true})
+			codexResult = applyCodexOAuthTransformWithOptions(decoded, codexOAuthTransformOptions{IsCodexCLI: isCodexCLI, IsCompact: isCompactRequest, SkipDefaultInstructions: true, PreserveToolCallIDs: true, SkipResponsesLiteSink: true})
 			ensureCodexOAuthInstructionsField(decoded)
 			markDecodedModified()
 		} else {
@@ -1094,7 +1094,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			if seed == "" && isCompact {
 				seed = resolveOpenAICompactMimicSessionID(c)
 			}
-			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact)
+			// 合成路径：responses-lite 头仅对出站 lite 模型发送（对齐上游按模型条件发送）。
+			responsesLite := isCodexResponsesLiteModel(gjson.GetBytes(body, "model").String())
+			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact, responsesLite)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)

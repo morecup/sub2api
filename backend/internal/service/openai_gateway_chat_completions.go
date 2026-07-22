@@ -202,6 +202,7 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 		codexResult := applyCodexOAuthTransformWithOptions(reqBody, codexOAuthTransformOptions{
 			SkipDefaultInstructions:             !isResponsesShape,
 			OmitPromotedSystemMessagesFromInput: !isResponsesShape && !isJSONObjectFormat,
+			SkipResponsesLiteSink:               !isResponsesShape,
 		})
 		if !isResponsesShape {
 			ensureCodexOAuthInstructionsField(reqBody)

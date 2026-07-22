@@ -620,7 +620,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if err := validateOpenAIWSBearerToken(account, token); err != nil {
 		return err
 	}
-	// OAuth 账号上行恒定按 Responses Lite 画像转发，首帧 body 无条件归一化。
+	// OAuth 账号上行的 Lite body 归一化保持无条件（对非 lite 模型逐字节兼容），首帧 body 无条件归一化。
 	if account.IsOpenAIOAuth() {
 		liteFirstMessage, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(firstClientMessage)
 		if liteErr != nil {
@@ -861,7 +861,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				}()
 			}
 			if isResponseCreate {
-				// OAuth 账号上行恒定按 Responses Lite 画像转发，每个 response.create 帧无条件归一化。
+				// OAuth 账号上行的 Lite body 归一化保持无条件（对非 lite 模型逐字节兼容），每个 response.create 帧无条件归一化。
 				if account.IsOpenAIOAuth() {
 					litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(payload)
 					if liteErr != nil {

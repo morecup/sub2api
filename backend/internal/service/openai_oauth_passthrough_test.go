@@ -164,8 +164,9 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
 	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=remote_compaction_v2。
 	require.Equal(t, "remote_compaction_v2", req.Header.Get("X-Codex-Beta-Features"))
-	// 0.145 实抓：POST 恒定发送 responses-lite 头；0.144 的 timing-metrics 头已移除。
-	require.Equal(t, "true", req.Header.Get("X-Openai-Internal-Codex-Responses-Lite"))
+	// responses-lite 头按出站模型条件发送：gpt-5.5 非 lite，不发送；
+	// 0.144 的 timing-metrics 头已移除。
+	require.Empty(t, req.Header.Get("X-Openai-Internal-Codex-Responses-Lite"))
 	require.Empty(t, req.Header.Get("X-Responsesapi-Include-Timing-Metrics"))
 	require.Equal(t, "text/event-stream", req.Header.Get("Accept"))
 	require.Equal(t, "Codex Desktop", req.Header.Get("Originator"))
@@ -617,7 +618,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceRequestAndStreamResponse
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// OAuth 账号上行恒定带 responses-lite 头，namespace 工具走 Lite 合约的
+	// OAuth 账号上行 body 无条件套用 Lite 合约归一化：namespace 工具走
 	// input.additional_tools 载体，顶层 tools 仅保留普通 function。
 	require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 1)
 	require.Equal(t, "plain", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
@@ -671,7 +672,7 @@ func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *t
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	// OAuth 账号上行恒定带 responses-lite 头，namespace 工具走 Lite 合约的
+	// OAuth 账号上行 body 无条件套用 Lite 合约归一化：namespace 工具走
 	// input.additional_tools 载体，不再摊平为 collaboration__spawn_agent。
 	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
 	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
@@ -931,6 +932,50 @@ func TestOpenAIGatewayService_OAuthPassthrough_CodexMissingInstructionsRejectedB
 	require.True(t, logSink.ContainsMessage("OpenAI passthrough 本地拦截：Codex 请求缺少有效 instructions"))
 	require.True(t, logSink.ContainsFieldValue("request_user_agent", "codex_cli_rs/0.98.0 (Windows 10.0.19045; x86_64) unknown"))
 	require.True(t, logSink.ContainsFieldValue("reject_reason", "instructions_missing"))
+}
+
+// responses lite 请求顶层本就没有 instructions（合法形态）：透传路径按入站 lite 头
+// 豁免 403 检查，请求正常上行。
+func TestOpenAIGatewayService_OAuthPassthrough_ResponsesLiteMissingInstructionsAllowed(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+	c.Request.Header.Set("User-Agent", "codex_cli_rs/0.145.0 (Windows 10.0.26100; x86_64) unknown")
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set(responsesLiteHeader, "true")
+
+	originalBody := []byte(`{"model":"gpt-5.1-codex-max","stream":true,"input":[{"type":"message","role":"user","content":"hi"}]}`)
+
+	upstream := &httpUpstreamRecorder{
+		resp: &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+			Body: io.NopCloser(strings.NewReader(
+				"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_lite_ok\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
+					"data: [DONE]\n\n",
+			)),
+		},
+	}
+	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+	account := &Account{
+		ID:          124,
+		Name:        "acc-lite",
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Concurrency: 1,
+		Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-acc"},
+		Extra:       map[string]any{"openai_passthrough": true},
+		Status:      StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+	}
+
+	result, err := svc.Forward(context.Background(), c, account, originalBody)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq, "lite 豁免后请求应正常上行")
+	// 透传路径 lite 头按入站保留。
+	require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_DisabledUsesLegacyTransform(t *testing.T) {

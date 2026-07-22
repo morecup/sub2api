@@ -199,6 +199,98 @@ func openAIResponsesLiteToolIdentityForError(rawTool any) string {
 	return fmt.Sprintf("tool type %q name %q", strings.TrimSpace(firstNonEmptyString(tool["type"])), strings.TrimSpace(firstNonEmptyString(tool["name"])))
 }
 
+// sinkOpenAIResponsesLiteRequestBody 把 responses lite 模型的 instructions/tools 下沉进
+// input 数组，对齐 codex-rs build_responses_request（core/src/client.rs:843-864）：
+//   - input[0] = {"type":"additional_tools","role":"developer","tools":[...]}
+//     （tools 为空时上游仍发送该载体，client.rs:844-848 无空值分支）
+//   - input[1] = {"type":"message","role":"developer","content":[{"type":"input_text","text":...}]}
+//     （instructions 非空时；已按 lite 形态携带 instructions 的输入不重复生成）
+//
+// 顶层 instructions/tools 省略（上游序列化跳过空 instructions 与 None tools），
+// parallel_tool_calls 强制 false（client.rs:897 `&& !use_responses_lite`），
+// reasoning.context=all_turns（client.rs:818-820）。
+// 真实 lite 客户端的输入已是该形态（载体后跟随着 instructions developer message），
+// 此时只归一载体位置与顶层字段，不再注入合成路径补填的默认 instructions，避免重复。
+func sinkOpenAIResponsesLiteRequestBody(reqBody map[string]any) bool {
+	if reqBody == nil {
+		return false
+	}
+	input, _ := reqBody["input"].([]any)
+
+	// 摘下已有 additional_tools 载体并收集其 tools（保持相对顺序）。
+	// 首个载体后紧跟 developer message 时，说明入站已按 lite 形态下沉 instructions。
+	var carrierTools []any
+	hadCarrier := false
+	instructionsAlreadySunk := false
+	rest := make([]any, 0, len(input))
+	for index, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok || strings.TrimSpace(firstNonEmptyString(item["type"])) != "additional_tools" {
+			rest = append(rest, rawItem)
+			continue
+		}
+		if !hadCarrier {
+			hadCarrier = true
+			if next := index + 1; next < len(input) {
+				if nextItem, ok := input[next].(map[string]any); ok &&
+					strings.TrimSpace(firstNonEmptyString(nextItem["type"])) == "message" &&
+					strings.TrimSpace(firstNonEmptyString(nextItem["role"])) == "developer" {
+					instructionsAlreadySunk = true
+				}
+			}
+		}
+		if tools, ok := item["tools"].([]any); ok {
+			carrierTools = append(carrierTools, tools...)
+		}
+	}
+
+	// 顶层 tools 在前、已有载体 tools 在后，按 type+name 去重（保留先出现者）。
+	topTools, _ := reqBody["tools"].([]any)
+	merged := make([]any, 0, len(topTools)+len(carrierTools))
+	merged = append(merged, topTools...)
+	merged = append(merged, carrierTools...)
+	seen := make(map[string]bool, len(merged))
+	deduped := merged[:0]
+	for _, tool := range merged {
+		if identity := openAIResponsesLiteToolIdentity(tool); identity != "" {
+			if seen[identity] {
+				continue
+			}
+			seen[identity] = true
+		}
+		deduped = append(deduped, tool)
+	}
+
+	newInput := make([]any, 0, len(rest)+2)
+	newInput = append(newInput, map[string]any{
+		"type":  "additional_tools",
+		"role":  "developer",
+		"tools": deduped,
+	})
+	if !instructionsAlreadySunk {
+		if instructions, ok := reqBody["instructions"].(string); ok && strings.TrimSpace(instructions) != "" {
+			newInput = append(newInput, map[string]any{
+				"type": "message",
+				"role": "developer",
+				"content": []any{map[string]any{
+					"type": "input_text",
+					"text": instructions,
+				}},
+			})
+		}
+	}
+	newInput = append(newInput, rest...)
+	reqBody["input"] = newInput
+
+	// 顶层 instructions/tools 省略；parallel_tool_calls 与 reasoning.context 按 lite 合约钉死。
+	delete(reqBody, "instructions")
+	delete(reqBody, "tools")
+	reqBody["parallel_tool_calls"] = false
+	// reasoning 非对象时无法写入 context：保留原值交给上游 400，不在此处放大改动面。
+	_, _ = ensureOpenAIResponsesLiteReasoningContext(reqBody)
+	return true
+}
+
 func normalizeOpenAIResponsesLiteToolsPayload(body []byte) ([]byte, bool, error) {
 	var requestBody map[string]any
 	if err := json.Unmarshal(body, &requestBody); err != nil {

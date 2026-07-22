@@ -27,7 +27,7 @@ const (
 	// codexDesktopThreadSource 对应 0.145 turn/prewarm metadata 的 thread_source。
 	codexDesktopThreadSource = "user"
 	// codexResponsesLiteValue 对应 x-openai-internal-codex-responses-lite 头
-	// （0.145 实抓：turn 与 compaction POST 均恒定发送）。
+	// （上游仅对 responses lite 模型发送该头，见 codexResponsesLiteModels）。
 	codexResponsesLiteValue = "true"
 	// codexOAIAttestationLite 对应 0.145 turn POST 的 x-oai-attestation
 	// （实抓：turn 不再携带 CBOR token，仅 {"v":1,"s":1}；compaction 与 WS prewarm 仍发完整 token）。
@@ -48,6 +48,22 @@ const (
 // Windows 端不使用 Apple DeviceCheck，而是为每个桌面进程生成带 app_session_id 的
 // error_code=1 CBOR envelope。保持进程内稳定、进程间变化，比复用旧抓包 token 更贴近 0.145。
 var codexOAIAttestation = buildCodexOAIAttestation(uuid.NewString())
+
+// codexResponsesLiteModels 为 responses lite 模型名单（use_responses_lite=true）。
+// 来源：codex-rs models-manager/models.json @ c5eb33aed，2026-07-22 核实，
+// 实抓清单交叉验证 terra=true/5.5=false。名单外模型（gpt-5.5、gpt-5.4、gpt-5.4-mini、
+// gpt-5.2、codex-auto-review 等）均为 false。
+var codexResponsesLiteModels = map[string]bool{
+	"gpt-5.6-sol":   true,
+	"gpt-5.6-terra": true,
+	"gpt-5.6-luna":  true,
+}
+
+// isCodexResponsesLiteModel 判定模型是否为 responses lite 模型。
+// 仅做大小写/空白归一后的精确匹配，不做前缀模糊匹配（避免误伤未来同前缀的非 lite 型号）。
+func isCodexResponsesLiteModel(model string) bool {
+	return codexResponsesLiteModels[strings.ToLower(strings.TrimSpace(model))]
+}
 
 func appendCodexCBORHead(dst []byte, major byte, value uint64) []byte {
 	switch {
@@ -403,7 +419,11 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 //
 // sessionSeed 为隔离前的原始会话种子；为空时回退随机 UUIDv7，
 // 以保证 session-id/thread-id 始终存在（与真实 Codex 行为一致）。
-func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, originator string, isCompact bool) {
+//
+// responsesLite 控制是否发送 x-openai-internal-codex-responses-lite 头：上游
+// （codex-rs client.rs add_responses_lite_header）仅在 responses lite 模型时发送，
+// 合成路径按出站最终模型判定，透传路径按入站头原样保留（调用方计算后传入）。
+func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, originator string, isCompact bool, responsesLite bool) {
 	if req == nil {
 		return
 	}
@@ -426,9 +446,11 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
 	req.Header.Set("version", codexDesktopVersion)
 	req.Header.Set("x-codex-beta-features", codexBetaFeaturesValue)
-	// 0.145 实抓：所有 /codex/responses POST 恒定携带 responses-lite 头；
-	// 0.144 的 x-responsesapi-include-timing-metrics 已在新版移除，不再发送。
-	req.Header.Set("x-openai-internal-codex-responses-lite", codexResponsesLiteValue)
+	// responses-lite 头仅对 lite 模型发送（对齐上游 add_responses_lite_header）；
+	// 非 lite 不发送。0.144 的 x-responsesapi-include-timing-metrics 已在新版移除，不再发送。
+	if responsesLite {
+		req.Header.Set("x-openai-internal-codex-responses-lite", codexResponsesLiteValue)
+	}
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("originator", codexDesktopOriginator)

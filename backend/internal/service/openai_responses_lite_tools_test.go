@@ -296,23 +296,47 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteToolsForOAuth(t *tes
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
+			// lite 头：managed 按出站 lite 模型发送；passthrough 按入站保留（入站已带）。
 			require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
 			require.Equal(t, "high", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
 			require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
-			require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
-			require.Equal(t, "shell", gjson.GetBytes(upstream.lastBody, `tools.#(type=="function").name`).String())
-			require.Equal(t, "exec", gjson.GetBytes(upstream.lastBody, `tools.#(type=="custom").name`).String())
-			require.True(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="tool_search")`).Exists())
-			require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
 			require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, "tool_choice.type").String())
 			require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
+			if passthrough {
+				// 透传不下沉：顶层 tools 保留 function/custom/tool_search，namespace
+				// 已在前置 Lite 归一化中迁移到 input.additional_tools。
+				require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+				require.Equal(t, "shell", gjson.GetBytes(upstream.lastBody, `tools.#(type=="function").name`).String())
+				require.Equal(t, "exec", gjson.GetBytes(upstream.lastBody, `tools.#(type=="custom").name`).String())
+				require.True(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="tool_search")`).Exists())
+				require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+			} else {
+				// managed（合成）路径：lite 模型按上游 build_responses_request 下沉——
+				// 顶层 instructions/tools 省略，全部工具进入 input[0] 的 additional_tools
+				// （顶层 tools 在前、namespace 迁移在后），instructions 成为其后的 developer message。
+				require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "instructions").Exists())
+				require.False(t, gjson.GetBytes(upstream.lastBody, "parallel_tool_calls").Bool())
+				carrier := gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools")`)
+				require.True(t, carrier.Exists())
+				require.Equal(t, "developer", carrier.Get("role").String())
+				require.Equal(t, "shell", carrier.Get(`tools.#(type=="function").name`).String())
+				require.Equal(t, "exec", carrier.Get(`tools.#(type=="custom").name`).String())
+				require.True(t, carrier.Get(`tools.#(type=="tool_search")`).Exists())
+				require.Equal(t, "collaboration", carrier.Get(`tools.#(type=="namespace").name`).String())
+				sunkInstructions := gjson.GetBytes(upstream.lastBody, "input.1")
+				require.Equal(t, "message", sunkInstructions.Get("type").String())
+				require.Equal(t, "developer", sunkInstructions.Get("role").String())
+				require.Equal(t, "input_text", sunkInstructions.Get("content.0.type").String())
+				require.Equal(t, "test", sunkInstructions.Get("content.0.text").String())
+			}
 		})
 	}
 }
 
-// Codex 伪装层对所有 OAuth 账号的上行请求无条件发送 responses-lite 头，
-// 因此即使入站客户端不带 lite 头、body 也没有 reasoning 字段，转发体也必须
-// 注入 reasoning.context=all_turns（managed 与 passthrough 两条路径一致）。
+// 入站不带 lite 头、body 也没有 reasoning 字段时，转发体仍必须注入
+// reasoning.context=all_turns（managed 与 passthrough 两条路径一致）；
+// responses-lite 头：managed 按出站 lite 模型发送，passthrough 按入站保留（无则不发）。
 func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteHeader(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -353,8 +377,13 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteH
 
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			// 上行请求头恒定带 lite 头（Codex 伪装层）。
-			require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+			if passthrough {
+				// 透传按入站保留：入站无 lite 头，上行也不发送。
+				require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeader))
+			} else {
+				// managed 按出站 lite 模型发送 lite 头。
+				require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+			}
 			// 上行 body 必须满足 Lite 合约。
 			require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
 		})

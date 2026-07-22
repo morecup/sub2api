@@ -639,7 +639,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		// Set OAuth-specific headers for ChatGPT internal API
 		if isOAuth {
 			req.Host = "chatgpt.com"
-			applyCodexOAuthMimicHeaders(req, account.ID, 0, sessionSeed, codexDesktopOriginator, false)
+			applyCodexOAuthMimicHeaders(req, account.ID, 0, sessionSeed, codexDesktopOriginator, false, isCodexResponsesLiteModel(upstreamTestModelID))
 			body, err = syncCodexOAuthMimicRequestBody(req, body, false)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)
@@ -981,7 +981,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 
 	if isOAuth {
 		req.Host = "chatgpt.com"
-		applyCodexOAuthMimicHeaders(req, account.ID, 0, probeSessionID, codexDesktopOriginator, true)
+		applyCodexOAuthMimicHeaders(req, account.ID, 0, probeSessionID, codexDesktopOriginator, true, isCodexResponsesLiteModel(testModelID))
 		payloadBytes, err = syncCodexOAuthMimicRequestBody(req, payloadBytes, true)
 		if err != nil {
 			return s.sendErrorAndEnd(c, "Failed to apply Codex request metadata")
@@ -1885,7 +1885,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		} else {
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}
-		applyCodexOAuthMimicHeaders(req, account.ID, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false)
+		applyCodexOAuthMimicHeaders(req, account.ID, 0, parsed.StickySessionSeed(), codexDesktopOriginator, false, isCodexResponsesLiteModel(parsed.Model))
 		body, err = syncCodexOAuthMimicRequestBody(req, body, false)
 		if err != nil {
 			return nil, fmt.Errorf("apply codex client metadata: %w", err)

@@ -85,6 +85,10 @@ type codexOAuthTransformOptions struct {
 	SkipDefaultInstructions             bool
 	PreserveToolCallIDs                 bool
 	OmitPromotedSystemMessagesFromInput bool
+	// SkipResponsesLiteSink 为 true 时跳过 responses lite 下沉。
+	// 桥接路径（chat completions / anthropic messages / compat messages bridge）使用：
+	// 其后置 instructions 处理依赖顶层字段，且不发送 lite 头，保持非 lite 形态。
+	SkipResponsesLiteSink bool
 }
 
 const (
@@ -314,6 +318,15 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 			reqBody["input"] = []any{}
 		}
 		result.Modified = true
+	}
+
+	// responses lite 模型把 instructions/tools 下沉进 input（判定用出站最终模型名，
+	// 即 model mapping 之后写入 reqBody["model"] 的 normalizedModel）。turn 与 compact
+	// 共用上游 build_responses_request，下沉对两者同样适用。
+	if !opts.SkipResponsesLiteSink && isCodexResponsesLiteModel(normalizedModel) {
+		if sinkOpenAIResponsesLiteRequestBody(reqBody) {
+			result.Modified = true
+		}
 	}
 
 	return result

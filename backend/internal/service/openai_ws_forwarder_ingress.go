@@ -232,8 +232,8 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
-		// OAuth 账号上行恒定按 Responses Lite 画像转发（见 applyCodexOAuthMimicHeaders），
-		// 故无条件执行 Lite body 归一化，与入站是否携带 lite 标记无关。
+		// OAuth 账号上行的 Lite body 归一化保持无条件（对非 lite 模型逐字节兼容），
+		// 与入站是否携带 lite 标记无关；responses-lite 头按出站模型条件发送。
 		if account.IsOpenAIOAuth() {
 			litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(normalized)
 			if liteErr != nil {

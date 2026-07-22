@@ -51,7 +51,10 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	}
 
 	if account != nil && account.Type == AccountTypeOAuth {
-		if rejectReason := detectOpenAIPassthroughInstructionsRejectReason(reqModel, body); rejectReason != "" {
+		// responses lite 请求顶层本就没有 instructions（合法形态）：透传路径按入站
+		// lite 头豁免 instructions 检查；非 lite 请求行为不变。
+		inboundResponsesLite := isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader))
+		if rejectReason := detectOpenAIPassthroughInstructionsRejectReason(reqModel, body, inboundResponsesLite); rejectReason != "" {
 			rejectMsg := "OpenAI codex passthrough requires a non-empty instructions field"
 			MarkOpsClientBusinessLimited(c, OpsClientBusinessLimitedReasonLocalPolicyDenied)
 			logOpenAIPassthroughInstructionsRejected(ctx, c, account, reqModel, rejectReason, body)
@@ -429,7 +432,10 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if seed == "" && isCompact {
 			seed = resolveOpenAICompactMimicSessionID(c)
 		}
-		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact)
+		// 透传路径：responses-lite 头按入站原样保留（入站有就透，没有就不加）；
+		// 入站头经白名单复制进 req.Header，伪装层重建头部前取出判定。
+		responsesLite := isOpenAIResponsesLiteHeader(req.Header.Get(responsesLiteHeader))
+		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact, responsesLite)
 		body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 		if err != nil {
 			return nil, fmt.Errorf("apply codex client metadata: %w", err)
