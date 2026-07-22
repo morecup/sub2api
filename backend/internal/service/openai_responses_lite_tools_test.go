@@ -309,3 +309,54 @@ func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteToolsForOAuth(t *tes
 		})
 	}
 }
+
+// Codex 伪装层对所有 OAuth 账号的上行请求无条件发送 responses-lite 头，
+// 因此即使入站客户端不带 lite 头、body 也没有 reasoning 字段，转发体也必须
+// 注入 reasoning.context=all_turns（managed 与 passthrough 两条路径一致）。
+func TestOpenAIGatewayServiceForward_NormalizesResponsesLiteForOAuthWithoutLiteHeader(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	for _, passthrough := range []bool{false, true} {
+		name := "managed"
+		if passthrough {
+			name = "passthrough"
+		}
+		t.Run(name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(rec)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+			c.Request.Header.Set("User-Agent", "codex_cli_rs/0.144.1")
+			// 入站故意不带 responses-lite 头。
+			require.Empty(t, c.GetHeader(responsesLiteHeader))
+			upstream := &httpUpstreamRecorder{resp: &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+				Body: io.NopCloser(strings.NewReader(
+					"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_lite_forced\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
+						"data: [DONE]\n\n",
+				)),
+			}}
+			svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
+			account := &Account{
+				ID: 502, Name: "responses-lite-forced", Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+				Concurrency: 1, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
+				Credentials: map[string]any{"access_token": "oauth-token", "chatgpt_account_id": "chatgpt-account"},
+				Extra:       map[string]any{"openai_passthrough": passthrough},
+			}
+			// body 不带 reasoning 字段，验证 Lite 归一化无条件注入。
+			body := []byte(`{
+				"model":"gpt-5.6-terra","stream":true,"instructions":"test",
+				"input":[{"type":"message","role":"user","content":"hello"}]
+			}`)
+
+			result, err := svc.Forward(context.Background(), c, account, body)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			// 上行请求头恒定带 lite 头（Codex 伪装层）。
+			require.Equal(t, "true", upstream.lastReq.Header.Get(responsesLiteHeader))
+			// 上行 body 必须满足 Lite 合约。
+			require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+		})
+	}
+}

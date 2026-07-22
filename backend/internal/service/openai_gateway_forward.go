@@ -44,7 +44,10 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if normalized {
 		body = normalizedBody
 	}
-	if account.IsOpenAIOAuth() && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) {
+	// Codex 伪装层对所有 OAuth 账号的上行请求无条件发送 responses-lite 头
+	// （applyCodexOAuthMimicHeaders），因此 body 也必须无条件满足 Lite 合约
+	// （reasoning.context=all_turns 等），不再以入站是否带 lite 头为条件。
+	if account.IsOpenAIOAuth() {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLiteToolsPayload(body)
 		if liteErr != nil {
 			setOpsUpstreamError(c, http.StatusBadRequest, liteErr.Error(), "")

@@ -592,11 +592,11 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceRequestAndStreamResponse
 	}`)
 
 	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":""}}`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":""}}`,
 		"",
-		`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":"{}"}}`,
+		`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}}`,
 		"",
-		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
 		"",
 		"data: [DONE]",
 		"",
@@ -617,15 +617,19 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceRequestAndStreamResponse
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 2)
+	// OAuth 账号上行恒定带 responses-lite 头，namespace 工具走 Lite 合约的
+	// input.additional_tools 载体，顶层 tools 仅保留普通 function。
+	require.Len(t, gjson.GetBytes(upstream.lastBody, "tools").Array(), 1)
 	require.Equal(t, "plain", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
-	require.Equal(t, "function", gjson.GetBytes(upstream.lastBody, "tools.1.type").String())
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.1.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "tools.1.tools").Exists())
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "tool_choice.namespace").Exists())
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "input.0.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "input.0.namespace").Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+	require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.type`).String())
+	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+	// tool_choice / input 中的 namespace 限定引用保持原样，由上游按 Lite 合约解析。
+	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, "tool_choice.name").String())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, "tool_choice.namespace").String())
+	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").name`).String())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").namespace`).String())
 
 	downstream := rec.Body.String()
 	require.NotContains(t, downstream, "collaboration__spawn_agent")
@@ -645,9 +649,9 @@ func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *t
 		"input":[{"type":"function_call","call_id":"call_old","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}]
 	}`)
 	upstreamSSE := strings.Join([]string{
-		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":""}}`,
+		`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":""}}`,
 		"",
-		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"collaboration__spawn_agent","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
+		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"spawn_agent","namespace":"collaboration","arguments":"{}"}],"usage":{"input_tokens":2,"output_tokens":1,"total_tokens":3}}}`,
 		"",
 		"data: [DONE]",
 		"",
@@ -667,10 +671,14 @@ func TestOpenAIGatewayService_NativeOAuth_NamespaceRequestAndStreamResponse(t *t
 	result, err := svc.Forward(context.Background(), c, account, body)
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Equal(t, "function", gjson.GetBytes(upstream.lastBody, "tools.0.type").String())
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
-	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "input.0.name").String())
-	require.False(t, gjson.GetBytes(upstream.lastBody, "input.0.namespace").Exists())
+	// OAuth 账号上行恒定带 responses-lite 头，namespace 工具走 Lite 合约的
+	// input.additional_tools 载体，不再摊平为 collaboration__spawn_agent。
+	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+	require.Equal(t, "namespace", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.type`).String())
+	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
+	require.Equal(t, "spawn_agent", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").name`).String())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="function_call").namespace`).String())
 	require.NotContains(t, rec.Body.String(), "collaboration__spawn_agent")
 	require.Contains(t, rec.Body.String(), `"name":"spawn_agent"`)
 	require.Contains(t, rec.Body.String(), `"namespace":"collaboration"`)
@@ -728,7 +736,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceNonStreamingResponse(t *
 	require.Contains(t, rec.Body.String(), `"namespace":"collaboration"`)
 }
 
-func TestOpenAIGatewayService_OAuthPassthrough_NamespaceCollisionReturnsBadRequest(t *testing.T) {
+func TestOpenAIGatewayService_OAuthPassthrough_NamespaceConflictAcceptedAsAdditionalTools(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
@@ -741,7 +749,17 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceCollisionReturnsBadReque
 			{"type":"namespace","name":"collaboration","tools":[{"type":"function","name":"spawn_agent","parameters":{"type":"object"}}]}
 		],"input":"hi"
 	}`)
-	upstream := &httpUpstreamRecorder{}
+	upstreamSSE := strings.Join([]string{
+		`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[],"usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`,
+		"",
+		"data: [DONE]",
+		"",
+	}, "\n")
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     http.Header{"Content-Type": []string{"text/event-stream"}, "x-request-id": []string{"rid_namespace_carrier"}},
+		Body:       io.NopCloser(strings.NewReader(upstreamSSE)),
+	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{}, httpUpstream: upstream}
 	account := &Account{
 		ID: 123, Name: "acc", Platform: PlatformOpenAI, Type: AccountTypeOAuth, Concurrency: 1,
@@ -749,14 +767,17 @@ func TestOpenAIGatewayService_OAuthPassthrough_NamespaceCollisionReturnsBadReque
 		Extra:       map[string]any{"openai_passthrough": true}, Status: StatusActive, Schedulable: true, RateMultiplier: f64p(1),
 	}
 
+	// Lite 合约下 namespace 声明总是先搬到 input.additional_tools，顶层不会再出现
+	// flatten 冲突；顶层名为 collaboration__spawn_agent 的 function 与 namespace 内
+	// 的 spawn_agent 对上游是两个不同工具，请求不再被本地 400 拒绝。
 	result, err := svc.Forward(context.Background(), c, account, body)
-	require.Error(t, err)
-	require.Nil(t, result)
-	require.Nil(t, upstream.lastReq)
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
-	require.Equal(t, "tools", gjson.Get(rec.Body.String(), "error.param").String())
-	require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), "conflicts with a top-level tool")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, upstream.lastReq)
+	require.Equal(t, "collaboration__spawn_agent", gjson.GetBytes(upstream.lastBody, "tools.0.name").String())
+	require.False(t, gjson.GetBytes(upstream.lastBody, `tools.#(type=="namespace")`).Exists())
+	require.Equal(t, "collaboration", gjson.GetBytes(upstream.lastBody, `input.#(type=="additional_tools").tools.0.name`).String())
+	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
 }
 
 func TestOpenAIGatewayService_OAuthPassthrough_CompactUsesJSONAndKeepsNonStreaming(t *testing.T) {

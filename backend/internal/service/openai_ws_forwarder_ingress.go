@@ -232,7 +232,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
-		if account.IsOpenAIOAuth() && isOpenAIResponsesLiteWebSocketPayload(normalized) {
+		// OAuth 账号上行恒定按 Responses Lite 画像转发（见 applyCodexOAuthMimicHeaders），
+		// 故无条件执行 Lite body 归一化，与入站是否携带 lite 标记无关。
+		if account.IsOpenAIOAuth() {
 			litePayload, _, liteErr := normalizeOpenAIResponsesLiteToolsPayload(normalized)
 			if liteErr != nil {
 				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(
