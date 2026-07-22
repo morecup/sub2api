@@ -23,7 +23,11 @@ func normalizeOpenAIResponsesLiteTools(reqBody map[string]any) (bool, error) {
 	}
 	rawTools, exists := reqBody["tools"]
 	if !exists || rawTools == nil {
-		return ensureOpenAIResponsesLiteReasoningContext(reqBody)
+		changed, err := ensureOpenAIResponsesLiteReasoningContext(reqBody)
+		if err != nil {
+			return false, err
+		}
+		return changed || stripOpenAIResponsesLiteImageDetails(reqBody), nil
 	}
 	tools, ok := rawTools.([]any)
 	if !ok {
@@ -57,7 +61,11 @@ func normalizeOpenAIResponsesLiteTools(reqBody map[string]any) (bool, error) {
 		}
 	}
 	if len(namespaceTools) == 0 {
-		return ensureOpenAIResponsesLiteReasoningContext(reqBody)
+		changed, err := ensureOpenAIResponsesLiteReasoningContext(reqBody)
+		if err != nil {
+			return false, err
+		}
+		return changed || stripOpenAIResponsesLiteImageDetails(reqBody), nil
 	}
 
 	input, err := appendOpenAIResponsesLiteAdditionalTools(reqBody["input"], namespaceTools)
@@ -73,7 +81,54 @@ func normalizeOpenAIResponsesLiteTools(reqBody map[string]any) (bool, error) {
 	} else {
 		reqBody["tools"] = topLevelTools
 	}
+	_ = stripOpenAIResponsesLiteImageDetails(reqBody)
 	return true, nil
+}
+
+// stripOpenAIResponsesLiteImageDetails mirrors codex-rs client_common.rs:
+// Lite requests omit detail from input images in message content and in
+// function/custom tool output content items. Other detail fields are preserved.
+func stripOpenAIResponsesLiteImageDetails(reqBody map[string]any) bool {
+	if reqBody == nil {
+		return false
+	}
+	input, ok := reqBody["input"].([]any)
+	if !ok {
+		return false
+	}
+	modified := false
+	for _, rawItem := range input {
+		item, ok := rawItem.(map[string]any)
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(firstNonEmptyString(item["type"])) {
+		case "message":
+			modified = stripOpenAIResponsesLiteImageDetailsFromContent(item["content"]) || modified
+		case "function_call_output", "custom_tool_call_output":
+			modified = stripOpenAIResponsesLiteImageDetailsFromContent(item["output"]) || modified
+		}
+	}
+	return modified
+}
+
+func stripOpenAIResponsesLiteImageDetailsFromContent(value any) bool {
+	content, ok := value.([]any)
+	if !ok {
+		return false
+	}
+	modified := false
+	for _, rawItem := range content {
+		item, ok := rawItem.(map[string]any)
+		if !ok || strings.TrimSpace(firstNonEmptyString(item["type"])) != "input_image" {
+			continue
+		}
+		if _, exists := item["detail"]; exists {
+			delete(item, "detail")
+			modified = true
+		}
+	}
+	return modified
 }
 
 func ensureOpenAIResponsesLiteReasoningContext(reqBody map[string]any) (bool, error) {
@@ -288,6 +343,7 @@ func sinkOpenAIResponsesLiteRequestBody(reqBody map[string]any) bool {
 	reqBody["parallel_tool_calls"] = false
 	// reasoning 非对象时无法写入 context：保留原值交给上游 400，不在此处放大改动面。
 	_, _ = ensureOpenAIResponsesLiteReasoningContext(reqBody)
+	_ = stripOpenAIResponsesLiteImageDetails(reqBody)
 	return true
 }
 

@@ -232,6 +232,38 @@ func TestNormalizeOpenAIResponsesLiteToolsPayload_PreservesResponseCreateShape(t
 	require.Equal(t, "namespace", gjson.GetBytes(updated, "tool_choice.type").String())
 }
 
+func TestNormalizeOpenAIResponsesLiteTools_StripsImageDetailsOnlyFromSupportedContent(t *testing.T) {
+	reqBody := map[string]any{
+		"input": []any{
+			map[string]any{
+				"type": "message",
+				"content": []any{
+					map[string]any{"type": "input_image", "image_url": "data:image/png;base64,a", "detail": "high"},
+					map[string]any{"type": "input_text", "text": "keep", "detail": "metadata"},
+				},
+			},
+			map[string]any{
+				"type":   "function_call_output",
+				"output": []any{map[string]any{"type": "input_image", "image_url": "https://example.com/a.png", "detail": "low"}},
+			},
+			map[string]any{
+				"type":   "custom_tool_call_output",
+				"output": []any{map[string]any{"type": "input_image", "image_url": "https://example.com/b.png", "detail": "auto"}},
+			},
+		},
+	}
+
+	changed, err := normalizeOpenAIResponsesLiteTools(reqBody)
+
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "all_turns", reqBody["reasoning"].(map[string]any)["context"])
+	require.NotContains(t, reqBody["input"].([]any)[0].(map[string]any)["content"].([]any)[0], "detail")
+	require.Equal(t, "metadata", reqBody["input"].([]any)[0].(map[string]any)["content"].([]any)[1].(map[string]any)["detail"])
+	require.NotContains(t, reqBody["input"].([]any)[1].(map[string]any)["output"].([]any)[0], "detail")
+	require.NotContains(t, reqBody["input"].([]any)[2].(map[string]any)["output"].([]any)[0], "detail")
+}
+
 func TestApplyCodexOAuthTransform_PreservesLiteNamespaceToolChoice(t *testing.T) {
 	reqBody := map[string]any{
 		"model": "gpt-5.6-terra",

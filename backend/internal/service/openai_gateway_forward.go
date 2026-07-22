@@ -69,7 +69,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// 合成路径且出站为 lite 模型时跳过摊平：namespace 工具由 transform 的 sink 原样
 	// 归并进 additional_tools 载体（上游 lite 合约），提前摊平会破坏载体形态；
 	// 非 lite 出站模型与透传路径维持既有摊平行为。
-	skipFlattenForLiteSink := !passthroughEnabled && isCodexResponsesLiteModel(resolveOpenAIForwardUpstreamModel(account, strings.TrimSpace(gjson.GetBytes(body, "model").String()), isOpenAIResponsesCompactPath(c)))
+	// Compat bridge deliberately skips the Lite sink to keep its neutral Responses
+	// shape, so it must still flatten namespaces before the transform.
+	skipFlattenForLiteSink := !passthroughEnabled && !isOpenAICompatMessagesBridgeBody(body) && isCodexResponsesLiteModel(resolveOpenAIForwardUpstreamModel(account, strings.TrimSpace(gjson.GetBytes(body, "model").String()), isOpenAIResponsesCompactPath(c)))
 	if shouldFlattenOpenAIResponsesNamespaces(account, wsDecision.Transport, passthroughEnabled) && !skipFlattenForLiteSink {
 		body, err = flattenOpenAIResponsesNamespaces(c, body)
 		if err != nil {

@@ -87,6 +87,30 @@ func TestApplyCodexOAuthTransform_ResponsesLiteSink(t *testing.T) {
 	require.Equal(t, "user", input[2].(map[string]any)["role"])
 }
 
+func TestApplyCodexOAuthTransform_ResponsesLiteSinkStripsImageDetails(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-5.6-terra",
+		"input": []any{
+			map[string]any{
+				"type":    "message",
+				"role":    "user",
+				"content": []any{map[string]any{"type": "input_image", "image_url": "data:image/png;base64,a", "detail": "high"}},
+			},
+			map[string]any{
+				"type":    "function_call_output",
+				"call_id": "call_image_output",
+				"output":  []any{map[string]any{"type": "input_image", "image_url": "https://example.com/a.png", "detail": "low"}},
+			},
+		},
+	}
+
+	applyCodexOAuthTransform(reqBody, false, false)
+
+	input := reqBody["input"].([]any)
+	require.NotContains(t, input[1].(map[string]any)["content"].([]any)[0], "detail")
+	require.NotContains(t, input[3].(map[string]any)["output"].([]any)[0], "detail")
+}
+
 // tools 为空时上游仍发送 additional_tools 载体（client.rs:844-848 无空值分支）。
 func TestApplyCodexOAuthTransform_ResponsesLiteSinkEmptyTools(t *testing.T) {
 	reqBody := map[string]any{
@@ -232,7 +256,9 @@ func TestApplyCodexOAuthTransform_NonLiteOutputUnchanged(t *testing.T) {
 			map[string]any{"type": "namespace", "name": "collaboration"},
 		},
 		"input": []any{
-			map[string]any{"type": "message", "role": "user", "content": "hello"},
+			map[string]any{"type": "message", "role": "user", "content": []any{
+				map[string]any{"type": "input_image", "image_url": "https://example.com/non-lite.png", "detail": "high"},
+			}},
 		},
 	}
 
@@ -245,6 +271,7 @@ func TestApplyCodexOAuthTransform_NonLiteOutputUnchanged(t *testing.T) {
 	input := reqBody["input"].([]any)
 	require.Len(t, input, 1)
 	require.Equal(t, "user", input[0].(map[string]any)["role"])
+	require.Equal(t, "high", input[0].(map[string]any)["content"].([]any)[0].(map[string]any)["detail"])
 }
 
 // lite 头按条件发送：true 时设置，false 时不发送。
