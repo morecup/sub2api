@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -39,6 +40,33 @@ func (s *OpenAIOAuthServiceSuite) setupServer(handler http.HandlerFunc) {
 	s.svc = &openaiOAuthService{tokenURL: s.srv.URL}
 }
 
+// decodeOAuthJSONBody 按实抓的 JSON 形态解析 refresh 请求体，
+// 并校验请求画像头（content-type/accept/originator/user-agent）。
+func decodeOAuthJSONBody(t *testing.T, r *http.Request) map[string]string {
+	t.Helper()
+	require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+	require.Equal(t, "*/*", r.Header.Get("Accept"))
+	require.Equal(t, openAIOAuthOriginator, r.Header.Get("Originator"))
+	require.Equal(t, openAIOAuthUserAgent, r.Header.Get("User-Agent"))
+	raw, err := io.ReadAll(r.Body)
+	require.NoError(t, err)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(raw, &body))
+	return body
+}
+
+// decodeOAuthExchangeForm 按实抓形态解析 authorization_code 交换请求：
+// form-urlencoded、accept: */*、无 originator/user-agent 头。返回解析后的表单。
+func decodeOAuthExchangeForm(t *testing.T, r *http.Request) url.Values {
+	t.Helper()
+	require.Equal(t, "application/x-www-form-urlencoded", r.Header.Get("Content-Type"))
+	require.Equal(t, "*/*", r.Header.Get("Accept"))
+	require.Empty(t, r.Header.Get("Originator"))
+	require.Empty(t, r.Header.Get("User-Agent"))
+	require.NoError(t, r.ParseForm())
+	return r.PostForm
+}
+
 func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -47,32 +75,29 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if err := r.ParseForm(); err != nil {
-			errCh <- "ParseForm failed"
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if got := r.PostForm.Get("grant_type"); got != "authorization_code" {
+		form := decodeOAuthExchangeForm(s.T(), r)
+		// 实抓字段顺序：grant_type, code, redirect_uri, client_id, code_verifier。
+		if got := form.Get("grant_type"); got != "authorization_code" {
 			errCh <- "grant_type mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("client_id"); got != openai.ClientID {
+		if got := form.Get("client_id"); got != openai.ClientID {
 			errCh <- "client_id mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("code"); got != "code" {
+		if got := form.Get("code"); got != "code" {
 			errCh <- "code mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("redirect_uri"); got != openai.DefaultRedirectURI {
+		if got := form.Get("redirect_uri"); got != openai.DefaultRedirectURI {
 			errCh <- "redirect_uri mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("code_verifier"); got != "ver" {
+		if got := form.Get("code_verifier"); got != "ver" {
 			errCh <- "code_verifier mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -96,28 +121,25 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_DefaultRedirectURI() {
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			errCh <- "ParseForm failed"
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if got := r.PostForm.Get("grant_type"); got != "refresh_token" {
+		body := decodeOAuthJSONBody(s.T(), r)
+		if got := body["grant_type"]; got != "refresh_token" {
 			errCh <- "grant_type mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("refresh_token"); got != "rt" {
+		if got := body["refresh_token"]; got != "rt" {
 			errCh <- "refresh_token mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("client_id"); got != openai.ClientID {
+		if got := body["client_id"]; got != openai.ClientID {
 			errCh <- "client_id mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if got := r.PostForm.Get("scope"); got != openai.RefreshScopes {
-			errCh <- "scope mismatch"
+		// 实抓：refresh 请求不携带 scope。
+		if _, exists := body["scope"]; exists {
+			errCh <- "scope must be omitted on refresh"
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -142,12 +164,8 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_FormFields() {
 func (s *OpenAIOAuthServiceSuite) TestRefreshToken_DefaultsToOpenAIClientID() {
 	var seenClientIDs []string
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		clientID := r.PostForm.Get("client_id")
-		seenClientIDs = append(seenClientIDs, clientID)
+		body := decodeOAuthJSONBody(s.T(), r)
+		seenClientIDs = append(seenClientIDs, body["client_id"])
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at","refresh_token":"rt","token_type":"bearer","expires_in":3600}`)
 	}))
@@ -163,13 +181,9 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_UseProvidedClientID() {
 	const customClientID = "custom-client-id"
 	var seenClientIDs []string
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		clientID := r.PostForm.Get("client_id")
-		seenClientIDs = append(seenClientIDs, clientID)
-		if clientID != customClientID {
+		body := decodeOAuthJSONBody(s.T(), r)
+		seenClientIDs = append(seenClientIDs, body["client_id"])
+		if body["client_id"] != customClientID {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -244,8 +258,8 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_UsesProvidedRedirectURI() {
 	want := "http://localhost:9999/cb"
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		if got := r.PostForm.Get("redirect_uri"); got != want {
+		form := decodeOAuthExchangeForm(s.T(), r)
+		if got := form.Get("redirect_uri"); got != want {
 			errCh <- "redirect_uri mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -267,8 +281,8 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_UseProvidedClientID() {
 	wantClientID := "custom-exchange-client-id"
 	errCh := make(chan string, 1)
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		if got := r.PostForm.Get("client_id"); got != wantClientID {
+		form := decodeOAuthExchangeForm(s.T(), r)
+		if got := form.Get("client_id"); got != wantClientID {
 			errCh <- "client_id mismatch"
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -288,8 +302,8 @@ func (s *OpenAIOAuthServiceSuite) TestExchangeCode_UseProvidedClientID() {
 
 func (s *OpenAIOAuthServiceSuite) TestTokenURL_CanBeOverriddenWithQuery() {
 	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = r.ParseForm()
-		s.received <- r.PostForm
+		raw, _ := io.ReadAll(r.Body)
+		s.received <- url.Values{"body": {string(raw)}}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"access_token":"at","token_type":"bearer","expires_in":1}`)
 	}))
@@ -324,6 +338,28 @@ func (s *OpenAIOAuthServiceSuite) TestRefreshToken_NonSuccessStatus() {
 	_, err := s.svc.RefreshToken(s.ctx, "rt", "")
 	require.Error(s.T(), err, "expected error for non-2xx status")
 	require.ErrorContains(s.T(), err, "status 401")
+}
+
+func (s *OpenAIOAuthServiceSuite) TestExchangeCode_FormFieldOrder() {
+	// 实抓（auth_login_exchange_flows.txt）：form 字段顺序为
+	// grant_type, code, redirect_uri, client_id, code_verifier。
+	bodyCh := make(chan string, 1)
+	s.setupServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		bodyCh <- string(raw)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"at","token_type":"bearer","expires_in":1}`)
+	}))
+
+	_, err := s.svc.ExchangeCode(s.ctx, "CODE X", "VER/1", openai.DefaultRedirectURI, "", "")
+	require.NoError(s.T(), err)
+	got := <-bodyCh
+	want := "grant_type=authorization_code" +
+		"&code=CODE+X" +
+		"&redirect_uri=" + url.QueryEscape(openai.DefaultRedirectURI) +
+		"&client_id=" + openai.ClientID +
+		"&code_verifier=" + url.QueryEscape("VER/1")
+	require.Equal(s.T(), want, got)
 }
 
 func TestNewOpenAIOAuthClient_DefaultTokenURL(t *testing.T) {

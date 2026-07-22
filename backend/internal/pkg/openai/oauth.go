@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // OpenAI OAuth Constants (from CRS project - Codex CLI client)
@@ -25,8 +27,9 @@ const (
 	// Default redirect URI (can be customized)
 	DefaultRedirectURI = "http://localhost:1455/auth/callback"
 
-	// Scopes
-	DefaultScopes = "openid profile email offline_access"
+	// DefaultScopes 对齐 codex-rs 0.139+ 实抓 authorize URL
+	// （较旧客户端新增 api.connectors.read / api.connectors.invoke 两项）。
+	DefaultScopes = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 	// RefreshScopes - scope for token refresh (without offline_access, aligned with CRS project)
 	RefreshScopes = "openid profile email"
 
@@ -38,6 +41,23 @@ const (
 	// OAuthPlatformOpenAI uses OpenAI Codex-compatible OAuth client.
 	OAuthPlatformOpenAI = "openai"
 )
+
+// codexDesktopAppVersion 对应 authorize URL 的 codex_app_version 参数（实抓 26.715.61943）。
+const codexDesktopAppVersion = "26.715.61943"
+
+// oauthStableSurfaceID 为进程级兜底值（无会话种子时使用）。
+var oauthStableSurfaceID = uuid.NewString()
+
+// StableSurfaceIDForSession 按登录会话派生 source_surface_stable_id /
+// codex_origin_stable_id（UUIDv5）：每个 OAuth 登录流程（state 唯一）呈现
+// 独立 surface，避免经本网关导入的账号在授权侧共享同一设备标识形成关联；
+// 同一会话内重试/重生成保持一致。sessionKey 为空时回退进程级稳定值。
+func StableSurfaceIDForSession(sessionKey string) string {
+	if strings.TrimSpace(sessionKey) == "" {
+		return oauthStableSurfaceID
+	}
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:oauth-surface:"+sessionKey)).String()
+}
 
 // OAuthSession stores OAuth flow state for OpenAI
 type OAuthSession struct {
@@ -152,14 +172,14 @@ func GenerateSessionID() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-// GenerateCodeVerifier generates a PKCE code verifier (64 bytes -> hex for OpenAI)
-// OpenAI uses hex encoding instead of base64url
+// GenerateCodeVerifier generates a PKCE code verifier (64 bytes -> base64url, 86 chars)。
+// 对齐 codex-rs 实抓：verifier 为 64 字节随机数的 base64url 编码（无 padding）。
 func GenerateCodeVerifier() (string, error) {
 	bytes, err := GenerateRandomBytes(64)
 	if err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes), nil
+	return base64URLEncode(bytes), nil
 }
 
 // GenerateCodeChallenge generates a PKCE code challenge using S256 method
@@ -202,6 +222,16 @@ func BuildAuthorizationURLForPlatform(state, codeChallenge, redirectURI, platfor
 	if codexFlow {
 		params.Set("codex_cli_simplified_flow", "true")
 	}
+	// 实抓 authorize URL 恒定携带 originator（codex-rs 为 codex_cli_rs；
+	// 本网关流量统一伪装 Codex Desktop 画像，保持一致）。
+	params.Set("originator", "Codex Desktop")
+	// 实抓 Codex Desktop App 26.715.61943 authorize URL 附加参数。
+	// stable_id 按登录会话（state）派生，每个登录流程呈现独立 surface。
+	params.Set("codex_app_version", codexDesktopAppVersion)
+	surfaceID := StableSurfaceIDForSession(state)
+	params.Set("source_surface_stable_id", surfaceID)
+	params.Set("codex_origin_stable_id", surfaceID)
+	params.Set("codex_streamlined_login", "true")
 
 	return fmt.Sprintf("%s?%s", AuthorizeURL, params.Encode())
 }

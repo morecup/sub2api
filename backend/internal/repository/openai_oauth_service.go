@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
@@ -14,6 +15,24 @@ import (
 	"github.com/imroc/req/v3"
 )
 
+// Codex /oauth/token 实抓画像（2026-07-21/22，见 docs/codex-desktop-capture/
+// 2026-07-21_0.145.0-alpha.27/raw/ 下 auth_login_exchange_flows.txt 与
+// auth_refresh_flows_desktop.txt）：
+//   - authorization_code 交换：form-urlencoded，无 originator/user-agent 头
+//   - refresh：JSON body（裸 application/json，仅 client_id/grant_type/refresh_token），
+//     originator: Codex Desktop，UA 为不带应用版本段的 Desktop 形态
+const (
+	openAIOAuthOriginator = "Codex Desktop"
+	openAIOAuthUserAgent  = "Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown"
+)
+
+// 请求体字段顺序与实抓 JSON 一致（client_id, grant_type, refresh_token）。
+type openAITokenRefreshRequest struct {
+	ClientID     string `json:"client_id"`
+	GrantType    string `json:"grant_type"`
+	RefreshToken string `json:"refresh_token"`
+}
+
 // NewOpenAIOAuthClient creates a new OpenAI OAuth client
 func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
 	return &openaiOAuthService{tokenURL: openai.TokenURL}
@@ -21,6 +40,24 @@ func NewOpenAIOAuthClient() service.OpenAIOAuthClient {
 
 type openaiOAuthService struct {
 	tokenURL string
+}
+
+// postOAuthTokenRequest 按实抓画像发送 /oauth/token 请求：JSON body（裸 application/json）、
+// accept: */*、originator/user-agent 为 Codex Desktop 形态。result 用于承接成功响应解析。
+func (s *openaiOAuthService) postOAuthTokenRequest(ctx context.Context, client *req.Client, payload any, result *openai.TokenResponse) (*req.Response, error) {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return client.R().
+		SetContext(ctx).
+		SetHeader("content-type", "application/json").
+		SetHeader("accept", "*/*").
+		SetHeader("originator", openAIOAuthOriginator).
+		SetHeader("user-agent", openAIOAuthUserAgent).
+		SetBody(body).
+		SetSuccessResult(result).
+		Post(s.tokenURL)
 }
 
 func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifier, redirectURI, proxyURL, clientID string) (*openai.TokenResponse, error) {
@@ -37,19 +74,22 @@ func (s *openaiOAuthService) ExchangeCode(ctx context.Context, code, codeVerifie
 		clientID = openai.ClientID
 	}
 
-	formData := url.Values{}
-	formData.Set("grant_type", "authorization_code")
-	formData.Set("client_id", clientID)
-	formData.Set("code", code)
-	formData.Set("redirect_uri", redirectURI)
-	formData.Set("code_verifier", codeVerifier)
+	// 实抓（codex-rs 0.139 登录回调，见归档 auth_login_exchange_flows.txt）：
+	// authorization_code 交换为 form-urlencoded，字段顺序 grant_type, code,
+	// redirect_uri, client_id, code_verifier；无 originator/user-agent 头。
+	form := "grant_type=" + url.QueryEscape("authorization_code") +
+		"&code=" + url.QueryEscape(code) +
+		"&redirect_uri=" + url.QueryEscape(redirectURI) +
+		"&client_id=" + url.QueryEscape(clientID) +
+		"&code_verifier=" + url.QueryEscape(codeVerifier)
 
 	var tokenResp openai.TokenResponse
-
 	resp, err := client.R().
 		SetContext(ctx).
-		SetHeader("User-Agent", "codex-cli/0.91.0").
-		SetFormDataFromValues(formData).
+		SetHeader("content-type", "application/x-www-form-urlencoded").
+		SetHeader("accept", "*/*").
+		SetHeader("user-agent", "").
+		SetBodyString(form).
 		SetSuccessResult(&tokenResp).
 		Post(s.tokenURL)
 
@@ -86,20 +126,15 @@ func (s *openaiOAuthService) refreshTokenWithClientID(ctx context.Context, refre
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_OAUTH_CLIENT_INIT_FAILED", "create HTTP client: %v", err)
 	}
 
-	formData := url.Values{}
-	formData.Set("grant_type", "refresh_token")
-	formData.Set("refresh_token", refreshToken)
-	formData.Set("client_id", clientID)
-	formData.Set("scope", openai.RefreshScopes)
+	// 实抓：refresh 请求体仅 client_id/grant_type/refresh_token 三个字段（不含 scope）。
+	payload := openAITokenRefreshRequest{
+		ClientID:     clientID,
+		GrantType:    "refresh_token",
+		RefreshToken: refreshToken,
+	}
 
 	var tokenResp openai.TokenResponse
-
-	resp, err := client.R().
-		SetContext(ctx).
-		SetHeader("User-Agent", "codex-cli/0.91.0").
-		SetFormDataFromValues(formData).
-		SetSuccessResult(&tokenResp).
-		Post(s.tokenURL)
+	resp, err := s.postOAuthTokenRequest(ctx, client, payload, &tokenResp)
 
 	if err != nil {
 		if shouldReturnOpenAINoProxyHint(ctx, proxyURL, err) {
