@@ -845,7 +845,7 @@ export interface OpenAIQuotaUsage {
   additional_rate_limits?: OpenAIAdditionalRateLimit[]
   credits?: OpenAICredits | null
   spend_control?: OpenAISpendControl | null
-  rate_limit_reached_type?: string | null
+  rate_limit_reached_type?: unknown
   promo?: unknown
   rate_limit_reset_credits?: OpenAIRateLimitResetCredits | null
   fetched_at: number

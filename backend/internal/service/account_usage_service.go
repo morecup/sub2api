@@ -808,10 +808,6 @@ func mergeAccountExtra(account *Account, updates map[string]any) {
 		account.Extra = make(map[string]any, len(updates))
 	}
 	for k, v := range updates {
-		if v == nil && isCodexCanonicalUsageExtraKey(k) {
-			delete(account.Extra, k)
-			continue
-		}
 		account.Extra[k] = v
 	}
 }
@@ -823,8 +819,12 @@ func applyExtraToUsage(usage *UsageInfo, extra map[string]any, now time.Time) {
 	if usage == nil {
 		return
 	}
-	usage.FiveHour = buildCodexUsageProgressFromExtra(extra, "5h", now)
-	usage.SevenDay = buildCodexUsageProgressFromExtra(extra, "7d", now)
+	if progress := buildCodexUsageProgressFromExtra(extra, "5h", now); progress != nil {
+		usage.FiveHour = progress
+	}
+	if progress := buildCodexUsageProgressFromExtra(extra, "7d", now); progress != nil {
+		usage.SevenDay = progress
+	}
 }
 
 func (s *AccountUsageService) getGeminiUsage(ctx context.Context, account *Account) (*UsageInfo, error) {
@@ -1339,8 +1339,6 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 		usedPercentKey string
 		resetAfterKey  string
 		resetAtKey     string
-		windowKey      string
-		expectedWindow codexCanonicalWindow
 	)
 
 	switch window {
@@ -1348,27 +1346,20 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 		usedPercentKey = "codex_5h_used_percent"
 		resetAfterKey = "codex_5h_reset_after_seconds"
 		resetAtKey = "codex_5h_reset_at"
-		windowKey = "codex_5h_window_minutes"
-		expectedWindow = codexCanonicalWindow5h
 	case "7d":
 		usedPercentKey = "codex_7d_used_percent"
 		resetAfterKey = "codex_7d_reset_after_seconds"
 		resetAtKey = "codex_7d_reset_at"
-		windowKey = "codex_7d_window_minutes"
-		expectedWindow = codexCanonicalWindow7d
 	default:
 		return nil
 	}
 
-	usedPercent, ok := resolveAccountExtraNumber(extra, usedPercentKey)
+	usedRaw, ok := extra[usedPercentKey]
 	if !ok {
 		return nil
 	}
-	if windowRaw, exists := extra[windowKey]; exists && classifyCodexCanonicalWindow(parseExtraInt(windowRaw)) != expectedWindow {
-		return nil
-	}
 
-	progress := &UsageProgress{Utilization: usedPercent}
+	progress := &UsageProgress{Utilization: parseExtraFloat64(usedRaw)}
 	if resetAtRaw, ok := extra[resetAtKey]; ok {
 		if resetAt, err := parseTime(fmt.Sprint(resetAtRaw)); err == nil {
 			progress.ResetsAt = &resetAt

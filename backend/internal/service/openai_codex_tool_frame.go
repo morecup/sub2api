@@ -140,10 +140,6 @@ func (s *OpenAIGatewayService) persistCodexUsageSnapshotForRetry(ctx context.Con
 		account.Extra = make(map[string]any, len(updates))
 	}
 	for key, value := range updates {
-		if value == nil && isCodexCanonicalUsageExtraKey(key) {
-			delete(account.Extra, key)
-			continue
-		}
 		account.Extra[key] = value
 	}
 	if s.accountRepo == nil {

@@ -127,6 +127,12 @@ func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
 			wantNil:    true,
 		},
 		{
+			name:       "object rate limit reached type does not fail the quota query",
+			usageBody:  `{"rate_limit_reached_type":{"type":"primary_window","metered_feature":"codex"}}`,
+			detailBody: `{}`,
+			wantNil:    true,
+		},
+		{
 			name:       "null body preserves missing usage credits",
 			usageBody:  `{}`,
 			detailBody: `null`,
@@ -226,4 +232,20 @@ func TestOpenAIQuotaUsageDecodesLatestCodexDesktopShape(t *testing.T) {
 	require.Equal(t, 2, usage.RateLimitResetCredits.AvailableCount)
 	require.NotNil(t, usage.RateLimitResetCredits.ApplicableAvailableCount)
 	require.Equal(t, 1, *usage.RateLimitResetCredits.ApplicableAvailableCount)
+}
+
+func TestOpenAIQuotaUsageDecodesObjectRateLimitReachedType(t *testing.T) {
+	var usage OpenAIQuotaUsage
+	err := json.Unmarshal([]byte(`{
+		"rate_limit_reached_type": {
+			"type": "primary_window",
+			"metered_feature": "codex"
+		}
+	}`), &usage)
+	require.NoError(t, err)
+
+	reachedType, ok := usage.RateLimitReachedType.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "primary_window", reachedType["type"])
+	require.Equal(t, "codex", reachedType["metered_feature"])
 }

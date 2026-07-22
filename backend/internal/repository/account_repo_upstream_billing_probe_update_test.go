@@ -150,33 +150,6 @@ func TestUpdateExtraNilProbeRemovesKeyInsteadOfWritingJSONNull(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUpdateExtraNilCodexAliasesRemoveKeysInsteadOfWritingJSONNull(t *testing.T) {
-	db, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = db.Close() })
-	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
-	t.Cleanup(func() { _ = client.Close() })
-
-	mock.ExpectExec(`(?s)UPDATE accounts SET extra = .* - \$3::text.* - \$4::text`).
-		WithArgs(
-			`{"codex_5h_used_percent":null,"codex_7d_used_percent":null,"codex_primary_window_minutes":43200}`,
-			int64(27),
-			"codex_5h_used_percent",
-			"codex_7d_used_percent",
-		).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	repo := newAccountRepositoryWithSQL(client, db, nil)
-
-	err = repo.UpdateExtra(context.Background(), 27, map[string]any{
-		"codex_primary_window_minutes": 43200,
-		"codex_5h_used_percent":        nil,
-		"codex_7d_used_percent":        nil,
-	})
-
-	require.NoError(t, err)
-	require.NoError(t, mock.ExpectationsWereMet())
-}
-
 func TestBulkUpdateNilProbeRemovesKeyInsteadOfWritingJSONNull(t *testing.T) {
 	exec := &recordingSQLExecutor{result: rowsAffectedResult(1)}
 	repo := newAccountRepositoryWithSQL(nil, exec, nil)

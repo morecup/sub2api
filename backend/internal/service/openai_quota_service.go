@@ -106,7 +106,7 @@ type OpenAIQuotaUsage struct {
 	AdditionalRateLimits  []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
 	Credits               *OpenAICredits               `json:"credits,omitempty"`
 	SpendControl          *OpenAISpendControl          `json:"spend_control,omitempty"`
-	RateLimitReachedType  *string                      `json:"rate_limit_reached_type,omitempty"`
+	RateLimitReachedType  any                          `json:"rate_limit_reached_type,omitempty"`
 	Promo                 any                          `json:"promo,omitempty"`
 	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
 	FetchedAt             int64                        `json:"fetched_at"`
