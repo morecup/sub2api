@@ -157,6 +157,11 @@ func TestAccountTestService_TestAccountConnection_OpenAICompactAPIKeyUsesCompact
 	require.NoError(t, err)
 
 	require.Equal(t, "https://example.com/v1/responses/compact", upstream.lastReq.URL.String())
+	// compact 探测统一使用 Codex Desktop 画像身份头（含 API Key 路径）。
+	require.Equal(t, codexDesktopUserAgent, upstream.lastReq.Header.Get("User-Agent"))
+	require.Equal(t, codexDesktopOriginator, upstream.lastReq.Header.Get("Originator"))
+	require.Equal(t, codexDesktopVersion, upstream.lastReq.Header.Get("Version"))
+	require.Equal(t, "responses=experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
 	require.Equal(t, "gpt-5.4-openai-compact", gjson.GetBytes(upstream.lastBody, "model").String())
 	updates := <-updateCalls
 	require.Equal(t, true, updates["openai_compact_supported"])

@@ -626,6 +626,9 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 
 		// Set common headers
 		req.Header.Set("Content-Type", "application/json")
+		if !isOAuth {
+			applyOpenAICodexProbeHeaders(req.Header)
+		}
 		if credentialAccount.IsOpenAIAgentIdentity() {
 			authHeaders, authErr := buildAgentIdentityAuthenticationHeaders(ctx, s.accountRepo, s.agentIdentityWS, &s.agentIdentityTaskMu, credentialAccount)
 			if authErr != nil {

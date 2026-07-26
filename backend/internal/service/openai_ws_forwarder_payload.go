@@ -92,6 +92,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 				headers.Add("x-codex-beta-features", value)
 			}
 		}
+		for _, name := range [...]string{"x-codex-window-id", "x-codex-installation-id"} {
+			if value := c.Request.Header.Get(name); strings.TrimSpace(value) != "" {
+				headers.Set(name, value)
+			}
+		}
 	}
 	if !isOAuthAccount {
 		if sessionResolution.SessionID != "" {
