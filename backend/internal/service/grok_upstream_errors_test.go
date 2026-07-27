@@ -161,7 +161,7 @@ func TestGrokContentPolicy403SharedErrorFallbackDoesNotMutate(t *testing.T) {
 		Header:     http.Header{"Content-Type": []string{"application/json"}},
 		Body:       io.NopCloser(strings.NewReader(string(body))),
 	}
-	_, err = svc.handleCompatErrorResponse(resp, c, account, writeChatCompletionsError, "grok-4.5")
+	_, err = svc.handleCompatErrorResponse(resp, c, account, writeChatCompletionsError, nil, "grok-4.5")
 	require.Error(t, err)
 	require.Equal(t, http.StatusForbidden, recorder.Code)
 	require.Contains(t, recorder.Body.String(), "invalid_request_error")
