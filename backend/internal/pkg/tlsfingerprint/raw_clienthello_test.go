@@ -28,6 +28,7 @@ type parsedClientHello struct {
 	supportedVersions   []uint16
 	keyShareGroups      []uint16
 	pskModes            []uint16
+	extensionSizes      map[uint16]int
 }
 
 func TestDefaultClientHelloRawCaptureMatchesLocalClaudeCode(t *testing.T) {
@@ -160,6 +161,10 @@ func parseClientHelloRecord(raw []byte) (*parsedClientHello, error) {
 		extData := body[offset:extEnd]
 		offset = extEnd
 		hello.extensions = append(hello.extensions, extID)
+		if hello.extensionSizes == nil {
+			hello.extensionSizes = make(map[uint16]int)
+		}
+		hello.extensionSizes[extID] = extLen
 		parseClientHelloExtension(hello, extID, extData)
 	}
 	return hello, nil
