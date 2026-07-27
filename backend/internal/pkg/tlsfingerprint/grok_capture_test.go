@@ -204,6 +204,11 @@ func TestGrokCLIProfileEmitsCapturedWireShape(t *testing.T) {
 //	WINDOW_UPDATE stream=0 increment=5177345
 //	frames: SETTINGS -> WINDOW_UPDATE -> HEADERS -> HEADERS -> DATA...
 //	pseudo-header order: :method, :scheme, :authority, :path
+//
+// Measured twice, once with the CLI in API-key mode against a custom base URL
+// and once in OAuth mode with the CLI chat proxy endpoint redirected
+// ([endpoints] cli_chat_proxy_base_url). Both produced this exact preamble, so
+// the HTTP/2 fingerprint does not depend on the credential type.
 const (
 	capturedGrokCLIAkamaiFingerprint = "2:0;4:2097152;5:16384;6:16384|5177345|0|m,s,a,p"
 	// What this transport actually produces. The SETTINGS block and the
