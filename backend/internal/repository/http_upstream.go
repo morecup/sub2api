@@ -366,10 +366,14 @@ func isGrokCLICompatibilityAccessDenied(body []byte) bool {
 }
 
 func isGrokCLIAccessDeniedFallbackCandidate(req *http.Request, resp *http.Response) bool {
+	// The CLI marker used to be the "this is our CLI-identity request" test, but
+	// it is no longer sent on inference paths (which is exactly where this
+	// fallback applies). The client-version header is the identity marker that
+	// every CLI request carries.
 	return req != nil && req.URL != nil && req.GetBody != nil && resp != nil &&
 		resp.StatusCode == http.StatusForbidden &&
 		strings.EqualFold(strings.TrimSpace(req.URL.Hostname()), grokCLIProxyHost) &&
-		strings.EqualFold(strings.TrimSpace(req.Header.Get("X-XAI-Token-Auth")), "xai-grok-cli") &&
+		strings.TrimSpace(req.Header.Get(xai.CLIClientVersionHeader)) != "" &&
 		strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Header.Get("Authorization"))), "bearer ")
 }
 
@@ -431,6 +435,46 @@ type prefixedReadCloser struct {
 	io.Closer
 }
 
+// grokCLITokenAuthHeader is the canonical spelling of the credential-type
+// discriminator in xAI's auth wire format: a bare Bearer is routed to
+// enterprise management-key auth, while Bearer plus this header marks a Grok
+// user/OAuth token (GrokAuthCredentials::apply in grok-build).
+const grokCLITokenAuthHeader = "X-XAI-Token-Auth"
+
+// grokInferencePathMarkers identify the endpoints the official CLI serves from
+// its sampling client.
+//
+// The discriminator is not endpoint-scoped in the CLI: every request built
+// through the shared auth seam (GrokAuthCredentials::apply — models, settings,
+// billing, bundles, feedback, telemetry) carries it. The sampling client that
+// owns inference builds its own Authorization header instead
+// (xai-grok-sampler/src/client.rs) and therefore sends a bare Bearer, which is
+// what a capture of POST /v1/responses shows. Splitting by path reproduces that
+// because the sampler owns exactly these endpoints.
+//
+// Matching the official client here is also the lower-risk direction: xAI cannot
+// start requiring the discriminator on inference without shipping a new CLI,
+// whereas sending an extra header puts the request on a branch no official
+// client exercises.
+var grokInferencePathMarkers = []string{
+	"/responses",
+	"/chat/completions",
+	"/messages",
+	"/embeddings",
+	"/images/",
+	"/videos/",
+}
+
+func isGrokCLIInferencePath(path string) bool {
+	path = strings.ToLower(path)
+	for _, marker := range grokInferencePathMarkers {
+		if strings.Contains(path, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // applyGrokCLIProxyHeaders applies the official Grok Build client identity at
 // the final shared transport boundary. Keying this behavior to the exact CLI
 // proxy host keeps direct api.x.ai traffic unchanged and automatically covers
@@ -442,7 +486,9 @@ func applyGrokCLIProxyHeaders(req *http.Request) {
 	if req.Header == nil {
 		req.Header = make(http.Header)
 	}
-	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+	if !isGrokCLIInferencePath(req.URL.Path) {
+		req.Header.Set(grokCLITokenAuthHeader, xai.CLITokenAuthValue)
+	}
 	req.Header.Set("x-grok-client-version", xai.EffectiveCLIClientVersion())
 	req.Header.Set(xai.CLIClientIdentifierHeader, xai.CLIClientIdentifier)
 	req.Header.Set("User-Agent", xai.CLIUserAgent())

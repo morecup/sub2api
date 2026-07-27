@@ -214,7 +214,9 @@ func TestHTTPUpstreamDoAppliesGrokCLIIdentityBeforeOAuthRoundTrip(t *testing.T) 
 				client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					capturedHeaders = req.Header.Clone()
 					statusCode := http.StatusOK
-					if req.Header.Get("X-XAI-Token-Auth") != "xai-grok-cli" {
+					// The client version is the identity marker every official CLI
+					// request carries, including inference.
+					if req.Header.Get("x-grok-client-version") == "" {
 						statusCode = http.StatusForbidden
 					}
 					return &http.Response{
@@ -239,8 +241,11 @@ func TestHTTPUpstreamDoAppliesGrokCLIIdentityBeforeOAuthRoundTrip(t *testing.T) 
 			require.NoError(t, resp.Body.Close())
 
 			require.Equal(t, xai.CLIClientVersion, capturedHeaders.Get("x-grok-client-version"))
-			require.Equal(t, "xai-grok-cli", capturedHeaders.Get("X-XAI-Token-Auth"))
+			require.Equal(t, xai.CLIClientIdentifier, capturedHeaders.Get(xai.CLIClientIdentifierHeader))
 			require.Equal(t, xai.CLIUserAgent(), capturedHeaders.Get("User-Agent"))
+			// These are inference endpoints: the official sampling client builds a
+			// bare Bearer, so the credential-type discriminator must not appear.
+			require.Empty(t, capturedHeaders.Get("X-XAI-Token-Auth"))
 		})
 	}
 }
@@ -270,7 +275,10 @@ func TestHTTPUpstreamDoFallsBackToOfficialGrokAPIOnCLIAccessDenied(t *testing.T)
 			require.NoError(t, err)
 			if calls == 1 {
 				require.Equal(t, grokCLIProxyHost, req.URL.Hostname())
-				require.Equal(t, "xai-grok-cli", req.Header.Get("X-XAI-Token-Auth"))
+				// Inference carries no credential-type discriminator; the fallback
+				// keys on the client-version marker instead.
+				require.Empty(t, req.Header.Get("X-XAI-Token-Auth"))
+				require.Equal(t, xai.CLIClientVersion, req.Header.Get("x-grok-client-version"))
 				return &http.Response{
 					StatusCode: http.StatusForbidden,
 					Header:     make(http.Header),
@@ -341,7 +349,7 @@ func TestGrokAccessDeniedFallbackRecognizesChatEndpointPermissionDenied(t *testi
 	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"model":"grok-4.5"}`))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer oauth-token")
-	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+	req.Header.Set(xai.CLIClientVersionHeader, xai.CLIClientVersion)
 
 	resp, err := transport.RoundTrip(req)
 	require.NoError(t, err)
@@ -392,7 +400,7 @@ func TestIsGrokCLIAccessDeniedFallbackCandidateRequiresAuthenticatedReplayableCL
 		req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"model":"grok-4.5"}`))
 		require.NoError(t, err)
 		req.Header.Set("Authorization", "Bearer oauth-token")
-		req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+		req.Header.Set(xai.CLIClientVersionHeader, xai.CLIClientVersion)
 		return req
 	}
 	newResponse := func() *http.Response { return &http.Response{StatusCode: http.StatusForbidden} }
@@ -407,7 +415,7 @@ func TestIsGrokCLIAccessDeniedFallbackCandidateRequiresAuthenticatedReplayableCL
 	})
 	t.Run("missing CLI identity", func(t *testing.T) {
 		req := newRequest()
-		req.Header.Del("X-XAI-Token-Auth")
+		req.Header.Del(xai.CLIClientVersionHeader)
 		require.False(t, isGrokCLIAccessDeniedFallbackCandidate(req, newResponse()))
 	})
 	t.Run("missing bearer authentication", func(t *testing.T) {
@@ -441,7 +449,7 @@ func TestHTTPUpstreamDoDoesNotFallbackForGrokEntitlementDenial(t *testing.T) {
 	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", strings.NewReader(`{"model":"grok-4.5"}`))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer oauth-token")
-	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
+	req.Header.Set(xai.CLIClientVersionHeader, xai.CLIClientVersion)
 
 	resp, err := transport.RoundTrip(req)
 	require.NoError(t, err)
@@ -462,8 +470,43 @@ func TestApplyGrokCLIProxyHeaders(t *testing.T) {
 		applyGrokCLIProxyHeaders(req)
 
 		require.Equal(t, xai.CLIClientVersion, req.Header.Get("x-grok-client-version"))
-		require.Equal(t, "xai-grok-cli", req.Header.Get("X-XAI-Token-Auth"))
+		require.Equal(t, xai.CLIClientIdentifier, req.Header.Get(xai.CLIClientIdentifierHeader))
 		require.Equal(t, xai.CLIUserAgent(), req.Header.Get("User-Agent"))
+		// /v1/responses belongs to the official sampling client, which sends a
+		// bare Bearer without the credential-type discriminator.
+		require.Empty(t, req.Header.Get("X-XAI-Token-Auth"))
+	})
+
+	t.Run("keeps the credential-type discriminator on control-plane paths", func(t *testing.T) {
+		for _, path := range []string{"/v1/models", "/v1/settings", "/v1/billing?format=credits"} {
+			req, err := http.NewRequest(http.MethodGet, "https://cli-chat-proxy.grok.com"+path, nil)
+			require.NoError(t, err)
+
+			applyGrokCLIProxyHeaders(req)
+
+			require.Equal(t, xai.CLITokenAuthValue, req.Header.Get("X-XAI-Token-Auth"), "path %s", path)
+			require.Equal(t, xai.CLIUserAgent(), req.Header.Get("User-Agent"))
+		}
+	})
+
+	t.Run("drops the discriminator on every inference path", func(t *testing.T) {
+		for _, path := range []string{
+			"/v1/responses",
+			"/v1/responses/compact",
+			"/v1/chat/completions",
+			"/v1/messages",
+			"/v1/embeddings",
+			"/v1/images/generations",
+			"/v1/videos/generations",
+		} {
+			req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com"+path, nil)
+			require.NoError(t, err)
+
+			applyGrokCLIProxyHeaders(req)
+
+			require.Empty(t, req.Header.Get("X-XAI-Token-Auth"), "path %s", path)
+			require.Equal(t, xai.CLIClientVersion, req.Header.Get("x-grok-client-version"), "path %s", path)
+		}
 	})
 
 	t.Run("accepts a valid operator override", func(t *testing.T) {
