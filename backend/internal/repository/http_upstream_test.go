@@ -575,17 +575,32 @@ func TestApplyGrokCLIProxyHeaders(t *testing.T) {
 		})
 	}
 
+	t.Run("strips OpenAI-Beta relayed from downstream", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", nil)
+		require.NoError(t, err)
+		req.Header.Set("OpenAI-Beta", "responses=v1")
+
+		applyGrokCLIProxyHeaders(req)
+
+		// The official CLI never sends this header to the proxy, so relaying a
+		// downstream value would be a sub2api-only marker.
+		require.Empty(t, req.Header.Get("OpenAI-Beta"))
+		require.Empty(t, req.Header.Values("Openai-Beta"))
+	})
+
 	t.Run("leaves direct xAI API requests unchanged", func(t *testing.T) {
 		t.Setenv("XAI_GROK_CLI_VERSION", "0.2.113")
 		req, err := http.NewRequest(http.MethodPost, "https://api.x.ai/v1/responses", nil)
 		require.NoError(t, err)
 		req.Header.Set("User-Agent", "test-foreign-ua/1.0")
+		req.Header.Set("OpenAI-Beta", "responses=v1")
 
 		applyGrokCLIProxyHeaders(req)
 
 		require.Empty(t, req.Header.Get("x-grok-client-version"))
 		require.Empty(t, req.Header.Get("X-XAI-Token-Auth"))
 		require.Equal(t, "test-foreign-ua/1.0", req.Header.Get("User-Agent"))
+		require.Equal(t, "responses=v1", req.Header.Get("OpenAI-Beta"))
 	})
 }
 

@@ -489,6 +489,11 @@ func applyGrokCLIProxyHeaders(req *http.Request) {
 	if !isGrokCLIInferencePath(req.URL.Path) {
 		req.Header.Set(grokCLITokenAuthHeader, xai.CLITokenAuthValue)
 	}
+	// The CLI never sends OpenAI-Beta to this gateway, so a relayed downstream
+	// value would be a sub2api-only marker. Dropping it here (rather than at the
+	// request builders) keeps custom base_url targets, which do not impersonate
+	// the CLI, free to forward it.
+	req.Header.Del("OpenAI-Beta")
 	req.Header.Set("x-grok-client-version", xai.EffectiveCLIClientVersion())
 	req.Header.Set(xai.CLIClientIdentifierHeader, xai.CLIClientIdentifier)
 	req.Header.Set("User-Agent", xai.CLIUserAgent())

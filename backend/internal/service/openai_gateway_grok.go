@@ -1077,12 +1077,23 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	// 官方 CLI 的 sampler 只走流式，抓包里 Accept 固定 text/event-stream。
+	// 非流式请求保留 application/json 在前：万一上游按 Accept 而非 body.stream
+	// 决定响应格式，非流式解析不会因为对齐指纹而失败。
+	if gjson.GetBytes(body, "stream").Bool() {
+		req.Header.Set("Accept", "text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json, text/event-stream")
+	}
 	if account.IsGrokOAuth() {
 		applyGrokCLIInferenceHeaders(req.Header)
+		applyGrokCLISessionHeaders(req.Header, account, body, cacheIdentity)
 	}
 	applyGrokCacheHeaders(req.Header, cacheIdentity)
 	if c != nil {
+		// 官方 CLI 从不向 cli-chat-proxy 发 OpenAI-Beta，打到该网关时由
+		// applyGrokCLIProxyHeaders 统一剥离；这里保留转发是为了自定义
+		// base_url / api.x.ai 这类不伪装 CLI 的目标。
 		if v := c.GetHeader("OpenAI-Beta"); strings.TrimSpace(v) != "" {
 			req.Header.Set("OpenAI-Beta", v)
 		}
