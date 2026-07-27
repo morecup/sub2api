@@ -1,9 +1,12 @@
 package tlsfingerprint
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 // capturedGrokCLIHellos are real ClientHello messages from the official Grok
@@ -184,5 +187,62 @@ func TestGrokCLIProfileEmitsCapturedWireShape(t *testing.T) {
 	}
 	if !reflect.DeepEqual(hello.extensionSizes, wantSizes) {
 		t.Fatalf("extension body sizes = %v, want %v", hello.extensionSizes, wantSizes)
+	}
+}
+
+// Captured HTTP/2 client preamble of the official Grok Build CLI 0.2.112, read
+// off a TLS endpoint holding a real Let's Encrypt certificate (the CLI has no
+// way to skip certificate validation, so a trusted cert is the only way to see
+// past the handshake).
+//
+// Raw observation, connection from grok-shell/0.2.112 (windows; x86_64):
+//
+//	SETTINGS  ENABLE_PUSH          (0x2) = 0
+//	SETTINGS  INITIAL_WINDOW_SIZE  (0x4) = 2097152
+//	SETTINGS  MAX_FRAME_SIZE       (0x5) = 16384
+//	SETTINGS  MAX_HEADER_LIST_SIZE (0x6) = 16384
+//	WINDOW_UPDATE stream=0 increment=5177345
+//	frames: SETTINGS -> WINDOW_UPDATE -> HEADERS -> HEADERS -> DATA...
+//	pseudo-header order: :method, :scheme, :authority, :path
+const (
+	capturedGrokCLIAkamaiFingerprint = "2:0;4:2097152;5:16384;6:16384|5177345|0|m,s,a,p"
+	// What this transport actually produces. The SETTINGS block and the
+	// WINDOW_UPDATE match the capture exactly; the pseudo-header order is
+	// hardcoded in golang.org/x/net/http2 and cannot be changed without forking
+	// it, so it stays the one observable difference.
+	emittedAkamaiFingerprint = "2:0;4:2097152;5:16384;6:16384|5177345|0|a,m,p,s"
+)
+
+// TestGrokCLIHTTP2ProfileMatchesCapturedPreamble pins the SETTINGS order and
+// values plus the connection WINDOW_UPDATE against the captured preamble.
+func TestGrokCLIHTTP2ProfileMatchesCapturedPreamble(t *testing.T) {
+	profile := GrokCLIHTTP2Profile()
+
+	settings := make([]string, 0, len(profile.Settings))
+	for _, setting := range profile.Settings {
+		settings = append(settings, fmt.Sprintf("%d:%d", setting.ID, setting.Value))
+	}
+	got := fmt.Sprintf("%s|%d|0|a,m,p,s", strings.Join(settings, ";"), profile.ConnectionWindowUpdate)
+	if got != emittedAkamaiFingerprint {
+		t.Fatalf("emitted Akamai fingerprint = %s, want %s", got, emittedAkamaiFingerprint)
+	}
+
+	// Everything except the pseudo-header order must be byte-identical to the
+	// captured official client.
+	capturedPrefix, _, _ := strings.Cut(capturedGrokCLIAkamaiFingerprint, "|0|")
+	emittedPrefix, _, _ := strings.Cut(emittedAkamaiFingerprint, "|0|")
+	if capturedPrefix != emittedPrefix {
+		t.Fatalf("SETTINGS/WINDOW_UPDATE diverged from the capture:\n got: %s\nwant: %s", emittedPrefix, capturedPrefix)
+	}
+}
+
+// TestCapturedGrokCLIAcceptEncoding documents the Accept-Encoding the official
+// client sends, which the transport layer reproduces for the CLI proxy host.
+// The value follows from the CLI building reqwest with only the gzip, brotli and
+// deflate features; the capture confirms it.
+func TestCapturedGrokCLIAcceptEncoding(t *testing.T) {
+	const captured = "gzip, br, deflate"
+	if xai.CLIAcceptEncoding != captured {
+		t.Fatalf("xai.CLIAcceptEncoding = %q, want the captured %q", xai.CLIAcceptEncoding, captured)
 	}
 }

@@ -61,7 +61,11 @@ type HTTP2Setting struct {
 // Known limitation: the pseudo-header order is hardcoded in
 // golang.org/x/net/http2 (:authority, :method, :path, :scheme) and cannot be
 // configured, so that one component of the Akamai fingerprint still reads as
-// Go. Everything else in the preamble is reproduced exactly.
+// Go. Everything else in the preamble is reproduced exactly. Measured against
+// the official Grok Build CLI 0.2.112:
+//
+//	captured: 2:0;4:2097152;5:16384;6:16384|5177345|0|m,s,a,p
+//	emitted : 2:0;4:2097152;5:16384;6:16384|5177345|0|a,m,p,s
 type HTTP2Profile struct {
 	// Name identifies the emulated client for logs.
 	Name string
