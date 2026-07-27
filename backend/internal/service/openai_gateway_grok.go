@@ -22,8 +22,11 @@ import (
 const (
 	grokComposerImageBridgeVisionModel     = "grok-build-0.1"
 	grokComposerImageBridgeMaxOutputTokens = 512
-	grokUpstreamUserAgent                  = "sub2api-grok/1.0"
-	grokCLIVersion                         = "0.2.93"
+	// Grok OAuth 流量统一伪装成官方 Grok Build CLI 身份，版本默认跟随
+	// xai.CLIClientVersion；运行时可用 XAI_GROK_CLI_VERSION 抬高
+	// （生效值见 xai.EffectiveCLIClientVersion / xai.CLIWorkspaceUserAgent）。
+	grokUpstreamUserAgent                  = "xai-grok-workspace/" + xai.CLIClientVersion
+	grokCLIVersion                         = xai.CLIClientVersion
 	grokDefaultResponsesModel              = "grok-4.5"
 	grokRateLimitFallbackCooldown          = 2 * time.Minute
 	grokRateLimitRepeatCooldown            = 10 * time.Minute
@@ -1092,8 +1095,8 @@ func applyGrokCLIHeaders(headers http.Header) {
 	if headers == nil {
 		return
 	}
-	headers.Set("User-Agent", grokUpstreamUserAgent)
-	headers.Set("X-Grok-Client-Version", grokCLIVersion)
+	headers.Set("User-Agent", xai.CLIWorkspaceUserAgent())
+	headers.Set("X-Grok-Client-Version", xai.EffectiveCLIClientVersion())
 	headers.Set("X-Grok-Client-Mode", "interactive")
 }
 
