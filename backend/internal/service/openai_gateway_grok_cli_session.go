@@ -57,6 +57,20 @@ var grokCompactionThresholds = map[string]int{
 // a constant is faithful rather than a value that links accounts together.
 const grokCompactionsRemaining = 1
 
+// grokAgentIDNamespace anchors the per-account agent id derivation.
+//
+// The captured agent id (0fca2568-5847-50f5-aec9-161b1068bfcb) carries version
+// nibble 5, i.e. the CLI derives it as a name-based UUIDv5 from something stable
+// about the install. Deriving ours the same way keeps the version nibble faithful
+// instead of emitting a v4 shape the official client never produces. The
+// namespace value itself is arbitrary and only has to stay stable.
+var grokAgentIDNamespace = uuid.MustParse("1b4b2f24-6a17-4c3d-9a2e-5f0c8d7e6b91")
+
+// grokAgentIDForAccount derives the stable per-install identifier the CLI sends.
+func grokAgentIDForAccount(accountID int64) string {
+	return uuid.NewSHA1(grokAgentIDNamespace, []byte(fmt.Sprintf("grok-agent-id:v1:%d", accountID))).String()
+}
+
 // applyGrokCLISessionHeaders reproduces the per-turn session headers the
 // official CLI attaches to an inference request.
 //
@@ -82,7 +96,7 @@ func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []by
 	// per account keeps that stability without making one constant that would
 	// link every account of a deployment together.
 	if account.ID > 0 {
-		headers.Set(grokAgentIDHeader, generateSessionUUID(fmt.Sprintf("grok-agent-id:v1:%d", account.ID)))
+		headers.Set(grokAgentIDHeader, grokAgentIDForAccount(account.ID))
 	}
 
 	headers.Set(traceParentHeader, newTraceParentHeader())

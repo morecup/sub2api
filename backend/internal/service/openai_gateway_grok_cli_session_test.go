@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -76,6 +77,24 @@ func TestApplyGrokCLISessionHeadersAgentIDIsPerAccount(t *testing.T) {
 	// One shared constant would tell the upstream that every account of a
 	// deployment runs on a single install.
 	require.NotEqual(t, first.Get(grokAgentIDHeader), second.Get(grokAgentIDHeader))
+}
+
+// TestGrokAgentIDMatchesCapturedUUIDVersion pins the version nibble. The captured
+// agent id 0fca2568-5847-50f5-aec9-161b1068bfcb is a name-based UUIDv5; emitting a
+// v4 shape would be a marker the official client never produces.
+func TestGrokAgentIDMatchesCapturedUUIDVersion(t *testing.T) {
+	t.Parallel()
+
+	got, err := uuid.Parse(grokAgentIDForAccount(7120))
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(5), got.Version())
+	require.Equal(t, uuid.RFC4122, got.Variant())
+	require.Equal(t, got.String(), grokAgentIDForAccount(7120))
+
+	captured, err := uuid.Parse("0fca2568-5847-50f5-aec9-161b1068bfcb")
+	require.NoError(t, err)
+	require.Equal(t, captured.Version(), got.Version())
+	require.Equal(t, captured.Variant(), got.Variant())
 }
 
 func TestApplyGrokCLISessionHeadersSkipsSessionHeadersWithoutConversation(t *testing.T) {
