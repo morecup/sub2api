@@ -99,8 +99,10 @@ func TestHTTPUpstreamDoWithTLSPlainHTTPUsesConfiguredSOCKSProxy(t *testing.T) {
 func TestTLSFingerprintHTTPSProxyFallsBackWithoutBypassingProxy(t *testing.T) {
 	proxyURL, err := url.Parse("https://user:pass@proxy.example:8443")
 	require.NoError(t, err)
-	transport, err := buildUpstreamTransportWithTLSFingerprint(poolSettings{}, proxyURL, &tlsfingerprint.Profile{Name: "test"})
+	roundTripper, err := buildUpstreamTransportWithTLSFingerprint(poolSettings{}, proxyURL, &tlsfingerprint.Profile{Name: "test"})
 	require.NoError(t, err)
+	transport, ok := roundTripper.(*http.Transport)
+	require.True(t, ok, "https proxies must keep the plain net/http transport")
 	require.NotNil(t, transport.Proxy)
 	require.Nil(t, transport.DialTLSContext)
 	req := &http.Request{URL: &url.URL{Scheme: "https", Host: "upstream.example"}}

@@ -1936,12 +1936,26 @@ func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 	return a.Platform == PlatformAnthropic && (a.Type == AccountTypeOAuth || a.Type == AccountTypeSetupToken)
 }
 
+// SupportsTLSFingerprint 判断账号所属平台是否有可模拟的官方客户端 TLS 指纹。
+//
+// Anthropic OAuth/SetupToken 走 Claude Code（Node.js）画像；Grok 走官方
+// Grok Build CLI（Rust/rustls + reqwest）画像。其余平台暂无实抓画像，保持
+// Go 默认握手。
+func (a *Account) SupportsTLSFingerprint() bool {
+	if a == nil {
+		return false
+	}
+	if a.IsAnthropicOAuthOrSetupToken() {
+		return true
+	}
+	return a.IsGrok() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey)
+}
+
 // IsTLSFingerprintEnabled 检查是否启用 TLS 指纹
-// 仅适用于 Anthropic OAuth/SetupToken 类型账号
+// 仅适用于有官方客户端画像的平台（见 SupportsTLSFingerprint）
 // 默认启用；只有 extra.enable_tls_fingerprint 显式为 false 时关闭。
 func (a *Account) IsTLSFingerprintEnabled() bool {
-	// 仅支持 Anthropic OAuth/SetupToken 账号
-	if !a.IsAnthropicOAuthOrSetupToken() {
+	if !a.SupportsTLSFingerprint() {
 		return false
 	}
 	if a.Extra == nil {

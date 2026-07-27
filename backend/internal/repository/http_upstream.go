@@ -445,6 +445,12 @@ func applyGrokCLIProxyHeaders(req *http.Request) {
 	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
 	req.Header.Set("x-grok-client-version", xai.EffectiveCLIClientVersion())
 	req.Header.Set("User-Agent", xai.CLIWorkspaceUserAgent())
+	// Setting Accept-Encoding explicitly both matches the CLI's reqwest build and
+	// stops net/http from advertising its own bare "gzip". Responses are
+	// decompressed by decompressResponseBody, which already covers all three.
+	if req.Header.Get("Accept-Encoding") == "" {
+		req.Header.Set("Accept-Encoding", xai.CLIAcceptEncoding)
+	}
 }
 
 // acquireClientWithTLS 获取或创建带 TLS 指纹的客户端
@@ -462,9 +468,13 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	}
 	settings := s.resolvePoolSettings(isolation, accountConcurrency)
 	settings = s.applyProfilePoolSettings(settings, upstreamProfile)
-	// TLS 指纹客户端使用独立的缓存键，加 "tls:" 前缀
-	cacheKey := "tls:" + buildCacheKey(isolation, proxyKey, accountID, upstreamProtocolModeDefault)
-	poolKey := buildPoolKey(settings, upstreamProtocolModeDefault) + ":tls"
+	// TLS 指纹客户端使用独立的缓存键，加 "tls:" 前缀。
+	// 画像标识必须进 key：不同画像的 transport 形状不同（HTTP/1.1 单栈 vs
+	// ALPN h2 双栈），且 proxy 隔离模式下 accountID 不参与 key，否则同一代理
+	// 上的 Anthropic 与 Grok 账号会复用彼此的客户端。
+	profileKey := profile.CacheKey()
+	cacheKey := "tls:" + profileKey + "|" + buildCacheKey(isolation, proxyKey, accountID, upstreamProtocolModeDefault)
+	poolKey := buildPoolKey(settings, upstreamProtocolModeDefault) + ":tls:" + profileKey
 
 	now := time.Now()
 	nowUnix := now.UnixNano()
@@ -1299,68 +1309,6 @@ func enableOpenAIHTTP2KeepAlive(transport *http.Transport) (*http2.Transport, er
 		h2.PingTimeout = openAIHTTP2PingTimeout
 	}
 	return h2, nil
-}
-
-// buildUpstreamTransportWithTLSFingerprint 构建带 TLS 指纹伪装的 Transport
-// 使用 utls 库模拟 Claude CLI 的 TLS 指纹
-//
-// 参数:
-//   - settings: 连接池配置
-//   - proxyURL: 代理 URL（nil 表示直连）
-//   - profile: TLS 指纹配置
-//
-// 返回:
-//   - *http.Transport: 配置好的 Transport 实例
-//   - error: 配置错误
-//
-// 代理类型处理:
-//   - nil/空: 直连，使用 TLSFingerprintDialer
-//   - http/https: HTTP 代理，使用 HTTPProxyDialer（CONNECT 隧道 + utls 握手）
-//   - socks5: SOCKS5 代理，使用 SOCKS5ProxyDialer（SOCKS5 隧道 + utls 握手）
-func buildUpstreamTransportWithTLSFingerprint(settings poolSettings, proxyURL *url.URL, profile *tlsfingerprint.Profile) (*http.Transport, error) {
-	transport := &http.Transport{
-		MaxIdleConns:          settings.maxIdleConns,
-		MaxIdleConnsPerHost:   settings.maxIdleConnsPerHost,
-		MaxConnsPerHost:       settings.maxConnsPerHost,
-		IdleConnTimeout:       settings.idleConnTimeout,
-		ResponseHeaderTimeout: settings.responseHeaderTimeout,
-		// 禁用默认的 TLS，我们使用自定义的 DialTLSContext
-		ForceAttemptHTTP2: false,
-	}
-
-	// 根据代理类型选择合适的 TLS 指纹 Dialer
-	if proxyURL == nil {
-		// 直连：使用 TLSFingerprintDialer
-		slog.Debug("tls_fingerprint_transport_direct")
-		dialer := tlsfingerprint.NewDialer(profile, nil)
-		transport.DialTLSContext = dialer.DialTLSContext
-	} else {
-		scheme := strings.ToLower(proxyURL.Scheme)
-		switch scheme {
-		case "socks5", "socks5h":
-			// SOCKS5 代理：使用 SOCKS5ProxyDialer
-			slog.Debug("tls_fingerprint_transport_socks5", "proxy", proxyURL.Host)
-			socks5Dialer := tlsfingerprint.NewSOCKS5ProxyDialer(profile, proxyURL)
-			transport.DialTLSContext = socks5Dialer.DialTLSContext
-		case "https":
-			// The fingerprint dialer emits a plaintext CONNECT preface and cannot
-			// establish TLS to an HTTPS proxy. Keep proxy routing via net/http.
-			return buildUpstreamTransport(settings, proxyURL, upstreamProtocolModeDefault)
-		case "http":
-			// HTTP/HTTPS 代理：使用 HTTPProxyDialer（CONNECT 隧道）
-			slog.Debug("tls_fingerprint_transport_http_connect", "proxy", proxyURL.Host)
-			httpDialer := tlsfingerprint.NewHTTPProxyDialer(profile, proxyURL)
-			transport.DialTLSContext = httpDialer.DialTLSContext
-		default:
-			// 未知代理类型，回退到普通代理配置（无 TLS 指纹）
-			slog.Debug("tls_fingerprint_transport_unknown_scheme_fallback", "scheme", scheme)
-			if err := proxyutil.ConfigureTransportProxy(transport, proxyURL); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return transport, nil
 }
 
 // trackedBody 带跟踪功能的响应体包装器

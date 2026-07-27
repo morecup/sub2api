@@ -258,7 +258,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if account.Platform == PlatformGrok {
 			SetOpsUpstreamRetryMetadata(c, attempt, retryPhase)
 		}
-		resp, err = s.httpUpstream.Do(requestForAttempt, proxyURL, account.ID, account.Concurrency)
+		resp, err = s.doUpstreamRequest(requestForAttempt, proxyURL, account)
 		if err != nil {
 			if turn == 1 {
 				return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)

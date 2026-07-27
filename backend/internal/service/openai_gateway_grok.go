@@ -25,14 +25,14 @@ const (
 	// Grok OAuth 流量统一伪装成官方 Grok Build CLI 身份，版本默认跟随
 	// xai.CLIClientVersion；运行时可用 XAI_GROK_CLI_VERSION 抬高
 	// （生效值见 xai.EffectiveCLIClientVersion / xai.CLIWorkspaceUserAgent）。
-	grokUpstreamUserAgent                  = "xai-grok-workspace/" + xai.CLIClientVersion
-	grokCLIVersion                         = xai.CLIClientVersion
-	grokDefaultResponsesModel              = "grok-4.5"
-	grokRateLimitFallbackCooldown          = 2 * time.Minute
-	grokRateLimitRepeatCooldown            = 10 * time.Minute
-	grokRateLimitSustainedCooldown         = 30 * time.Minute
-	grokRateLimitMaxAdaptiveCooldown       = time.Hour
-	grokRateLimitBackoffQuietPeriod        = time.Hour
+	grokUpstreamUserAgent            = "xai-grok-workspace/" + xai.CLIClientVersion
+	grokCLIVersion                   = xai.CLIClientVersion
+	grokDefaultResponsesModel        = "grok-4.5"
+	grokRateLimitFallbackCooldown    = 2 * time.Minute
+	grokRateLimitRepeatCooldown      = 10 * time.Minute
+	grokRateLimitSustainedCooldown   = 30 * time.Minute
+	grokRateLimitMaxAdaptiveCooldown = time.Hour
+	grokRateLimitBackoffQuietPeriod  = time.Hour
 )
 
 func (s *OpenAIGatewayService) forwardGrokResponses(
@@ -116,7 +116,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 			return nil, buildErr
 		}
 
-		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		resp, err = s.doUpstreamRequest(upstreamReq, proxyURL, account)
 		SetOpsLatencyMs(c, OpsUpstreamLatencyMsKey, time.Since(upstreamStart).Milliseconds())
 		if err != nil {
 			return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
@@ -908,7 +908,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 		proxyURL = account.Proxy.URL()
 	}
 
-	resp, err := s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+	resp, err := s.doUpstreamRequest(upstreamReq, proxyURL, account)
 	if err != nil {
 		return "", OpenAIUsage{}, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}

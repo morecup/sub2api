@@ -99,3 +99,61 @@ func TestResolveTLSProfileDefaultsToBuiltInForAnthropicOAuth(t *testing.T) {
 	})
 	require.Nil(t, disabled)
 }
+
+func TestAccountTLSFingerprintCoversGrokAccounts(t *testing.T) {
+	tests := []struct {
+		name    string
+		account *Account
+		want    bool
+	}{
+		{
+			name:    "grok oauth defaults enabled",
+			account: &Account{Platform: PlatformGrok, Type: AccountTypeOAuth},
+			want:    true,
+		},
+		{
+			name:    "grok api key defaults enabled",
+			account: &Account{Platform: PlatformGrok, Type: AccountTypeAPIKey},
+			want:    true,
+		},
+		{
+			name: "grok explicit opt out",
+			account: &Account{
+				Platform: PlatformGrok,
+				Type:     AccountTypeOAuth,
+				Extra:    map[string]any{"enable_tls_fingerprint": false},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, tt.account.IsTLSFingerprintEnabled())
+		})
+	}
+}
+
+// A Grok account must never be handed the Claude Code (Node.js) hello: the two
+// clients look nothing alike, so the wrong built-in would be worse than none.
+func TestResolveTLSProfileUsesGrokCLIProfileForGrokAccounts(t *testing.T) {
+	svc := &TLSFingerprintProfileService{}
+
+	profile := svc.ResolveTLSProfile(&Account{Platform: PlatformGrok, Type: AccountTypeOAuth})
+	require.NotNil(t, profile)
+	require.Equal(t, tlsfingerprint.GrokCLIProfileName, profile.Name)
+	require.True(t, profile.AdvertisesHTTP2())
+	require.NotNil(t, profile.HTTP2)
+
+	anthropic := svc.ResolveTLSProfile(&Account{Platform: PlatformAnthropic, Type: AccountTypeOAuth})
+	require.NotNil(t, anthropic)
+	require.Equal(t, tlsfingerprint.BuiltInDefaultProfileName, anthropic.Name)
+	require.False(t, anthropic.AdvertisesHTTP2())
+
+	require.Nil(t, svc.ResolveTLSProfile(&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}))
+	require.Nil(t, svc.ResolveTLSProfile(&Account{
+		Platform: PlatformGrok,
+		Type:     AccountTypeOAuth,
+		Extra:    map[string]any{"enable_tls_fingerprint": false},
+	}))
+}

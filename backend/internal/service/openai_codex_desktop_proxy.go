@@ -125,7 +125,7 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	return s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	return s.doUpstreamRequest(req, proxyURL, account)
 }
 
 // WriteCodexDesktopProxyResponse copies a generic upstream response to Gin.

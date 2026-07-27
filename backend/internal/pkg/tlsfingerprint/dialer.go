@@ -16,6 +16,21 @@ import (
 	"golang.org/x/net/proxy"
 )
 
+// ExtensionOrderMode selects how the ClientHello extension order is derived
+// from Profile.Extensions.
+type ExtensionOrderMode string
+
+const (
+	// ExtensionOrderFixed sends Profile.Extensions verbatim. This is the
+	// default and matches clients with a deterministic ClientHello (Node.js,
+	// OpenSSL, Go).
+	ExtensionOrderFixed ExtensionOrderMode = ""
+	// ExtensionOrderRustls reshuffles the extensions per connection the way
+	// rustls 0.23 does, so the observable JA3 varies across connections exactly
+	// as it does for a real rustls client.
+	ExtensionOrderRustls ExtensionOrderMode = "rustls"
+)
+
 // Profile contains TLS fingerprint configuration.
 // All slice fields use built-in defaults when empty.
 type Profile struct {
@@ -30,6 +45,45 @@ type Profile struct {
 	KeyShareGroups      []uint16 // Empty uses [X25519]
 	PSKModes            []uint16 // Empty uses [psk_dhe_ke]
 	Extensions          []uint16 // Extension type IDs in order; empty uses the built-in Claude Code main-request order
+	// ExtensionOrder selects the per-connection ordering strategy applied to
+	// Extensions. Empty keeps the listed order.
+	ExtensionOrder ExtensionOrderMode
+	// HTTP2 describes the emulated client's HTTP/2 connection preamble. It is
+	// only consulted when the profile negotiates h2; nil keeps the local
+	// HTTP/2 stack's own preamble.
+	HTTP2 *HTTP2Profile
+}
+
+// EffectiveALPNProtocols returns the ALPN list this profile puts on the wire.
+func (p *Profile) EffectiveALPNProtocols() []string {
+	if p != nil && len(p.ALPNProtocols) > 0 {
+		return p.ALPNProtocols
+	}
+	return defaultALPNProtocols
+}
+
+// AdvertisesHTTP2 reports whether this profile offers h2 during ALPN.
+func (p *Profile) AdvertisesHTTP2() bool {
+	for _, proto := range p.EffectiveALPNProtocols() {
+		if proto == ALPNProtocolHTTP2 {
+			return true
+		}
+	}
+	return false
+}
+
+// WithALPNProtocols returns a shallow copy of the profile that advertises only
+// the given ALPN protocols. It is used to build the HTTP/1.1 companion of an
+// h2-capable profile: real clients that fall back to HTTP/1.1 stop offering h2
+// as well, so the fallback connection must not advertise a protocol the local
+// transport cannot speak.
+func (p *Profile) WithALPNProtocols(protocols ...string) *Profile {
+	if p == nil {
+		return nil
+	}
+	clone := *p
+	clone.ALPNProtocols = protocols
+	return &clone
 }
 
 // Dialer creates TLS connections with custom fingerprints.
@@ -56,6 +110,10 @@ const (
 	// BuiltInDefaultProfileName identifies the local Claude Code TLS profile used
 	// when an account enables TLS fingerprinting without selecting a custom profile.
 	BuiltInDefaultProfileName = "Built-in Default (Claude Code 2.1.201 Linux)"
+
+	// ALPN protocol identifiers used across profiles.
+	ALPNProtocolHTTP2 = "h2"
+	ALPNProtocolHTTP1 = "http/1.1"
 
 	// BuiltInDefaultJA3Raw and BuiltInDefaultJA3Hash are from:
 	// /tmp/claude-code-cli-analysis/captures/2.1.201_vps-linux_20260704-062834/tls_clienthello.json
@@ -323,6 +381,10 @@ func toUTLSCurves(curves []uint16) []utls.CurveID {
 	return result
 }
 
+// defaultALPNProtocols is used when Profile.ALPNProtocols is empty. HTTP/1.1
+// only, matching the captured Claude Code main request.
+var defaultALPNProtocols = []string{ALPNProtocolHTTP1}
+
 // defaultExtensionOrder is the captured Claude Code 2.1.201 Linux extension order.
 // Used when Profile.Extensions is empty.
 var defaultExtensionOrder = []uint16{
@@ -374,10 +436,7 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 		}
 	}
 
-	alpnProtocols := []string{"http/1.1"}
-	if profile != nil && len(profile.ALPNProtocols) > 0 {
-		alpnProtocols = profile.ALPNProtocols
-	}
+	alpnProtocols := profile.EffectiveALPNProtocols()
 
 	supportedVersions := []uint16{utls.VersionTLS13, utls.VersionTLS12}
 	if profile != nil && len(profile.SupportedVersions) > 0 {
@@ -406,6 +465,9 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 	extOrder := defaultExtensionOrder
 	if profile != nil && len(profile.Extensions) > 0 {
 		extOrder = profile.Extensions
+	}
+	if profile != nil && profile.ExtensionOrder == ExtensionOrderRustls {
+		extOrder = rustlsExtensionOrder(extOrder, randomExtensionOrderSeed())
 	}
 
 	// Build extensions list from the ordered IDs.

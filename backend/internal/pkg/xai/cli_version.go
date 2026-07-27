@@ -31,6 +31,16 @@ func CLIWorkspaceUserAgent() string {
 	return "xai-grok-workspace/" + EffectiveCLIClientVersion()
 }
 
+// CLIAcceptEncoding is the Accept-Encoding header reqwest attaches to every
+// Grok Build CLI request that does not set one itself.
+//
+// The CLI builds reqwest with default-features = false, so only the compression
+// features some workspace crate opts into are compiled in: gzip, brotli and
+// deflate (crates/codegen/xai-grok-tools/Cargo.toml). reqwest renders that
+// combination in this fixed order. zstd is absent on purpose — the workspace
+// depends on async-compression's zstd directly, not on reqwest's zstd feature.
+const CLIAcceptEncoding = "gzip, br, deflate"
+
 func isSupportedCLIClientVersion(version string) bool {
 	canonical := "v" + version
 	minimum := "v" + CLIClientVersion

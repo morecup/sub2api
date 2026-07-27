@@ -418,6 +418,7 @@ type OpenAIGatewayService struct {
 	userPlatformQuotaRepo UserPlatformQuotaRepository
 	liveAttestation       liveattestation.Provider
 	liveAttestationCipher SecretEncryptor
+	tlsFPProfileService   *TLSFingerprintProfileService
 
 	openaiWSPoolOnce              sync.Once
 	openaiWSStateStoreOnce        sync.Once
@@ -474,6 +475,7 @@ func NewOpenAIGatewayService(
 	balanceNotifyService *BalanceNotifyService,
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
+	tlsFPProfileService *TLSFingerprintProfileService,
 ) *OpenAIGatewayService {
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
@@ -507,6 +509,7 @@ func NewOpenAIGatewayService(
 		balanceNotifyService:  balanceNotifyService,
 		settingService:        settingService,
 		userPlatformQuotaRepo: userPlatformQuotaRepo,
+		tlsFPProfileService:   tlsFPProfileService,
 		liveAttestation:       liveattestation.NewProvider(),
 		liveAttestationCipher: newLiveAttestationCipher(cfg),
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),

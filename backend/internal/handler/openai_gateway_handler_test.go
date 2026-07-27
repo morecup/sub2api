@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	coderws "github.com/coder/websocket"
@@ -1593,6 +1594,10 @@ func (u *openAIHTTPPassthroughFailoverUpstream) Do(_ *http.Request, _ string, ac
 	}, nil
 }
 
+func (u *openAIHTTPPassthroughFailoverUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, concurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return u.Do(req, proxyURL, accountID, concurrency)
+}
+
 func (u *openAIHTTPPassthroughFailoverUpstream) calls() []int64 {
 	u.mu.Lock()
 	defer u.mu.Unlock()
@@ -1722,6 +1727,7 @@ func TestOpenAIResponses_APIKeyPassthroughPool5xxRetriesThenExhaustsMaxSwitches(
 		billingCacheSvc,
 		upstream,
 		&service.DeferredService{},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -1881,6 +1887,7 @@ func TestOpenAIResponsesWebSocket_FailoverOnUpstreamUsageLimitEvent(t *testing.T
 		billingCacheSvc,
 		nil,
 		&service.DeferredService{},
+		nil,
 		nil,
 		nil,
 		nil,
@@ -2076,7 +2083,7 @@ func TestOpenAIResponsesWebSocket_FirstOutputTimeoutWithoutDownstreamReusesClien
 	gatewaySvc := service.NewOpenAIGatewayService(
 		accountRepo, nil, nil, nil, nil, nil, nil, cfg, nil, nil,
 		service.NewBillingService(cfg, nil), rateLimitSvc, billingCacheSvc,
-		nil, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil,
+		nil, &service.DeferredService{}, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	cache := &concurrencyCacheMock{
 		acquireUserSlotFn: func(context.Context, int64, int, string) (bool, error) { return true, nil },
@@ -2281,6 +2288,7 @@ func runOpenAIResponsesWebSocketUsageLogCase(t *testing.T, tc openAIResponsesWSU
 		nil,
 		nil,
 		nil, // userPlatformQuotaRepo
+		nil, // tlsFPProfileService
 	)
 
 	cache := &concurrencyCacheMock{

@@ -173,7 +173,7 @@ func (s *TLSFingerprintProfileService) getRandomProfile() *tlsfingerprint.Profil
 // 逻辑：
 //  1. 未启用 TLS 指纹 → 返回 nil（不伪装）
 //  2. 启用 + 绑定了 profile_id → 从缓存查找对应 profile
-//  3. 启用 + 未绑定或找不到 → 返回空 Profile（使用代码内置默认值）
+//  3. 启用 + 未绑定或找不到 → 返回该平台官方客户端的内置画像
 func (s *TLSFingerprintProfileService) ResolveTLSProfile(account *Account) *tlsfingerprint.Profile {
 	if account == nil || !account.IsTLSFingerprintEnabled() {
 		return nil
@@ -190,7 +190,17 @@ func (s *TLSFingerprintProfileService) ResolveTLSProfile(account *Account) *tlsf
 			return p
 		}
 	}
-	// TLS 启用但无绑定 profile → 空 Profile → dialer 使用内置默认值
+	return builtInProfileForAccount(account)
+}
+
+// builtInProfileForAccount 返回账号所属平台的官方客户端内置画像。
+//
+// 未绑定自定义模板时按平台选择，避免用 Claude Code（Node.js）的 ClientHello
+// 去伪装 Grok Build CLI（Rust/rustls）这类完全不同的客户端。
+func builtInProfileForAccount(account *Account) *tlsfingerprint.Profile {
+	if account != nil && account.IsGrok() {
+		return tlsfingerprint.GrokCLIProfile()
+	}
 	return tlsfingerprint.BuiltInDefaultProfile()
 }
 
