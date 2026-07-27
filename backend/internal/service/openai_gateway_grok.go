@@ -24,8 +24,7 @@ const (
 	grokComposerImageBridgeMaxOutputTokens = 512
 	// Grok OAuth 流量统一伪装成官方 Grok Build CLI 身份，版本默认跟随
 	// xai.CLIClientVersion；运行时可用 XAI_GROK_CLI_VERSION 抬高
-	// （生效值见 xai.EffectiveCLIClientVersion / xai.CLIWorkspaceUserAgent）。
-	grokUpstreamUserAgent            = "xai-grok-workspace/" + xai.CLIClientVersion
+	// （生效值见 xai.EffectiveCLIClientVersion / xai.CLIUserAgent）。
 	grokCLIVersion                   = xai.CLIClientVersion
 	grokDefaultResponsesModel        = "grok-4.5"
 	grokRateLimitFallbackCooldown    = 2 * time.Minute
@@ -34,6 +33,11 @@ const (
 	grokRateLimitMaxAdaptiveCooldown = time.Hour
 	grokRateLimitBackoffQuietPeriod  = time.Hour
 )
+
+// grokUpstreamUserAgent 是发往 xAI 上游的 User-Agent，取自官方 Grok Build CLI
+// 的实抓值（见 xai.CLIUserAgent 的抓包说明）。此前这里是
+// "xai-grok-workspace/<版本>"，实测官方客户端从不发送该形式。
+var grokUpstreamUserAgent = xai.CLIUserAgent()
 
 func (s *OpenAIGatewayService) forwardGrokResponses(
 	ctx context.Context,
@@ -1075,7 +1079,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	if account.IsGrokOAuth() {
-		applyGrokCLIHeaders(req.Header)
+		applyGrokCLIInferenceHeaders(req.Header)
 	}
 	applyGrokCacheHeaders(req.Header, cacheIdentity)
 	if c != nil {
@@ -1089,15 +1093,42 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	return req, nil
 }
 
-// applyGrokCLIHeaders identifies subscription traffic as a supported Grok CLI
-// version. The CLI gateway rejects otherwise valid OAuth requests without it.
-func applyGrokCLIHeaders(headers http.Header) {
+// applyGrokCLIIdentityHeaders sets the identity headers the official Grok CLI
+// puts on every request it makes. The CLI gateway rejects otherwise valid OAuth
+// requests without a supported client version.
+//
+// Captured from grok 0.2.112 on both the inference POST and the control-plane
+// GETs: user-agent, x-grok-client-version and x-grok-client-identifier.
+func applyGrokCLIIdentityHeaders(headers http.Header) {
 	if headers == nil {
 		return
 	}
-	headers.Set("User-Agent", xai.CLIWorkspaceUserAgent())
+	headers.Set("User-Agent", xai.CLIUserAgent())
 	headers.Set("X-Grok-Client-Version", xai.EffectiveCLIClientVersion())
-	headers.Set("X-Grok-Client-Mode", "interactive")
+	headers.Set(xai.CLIClientIdentifierHeader, xai.CLIClientIdentifier)
+}
+
+// applyGrokCLIInferenceHeaders identifies inference traffic (Responses, Chat
+// Completions, media) as the official CLI.
+//
+// The capture shows the CLI sends neither x-grok-client-mode nor
+// x-xai-token-auth on POST /v1/responses, so neither is added here; both belong
+// to the control-plane requests (see applyGrokCLIControlPlaneHeaders).
+func applyGrokCLIInferenceHeaders(headers http.Header) {
+	applyGrokCLIIdentityHeaders(headers)
+}
+
+// applyGrokCLIControlPlaneHeaders identifies control-plane traffic (models,
+// settings, quota) as the official CLI.
+//
+// Captured on GET /v1/models and GET /v1/settings, which additionally carry
+// x-grok-client-mode. Sub2API relays interactive sessions, so "interactive" is
+// the mode reported; the CLI itself only sends "headless" for `grok -p`.
+func applyGrokCLIControlPlaneHeaders(headers http.Header) {
+	applyGrokCLIIdentityHeaders(headers)
+	if headers != nil {
+		headers.Set("X-Grok-Client-Mode", "interactive")
+	}
 }
 
 func (s *OpenAIGatewayService) updateGrokUsageSnapshot(ctx context.Context, account *Account, snapshot *xai.QuotaSnapshot) {

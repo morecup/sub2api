@@ -1,7 +1,9 @@
 package xai
 
 import (
+	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -25,10 +27,53 @@ func EffectiveCLIClientVersion() string {
 	return version
 }
 
-// CLIWorkspaceUserAgent returns the User-Agent presented by the official
-// Grok Build CLI workspace client.
-func CLIWorkspaceUserAgent() string {
-	return "xai-grok-workspace/" + EffectiveCLIClientVersion()
+// CLIClientIdentifier is the process-level client name the CLI reports, and the
+// value of the x-grok-client-identifier header. It comes from GROK_CLIENT_NAME
+// and defaults to "grok-shell" (crates/codegen/xai-grok-http/src/lib.rs
+// process_client_identifier).
+const CLIClientIdentifier = "grok-shell"
+
+// CLIClientIdentifierHeader carries CLIClientIdentifier upstream.
+const CLIClientIdentifierHeader = "x-grok-client-identifier"
+
+// CLIUserAgent returns the User-Agent presented by the official Grok Build CLI.
+//
+// Captured from grok 0.2.112 on every request it makes, both in API-key mode and
+// on the OAuth CLI-proxy path:
+//
+//	grok-shell/0.2.112 (windows; x86_64)
+//
+// The CLI only renders the longer "{origin}/{ver} grok-shell/{ver} (...)" form
+// when an embedding client sets a different origin via GROK_CLIENT_NAME; a plain
+// `grok` process collapses to this short form (UserAgent::render in
+// crates/codegen/xai-grok-http/src/lib.rs).
+func CLIUserAgent() string {
+	return fmt.Sprintf("%s/%s (%s; %s)", CLIClientIdentifier, EffectiveCLIClientVersion(), cliPlatformOS(), cliPlatformArch())
+}
+
+// cliPlatformOS and cliPlatformArch mirror the CLI's PlatformInfo::current()
+// mapping so the advertised platform stays self-consistent with the host the
+// relay actually runs on, exactly as a real CLI install would report it.
+func cliPlatformOS() string {
+	switch runtime.GOOS {
+	case "darwin":
+		return "macos"
+	case "windows":
+		return "windows"
+	default:
+		return runtime.GOOS
+	}
+}
+
+func cliPlatformArch() string {
+	switch runtime.GOARCH {
+	case "amd64":
+		return "x86_64"
+	case "arm64":
+		return "aarch64"
+	default:
+		return runtime.GOARCH
+	}
 }
 
 // CLIAcceptEncoding is the Accept-Encoding header reqwest attaches to every

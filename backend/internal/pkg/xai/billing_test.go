@@ -38,7 +38,10 @@ func TestApplyCLIBillingHeaders(t *testing.T) {
 	require.Equal(t, "Bearer token", req.Header.Get("Authorization"))
 	require.Equal(t, CLITokenAuthValue, req.Header.Get(CLITokenAuthHeader))
 	require.Equal(t, CLIClientVersion, req.Header.Get(CLIClientVersionHeader))
-	require.Equal(t, "grok-pager/"+CLIClientVersion+" grok-shell/"+CLIClientVersion+" (macos; aarch64)", req.UserAgent())
+	// Billing shares the captured CLI identity so one deployment never presents
+	// two different clients to xAI.
+	require.Equal(t, CLIUserAgent(), req.UserAgent())
+	require.Equal(t, CLIClientIdentifier, req.Header.Get(CLIClientIdentifierHeader))
 }
 
 func TestBuildBillingSummaryWeeklyAndMonthly(t *testing.T) {

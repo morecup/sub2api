@@ -211,7 +211,7 @@ func (s *OpenAIGatewayService) sendCCUpstreamRequest(
 
 	if account.Platform == PlatformGrok {
 		if account.IsGrokOAuth() {
-			applyGrokCLIHeaders(upstreamReq.Header)
+			applyGrokCLIInferenceHeaders(upstreamReq.Header)
 		}
 		applyGrokCacheHeaders(upstreamReq.Header, grokCacheIdentity)
 	}

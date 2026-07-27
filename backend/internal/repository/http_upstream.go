@@ -444,7 +444,8 @@ func applyGrokCLIProxyHeaders(req *http.Request) {
 	}
 	req.Header.Set("X-XAI-Token-Auth", "xai-grok-cli")
 	req.Header.Set("x-grok-client-version", xai.EffectiveCLIClientVersion())
-	req.Header.Set("User-Agent", xai.CLIWorkspaceUserAgent())
+	req.Header.Set(xai.CLIClientIdentifierHeader, xai.CLIClientIdentifier)
+	req.Header.Set("User-Agent", xai.CLIUserAgent())
 	// Setting Accept-Encoding explicitly both matches the CLI's reqwest build and
 	// stops net/http from advertising its own bare "gzip". Responses are
 	// decompressed by decompressResponseBody, which already covers all three.
