@@ -10,8 +10,10 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -503,8 +505,59 @@ func grokChatResponsesCacheIntentBody(body []byte) ([]byte, error) {
 	return json.Marshal(root)
 }
 
-func grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity string) bool {
-	return strings.TrimSpace(upstreamModel) == "grok-4.5" && strings.TrimSpace(cacheIdentity) != ""
+// grokResponsesServesModel reports whether xAI serves the model on
+// /v1/responses.
+//
+// Composer and image models only exist on their native endpoints, so they keep
+// them. The official CLI never uses those models, so keeping them off
+// /v1/responses claims no CLI identity for traffic that could not belong to one.
+func grokResponsesServesModel(model string) bool {
+	return !isGrokComposerModel(model) && !isGrokImageGenerationModel(model)
+}
+
+// grokChatBridgeBlockingReason classifies an eligibility failure.
+//
+// true means the Responses converter would change what the request asks for
+// (an unrepresentable role, tool declaration, or content part), so the request
+// keeps Chat Completions. false means the conversion only drops a parameter the
+// Responses API has no equivalent for, which is the better trade for an OAuth
+// account: the official CLI only ever posts /v1/responses, so a relayed
+// /v1/chat/completions is a sub2api-only marker on the same gateway.
+func grokChatBridgeBlockingReason(reason string) bool {
+	switch reason {
+	case "invalid_json",
+		"invalid_messages",
+		"invalid_model",
+		"invalid_message_role",
+		"invalid_reasoning_content",
+		"invalid_tool",
+		"invalid_tools",
+		"invalid_tool_call",
+		"invalid_tool_calls",
+		"invalid_tool_call_id",
+		"invalid_tool_call_index",
+		"invalid_tool_message_content",
+		"empty_message_content",
+		"non_text_message_content",
+		"unsupported_tool_type",
+		"unsupported_tool_choice",
+		"unsupported_functions",
+		"unsupported_function_call",
+		"required_tool_choice_without_tools":
+		return true
+	}
+	for _, prefix := range []string{
+		"unsupported_message_role_",
+		"unsupported_content_part_",
+		"invalid_tool_function",
+		"unsafe_tool_",
+		"unsafe_message_field_",
+	} {
+		if strings.HasPrefix(reason, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // forwardGrokChatCompletionsViaResponses converts a strictly compatible Chat
@@ -523,7 +576,13 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 
 	var chatReq apicompat.ChatCompletionsRequest
 	if err := json.Unmarshal(body, &chatReq); err != nil {
-		return nil, fmt.Errorf("parse grok chat completions request: %w", err)
+		// A body that does not even parse as Chat Completions cannot be converted;
+		// forwarding it keeps whatever error the upstream would have produced.
+		logger.L().Debug("grok chat_completions: body does not parse, using raw fallback",
+			zap.Int64("account_id", account.ID),
+			zap.Error(err),
+		)
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	originalModel := chatReq.Model
 	clientStream := chatReq.Stream
@@ -534,14 +593,34 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	// Completions path cannot forward image_url parts to Grok's native vision
 	// for non-composer models, so they would be silently dropped. Route them to
 	// Responses even when no prompt-cache identity is available.
-	hasImageInput := openAIJSONValueMayContainImageInput(gjson.GetBytes(body, "messages"))
-	if !grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity) && (!hasImageInput || strings.TrimSpace(upstreamModel) != "grok-4.5") {
+	if !grokResponsesServesModel(upstreamModel) {
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
+	// Anything the converter can express goes to /v1/responses, even when a
+	// parameter is lost on the way, because the endpoint itself is the louder
+	// signal: the official CLI posts /v1/responses and nothing else.
+	if eligible, reason := grokChatResponsesBridgeEligibility(body); !eligible {
+		if grokChatBridgeBlockingReason(reason) {
+			logger.L().Debug("grok chat_completions: request shape is not representable in Responses, using raw fallback",
+				zap.Int64("account_id", account.ID),
+				zap.String("reason", reason),
+			)
+			return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+		}
+		logger.L().Debug("grok chat_completions: bridging to Responses with a parameter the API cannot carry",
+			zap.Int64("account_id", account.ID),
+			zap.String("reason", reason),
+			zap.String("upstream_model", upstreamModel),
+		)
 	}
 
 	responsesReq, err := apicompat.ChatCompletionsToResponses(&chatReq)
 	if err != nil {
-		return nil, fmt.Errorf("convert grok chat completions to responses: %w", err)
+		logger.L().Warn("grok chat_completions: Responses conversion failed, using raw fallback",
+			zap.Int64("account_id", account.ID),
+			zap.Error(err),
+		)
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 	responsesReq.Model = upstreamModel
 	responsesReq.Stream = true

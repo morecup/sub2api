@@ -37,7 +37,12 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// ForwardAsChatCompletions 对称）。缺少此分流时，/v1/messages 入站请求
 	// 会被无条件转为 Responses 格式发往上游 /v1/responses，导致只支持
 	// /v1/chat/completions 的第三方 OpenAI 兼容上游全部 400。
-	if account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
+	// Grok is excluded: this fallback resolves an OpenAI-compatible
+	// /v1/chat/completions target, which is the wrong upstream for a Grok
+	// account, and xAI serves /v1/responses for every model the Anthropic bridge
+	// can map. Keeping Grok on the Responses path also keeps the upstream request
+	// path identical to the official CLI's.
+	if account.Platform != PlatformGrok && account.Type == AccountTypeAPIKey && !openai_compat.ShouldUseResponsesAPI(account.Extra) {
 		return s.forwardAnthropicViaRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 

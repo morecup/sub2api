@@ -239,9 +239,50 @@ func TestFingerprintClientCacheSeparatesProfilesUnderProxyIsolation(t *testing.T
 	require.IsType(t, &alpnRoundTripper{}, grok.client.Transport)
 	require.IsType(t, &http.Transport{}, claude.client.Transport)
 
-	again, err := svc.getClientEntryWithTLS("", 3, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
+	again, err := svc.getClientEntryWithTLS("", 1, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
 	require.NoError(t, err)
-	require.Same(t, grok.client, again.client, "the same profile must reuse its cached client")
+	require.Same(t, grok.client, again.client, "the same profile and account must reuse its cached client")
+
+	// A resumption-capable profile carries a TLS ticket store, and a ticket ties
+	// two connections together for the peer. Proxy isolation keeps the account out
+	// of the cache key, so resumption has to put it back: otherwise two Grok
+	// accounts behind one proxy would present each other's tickets.
+	otherAccount, err := svc.getClientEntryWithTLS("", 3, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
+	require.NoError(t, err)
+	require.NotSame(t, grok.client, otherAccount.client, "resumption must not share a ticket store across accounts")
+
+	// Profiles that never resume keep sharing one client under proxy isolation.
+	claudeAgain, err := svc.getClientEntryWithTLS("", 4, 1, tlsfingerprint.BuiltInDefaultProfile(), service.HTTPUpstreamProfileDefault, false, false)
+	require.NoError(t, err)
+	require.Same(t, claude.client, claudeAgain.client, "a profile without resumption must still pool across accounts")
+}
+
+// TestGrokCLIProfilePinsPoolAndResumption pins the reqwest client configuration
+// captured from xai-grok-sampler/src/shared_http.rs.
+func TestGrokCLIProfilePinsPoolAndResumption(t *testing.T) {
+	profile := tlsfingerprint.GrokCLIProfile()
+
+	require.NotNil(t, profile.Pool)
+	require.Equal(t, 2, profile.Pool.MaxIdleConnsPerHost)
+	require.Equal(t, 90*time.Second, profile.Pool.IdleConnTimeout)
+	require.Equal(t, 10*time.Second, profile.Pool.ConnectTimeout)
+	require.Equal(t, 10*time.Second, profile.ConnectTimeout())
+	require.True(t, profile.ResumeSessions)
+	// A profile only resumes once a ticket store is attached, which is what keeps
+	// resumption scoped to one account.
+	require.False(t, profile.ResumesSessions())
+
+	// The pool profile narrows the operator's settings but never widens them.
+	settings := poolSettings{maxIdleConnsPerHost: 32, idleConnTimeout: 30 * time.Second}
+	narrowed := applyProfilePoolProfile(settings, profile)
+	require.Equal(t, 2, narrowed.maxIdleConnsPerHost)
+	require.Equal(t, 90*time.Second, narrowed.idleConnTimeout)
+
+	tight := poolSettings{maxIdleConnsPerHost: 1, idleConnTimeout: 30 * time.Second}
+	require.Equal(t, 1, applyProfilePoolProfile(tight, profile).maxIdleConnsPerHost)
+
+	// A profile without pool hints leaves the settings untouched.
+	require.Equal(t, settings, applyProfilePoolProfile(settings, tlsfingerprint.BuiltInDefaultProfile()))
 }
 
 func TestProfileCacheKeyDistinguishesObservableConfiguration(t *testing.T) {

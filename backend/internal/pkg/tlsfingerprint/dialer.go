@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/proxy"
@@ -52,6 +53,63 @@ type Profile struct {
 	// only consulted when the profile negotiates h2; nil keeps the local
 	// HTTP/2 stack's own preamble.
 	HTTP2 *HTTP2Profile
+	// Pool describes the emulated client's connection pool and dial timeouts.
+	// nil keeps the local pool configuration.
+	Pool *PoolProfile
+	// ResumeSessions offers the tickets collected on earlier connections, the
+	// way a client with session resumption enabled does. Off by default: a
+	// resumed handshake links the two connections for the peer, so it must be
+	// opted into and scoped by the caller (see SessionCache).
+	ResumeSessions bool
+	// SessionCache stores the tickets used when ResumeSessions is set. It is
+	// supplied by the caller rather than created here because its scope decides
+	// which connections the peer may link: one cache per account keeps
+	// resumption from tying two accounts to the same client.
+	//
+	// nil with ResumeSessions set means no resumption, since there is nowhere to
+	// keep a ticket.
+	SessionCache utls.ClientSessionCache
+}
+
+// PoolProfile describes the connection reuse behavior of the emulated client.
+//
+// Connection lifetime is observable: the peer sees how long a connection lingers
+// between requests and how many requests share one. Matching it costs extra
+// handshakes whenever the local concurrency exceeds the emulated client's idle
+// cap, which is the trade this struct makes deliberately.
+type PoolProfile struct {
+	// MaxIdleConnsPerHost caps idle (not in-flight) connections kept per host.
+	MaxIdleConnsPerHost int
+	// IdleConnTimeout is how long an idle connection is kept before closing.
+	IdleConnTimeout time.Duration
+	// ConnectTimeout bounds the TCP connect, before the TLS handshake.
+	ConnectTimeout time.Duration
+}
+
+// ResumesSessions reports whether this profile may present a session ticket.
+//
+// Callers pooling transports must treat a true result as a reason to keep the
+// transport (and therefore the ticket store) from being shared across accounts.
+func (p *Profile) ResumesSessions() bool {
+	return p != nil && p.ResumeSessions && p.SessionCache != nil
+}
+
+// WithSessionCache returns a shallow copy of the profile bound to cache.
+func (p *Profile) WithSessionCache(cache utls.ClientSessionCache) *Profile {
+	if p == nil {
+		return nil
+	}
+	clone := *p
+	clone.SessionCache = cache
+	return &clone
+}
+
+// ConnectTimeout returns the profile's TCP connect timeout, or 0 for none.
+func (p *Profile) ConnectTimeout() time.Duration {
+	if p == nil || p.Pool == nil {
+		return 0
+	}
+	return p.Pool.ConnectTimeout
 }
 
 // EffectiveALPNProtocols returns the ALPN list this profile puts on the wire.
@@ -195,7 +253,7 @@ var (
 // If baseDialer is nil, direct TCP dial is used.
 func NewDialer(profile *Profile, baseDialer func(ctx context.Context, network, addr string) (net.Conn, error)) *Dialer {
 	if baseDialer == nil {
-		baseDialer = (&net.Dialer{}).DialContext
+		baseDialer = (&net.Dialer{Timeout: profile.ConnectTimeout()}).DialContext
 	}
 	return &Dialer{profile: profile, baseDialer: baseDialer}
 }
@@ -271,7 +329,7 @@ func (d *HTTPProxyDialer) DialTLSContext(ctx context.Context, network, addr stri
 		}
 	}
 
-	dialer := &net.Dialer{}
+	dialer := &net.Dialer{Timeout: d.profile.ConnectTimeout()}
 	conn, err := dialer.DialContext(ctx, "tcp", proxyAddr)
 	if err != nil {
 		slog.Debug("tls_fingerprint_http_proxy_connect_failed", "error", err)
@@ -350,7 +408,15 @@ func performTLSHandshake(ctx context.Context, conn net.Conn, profile *Profile, a
 	}
 
 	spec := buildClientHelloSpecFromProfile(profile)
-	tlsConn := utls.UClient(conn, &utls.Config{ServerName: host}, utls.HelloCustom)
+	config := &utls.Config{ServerName: host}
+	if profile.ResumesSessions() {
+		config.ClientSessionCache = profile.SessionCache
+		// Without a cached ticket the pre_shared_key extension is dropped
+		// entirely, so a first connection keeps the fresh-handshake shape the
+		// profile was verified against and only a resumed one carries the PSK.
+		config.OmitEmptyPsk = true
+	}
+	tlsConn := utls.UClient(conn, config, utls.HelloCustom)
 
 	if err := tlsConn.ApplyPreset(spec); err != nil {
 		_ = conn.Close()
@@ -525,6 +591,14 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 	if enableGREASE && (profile == nil || len(profile.Extensions) == 0) {
 		extensions = append([]utls.TLSExtension{&utls.UtlsGREASEExtension{}}, extensions...)
 		extensions = append(extensions, &utls.UtlsGREASEExtension{})
+	}
+
+	// pre_shared_key must be the final extension (RFC 8446 section 4.2.11), which
+	// is also why it sits outside any per-connection extension shuffle. utls fills
+	// it from the session cache and, with Config.OmitEmptyPsk, drops it when no
+	// ticket is held.
+	if profile.ResumesSessions() {
+		extensions = append(extensions, &utls.UtlsPreSharedKeyExtension{})
 	}
 
 	return &utls.ClientHelloSpec{

@@ -74,16 +74,15 @@ func (s *OpenAIGatewayService) ForwardAsChatCompletions(
 	}
 
 	if account.Platform == PlatformGrok {
+		// OAuth accounts present the official CLI identity to cli-chat-proxy, and
+		// that client only ever posts /v1/responses. The bridge decides for itself
+		// when a request genuinely cannot be converted (see
+		// forwardGrokChatCompletionsViaResponses) instead of being gated here.
 		if account.IsGrokOAuth() {
-			if eligible, reason := grokChatResponsesBridgeEligibility(body); eligible {
-				return s.forwardGrokChatCompletionsViaResponses(ctx, c, account, body, promptCacheKey, defaultMappedModel)
-			} else {
-				logger.L().Debug("grok chat_completions: using raw fallback",
-					zap.Int64("account_id", account.ID),
-					zap.String("reason", reason),
-				)
-			}
+			return s.forwardGrokChatCompletionsViaResponses(ctx, c, account, body, promptCacheKey, defaultMappedModel)
 		}
+		// API-key accounts talk to api.x.ai as themselves, where
+		// /v1/chat/completions is a public endpoint and no CLI identity is claimed.
 		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
 	}
 

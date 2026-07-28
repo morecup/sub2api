@@ -225,12 +225,63 @@ func TestGrokChatResponsesBridgeEligibility(t *testing.T) {
 	}
 }
 
-func TestGrokChatResponsesRuntimeEligibility(t *testing.T) {
+// TestGrokResponsesServesModel pins which models keep a non-Responses upstream
+// path. Everything the official CLI can talk to must resolve to /v1/responses.
+func TestGrokResponsesServesModel(t *testing.T) {
 	t.Parallel()
-	require.True(t, grokChatResponsesRuntimeEligible("grok-4.5", "isolated-id"))
-	require.False(t, grokChatResponsesRuntimeEligible("grok-4.3", "isolated-id"))
-	require.False(t, grokChatResponsesRuntimeEligible("grok-4.5-build-free", "isolated-id"))
-	require.False(t, grokChatResponsesRuntimeEligible("grok-4.5", ""))
+
+	for _, model := range []string{"grok-4.5", "grok-4.3", "grok-build-0.1", "grok-4.5-build-free", "grok-4.20-0309-reasoning"} {
+		require.True(t, grokResponsesServesModel(model), "model %s", model)
+	}
+	// Composer and image models only exist on their native endpoints, and the
+	// official CLI never uses them.
+	for _, model := range []string{"grok-composer-2.5-fast", "composer-2.5", "xai/grok-composer", "grok-imagine-image"} {
+		require.False(t, grokResponsesServesModel(model), "model %s", model)
+	}
+}
+
+func TestGrokChatBridgeBlockingReason(t *testing.T) {
+	t.Parallel()
+
+	// Shapes the converter cannot express keep Chat Completions rather than
+	// silently becoming a different request.
+	for _, reason := range []string{
+		"invalid_json",
+		"invalid_messages",
+		"invalid_model",
+		"invalid_message_role",
+		"non_text_message_content",
+		"empty_message_content",
+		"unsupported_message_role_developer",
+		"unsupported_content_part_input_audio",
+		"unsupported_tool_type",
+		"unsupported_tool_choice",
+		"unsupported_functions",
+		"unsupported_function_call",
+		"required_tool_choice_without_tools",
+		"invalid_tool_function_parameters",
+		"unsafe_tool_field_cache_control",
+		"unsafe_message_field_name",
+	} {
+		require.True(t, grokChatBridgeBlockingReason(reason), "reason %s", reason)
+	}
+
+	// A dropped or normalized parameter is the better trade: a relayed
+	// /v1/chat/completions is a sub2api-only marker on the CLI gateway.
+	for _, reason := range []string{
+		"unsupported_stop",
+		"unsupported_reasoning_effort",
+		"unknown_field_frequency_penalty",
+		"unknown_field_seed",
+		"unknown_stream_option_chunk_size",
+		"unsafe_max_tokens",
+		"conflicting_max_tokens",
+		"invalid_service_tier",
+		"invalid_prompt_cache_key",
+		"invalid_temperature",
+	} {
+		require.False(t, grokChatBridgeBlockingReason(reason), "reason %s", reason)
+	}
 }
 
 func TestForwardGrokChatViaResponsesNonStreamingCachesAndReturnsChat(t *testing.T) {
@@ -535,7 +586,11 @@ func TestForwardGrokChatViaResponsesPropagatesServiceTierForBilling(t *testing.T
 	}
 }
 
-func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
+// TestForwardGrokChatAlwaysUsesResponsesForOAuth pins that an OAuth account's
+// /v1/chat/completions traffic reaches xAI as POST /v1/responses regardless of
+// prompt-cache identity or model, since that is the only request the official CLI
+// makes.
+func TestForwardGrokChatAlwaysUsesResponsesForOAuth(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	tests := []struct {
@@ -544,8 +599,11 @@ func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
 		mappedModel  string
 		wantUpstream string
 	}{
+		// Neither a missing prompt-cache identity nor a model other than the
+		// CLI's default is a reason to reveal a /v1/chat/completions upstream on
+		// the gateway the official CLI only ever posts /v1/responses to.
 		{name: "missing cache identity", wantUpstream: "grok-4.5"},
-		{name: "non cache capable mapped model", setAPIKey: true, mappedModel: "grok-4.3", wantUpstream: "grok-4.3"},
+		{name: "model other than the CLI default", setAPIKey: true, mappedModel: "grok-4.3", wantUpstream: "grok-4.3"},
 	}
 
 	for index, tt := range tests {
@@ -565,13 +623,7 @@ func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
 			repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
 				accountsByID: map[int64]*Account{account.ID: account},
 			}}
-			upstream := &httpUpstreamRecorder{resp: &http.Response{
-				StatusCode: http.StatusOK,
-				Header:     http.Header{"Content-Type": []string{"application/json"}},
-				Body: io.NopCloser(strings.NewReader(
-					`{"id":"chat_raw","object":"chat.completion","model":"` + tt.wantUpstream + `","choices":[{"index":0,"message":{"role":"assistant","content":"raw ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}`,
-				)),
-			}}
+			upstream := &httpUpstreamRecorder{resp: grokChatBridgeCompletedResponse("resp_no_gate", 0)}
 			svc := &OpenAIGatewayService{
 				httpUpstream:      upstream,
 				grokTokenProvider: NewGrokTokenProvider(repo, nil),
@@ -581,11 +633,14 @@ func TestForwardGrokChatRuntimeGateFallsBackToRaw(t *testing.T) {
 			result, err := svc.ForwardAsChatCompletions(context.Background(), c, account, body, "", "")
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			require.Equal(t, xai.DefaultCLIBaseURL+"/chat/completions", upstream.lastReq.URL.String())
-			require.Equal(t, grokChatRawEndpoint, result.UpstreamEndpoint)
+			require.Equal(t, xai.DefaultCLIBaseURL+"/responses", upstream.lastReq.URL.String())
+			require.Equal(t, grokChatResponsesEndpoint, result.UpstreamEndpoint)
 			require.Equal(t, tt.wantUpstream, result.UpstreamModel)
-			require.False(t, gjson.GetBytes(upstream.lastBody, "tools").Exists())
-			require.Equal(t, "raw ok", gjson.Get(recorder.Body.String(), "choices.0.message.content").String())
+			require.Equal(t, tt.wantUpstream, gjson.GetBytes(upstream.lastBody, "model").String())
+			// The client asked for a non-streaming reply; upstream still streams,
+			// exactly as the official CLI's sampler does.
+			require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool())
+			require.Equal(t, "cached ok", gjson.Get(recorder.Body.String(), "choices.0.message.content").String())
 		})
 	}
 }
@@ -633,10 +688,13 @@ func TestForwardGrokChatViaResponses429UsesGrokRateLimitPolicy(t *testing.T) {
 	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
+// TestForwardGrokRawChat429PreservesRetryAfter covers the raw Chat Completions
+// path, which an OAuth account now only reaches for models xAI does not serve on
+// /v1/responses (composer/image models, which the official CLI never uses).
 func TestForwardGrokRawChat429PreservesRetryAfter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	body := []byte(`{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":false,"stop":"done"}`)
+	body := []byte(`{"model":"grok-composer-2.5-fast","messages":[{"role":"user","content":"hi"}],"stream":false}`)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, grokChatRawEndpoint, bytes.NewReader(body))
@@ -675,7 +733,7 @@ func TestForwardGrokRawChat429PreservesRetryAfter(t *testing.T) {
 func TestForwardGrokRawChatErrorRecordsActualEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	body := []byte(`{"model":"grok","messages":[{"role":"user","content":"hi"}],"stream":false,"stop":"done"}`)
+	body := []byte(`{"model":"grok-composer-2.5-fast","messages":[{"role":"user","content":"hi"}],"stream":false}`)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, grokChatRawEndpoint, bytes.NewReader(body))

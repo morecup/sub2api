@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -526,6 +527,14 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	// 上的 Anthropic 与 Grok 账号会复用彼此的客户端。
 	profileKey := profile.CacheKey()
 	cacheKey := "tls:" + profileKey + "|" + buildCacheKey(isolation, proxyKey, accountID, upstreamProtocolModeDefault)
+	if profile.ResumeSessions {
+		// 会话复用画像的 transport 持有 TLS 票据仓库，票据本身就把两条连接
+		// 绑定成同一个客户端。proxy 隔离模式下 accountID 不进 key，若不在此
+		// 处补上，同一代理上的两个 Grok 账号会互相复用票据，等于主动告诉
+		// 上游它们是同一台机器——比不复用更糟。
+		cacheKey += "|acct:" + strconv.FormatInt(accountID, 10)
+	}
+	settings = applyProfilePoolProfile(settings, profile)
 	poolKey := buildPoolKey(settings, upstreamProtocolModeDefault) + ":tls:" + profileKey
 
 	now := time.Now()

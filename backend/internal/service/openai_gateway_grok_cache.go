@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
@@ -94,11 +95,15 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 		return ""
 	}
 
-	// generateSessionUUID hashes the whole seed before formatting it as a UUID.
-	// Include a versioned namespace so this identity cannot collide with other
-	// upstream session identifiers derived by sub2api.
+	// The seed is hashed before being formatted as a UUID. Include a versioned
+	// namespace so this identity cannot collide with other upstream session
+	// identifiers derived by sub2api.
+	//
+	// The official CLI's x-grok-conv-id is a UUIDv7, so the identity is shaped as
+	// one (see grokConversationUUID) instead of the v4 shape the generic session
+	// helper produces.
 	isolatedSeed := fmt.Sprintf("grok-prompt-cache:v1:%d:%s:%s", apiKeyID, model, seed)
-	return generateSessionUUID(isolatedSeed)
+	return grokConversationUUID(isolatedSeed, time.Now())
 }
 
 func explicitGrokCacheSeed(c *gin.Context, body []byte, explicitKey string) string {

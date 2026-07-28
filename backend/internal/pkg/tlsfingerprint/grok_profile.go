@@ -135,6 +135,11 @@ func GrokCLIProfile() *Profile {
 		ExtensionOrder: ExtensionOrderRustls,
 		EnableGREASE:   false,
 		HTTP2:          GrokCLIHTTP2Profile(),
+		Pool:           GrokCLIPoolProfile(),
+		// rustls keeps session resumption on by default and reqwest does not turn
+		// it off, so the official client presents a ticket on every connection
+		// after its first. The ticket store is attached per account by the caller.
+		ResumeSessions: true,
 	}
 }
 
@@ -157,6 +162,24 @@ func GrokCLIHTTP2Profile() *HTTP2Profile {
 		ConnectionWindowUpdate: grokCLIH2ConnectionWindowUpdate,
 		PingInterval:           grokCLIH2PingInterval,
 		PingTimeout:            grokCLIH2PingTimeout,
+	}
+}
+
+// GrokCLIPoolProfile returns the connection reuse behavior configured in
+// xai-grok-sampler/src/shared_http.rs: pool_max_idle_per_host(2),
+// pool_idle_timeout(90s) and connect_timeout(10s).
+//
+// The idle cap is the one value that costs something to match. Relaying more than
+// two concurrent requests per account means connections beyond the cap are closed
+// instead of pooled, so a busy account pays extra handshakes. That is accepted
+// here because connection lifetime is directly observable by the peer, while the
+// extra handshakes only cost latency: each one still presents the same verified
+// ClientHello (with a fresh rustls extension order, as a real rustls client does).
+func GrokCLIPoolProfile() *PoolProfile {
+	return &PoolProfile{
+		MaxIdleConnsPerHost: 2,
+		IdleConnTimeout:     90 * time.Second,
+		ConnectTimeout:      10 * time.Second,
 	}
 }
 

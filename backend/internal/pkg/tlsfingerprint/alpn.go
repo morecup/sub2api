@@ -86,6 +86,16 @@ func (p *Profile) CacheKey() string {
 	if p.EnableGREASE {
 		writeString("grease")
 	}
+	if p.ResumeSessions {
+		// A resumption-capable profile can put pre_shared_key on the wire, so it
+		// must never share a transport with one that cannot.
+		writeString("resume")
+	}
+	if p.Pool != nil {
+		writeString(strconv.Itoa(p.Pool.MaxIdleConnsPerHost))
+		writeString(p.Pool.IdleConnTimeout.String())
+		writeString(p.Pool.ConnectTimeout.String())
+	}
 	writeUint16s(p.CipherSuites)
 	writeUint16s(p.Curves)
 	writeUint16s(p.PointFormats)

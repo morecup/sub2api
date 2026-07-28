@@ -2,11 +2,16 @@ package service
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
@@ -41,21 +46,87 @@ const (
 	traceParentHeader         = "traceparent"
 )
 
-// grokCompactionThresholds maps an upstream model to the compaction threshold
-// the CLI advertises for it.
-//
-// The CLI derives this from the model's context window (captured: 400000 for
-// grok-4.5, whose window is 500000). Only measured models are listed on purpose:
-// advertising "compact at 400k" for a 256k-window model would be internally
-// inconsistent, which is worse than omitting the pair.
-var grokCompactionThresholds = map[string]int{
-	"grok-4.5": 400000,
+// grokCompactionModel is the per-model input to the CLI's x-compaction-at
+// calculation.
+type grokCompactionModel struct {
+	contextWindow    uint64
+	thresholdPercent uint64
 }
 
-// grokCompactionsRemaining is the CLI's fresh-session compaction budget. Unlike
-// the identifiers below this is config-derived and identical across installs, so
-// a constant is faithful rather than a value that links accounts together.
-const grokCompactionsRemaining = 1
+// grokCompactionModels holds the models whose compaction budget is established.
+//
+// The official client computes the header as
+// context_window * auto_compact_threshold_percent / 100
+// (xai-grok-sampling-types CompactionAtTokens::resolve), with both inputs coming
+// from per-model remote config. grok-4.5's captured value is 400000, which pins
+// its window at 500000 and its threshold at 80 rather than the 85 default
+// (xai-grok-compaction DEFAULT_AUTO_COMPACT_THRESHOLD_PERCENT).
+//
+// Unlisted models send no compaction pair. That is a shape the official client
+// produces too: the same config can disable the header per model, whereas a value
+// derived from a guessed window would contradict the catalog xAI itself serves.
+var grokCompactionModels = map[string]grokCompactionModel{
+	"grok-4.5": {contextWindow: 500_000, thresholdPercent: 80},
+}
+
+// grokCompactionAt resolves the x-compaction-at token count for a model.
+func grokCompactionAt(model string) (uint64, bool) {
+	entry, ok := grokCompactionModels[strings.ToLower(strings.TrimSpace(model))]
+	if !ok || entry.contextWindow == 0 || entry.thresholdPercent == 0 {
+		return 0, false
+	}
+	return entry.contextWindow * entry.thresholdPercent / 100, true
+}
+
+// grokCompactionSummaryMarker wraps a restored compaction summary on the way to
+// xAI (see convertOpenAICompactInputsForGrok).
+const grokCompactionSummaryMarker = "<conversation_summary>"
+
+// grokCompactionsRemainingForBody resolves x-compactions-remaining.
+//
+// The official value is dynamic: 1 while the session still carries its
+// uncompacted prefix and 0 once it has compacted
+// (CompactionsRemaining::resolve(has_compaction_summary)). A request whose input
+// carries a compaction summary is the same "already compacted" state.
+func grokCompactionsRemainingForBody(body []byte) int {
+	if requestCarriesGrokCompactionSummary(body) {
+		return 0
+	}
+	return 1
+}
+
+func requestCarriesGrokCompactionSummary(body []byte) bool {
+	if len(body) == 0 {
+		return false
+	}
+	// The marker has to be read through a JSON decode rather than scanned for in
+	// the raw bytes: encoding/json escapes the angle brackets to \u003c and
+	// \u003e, so a byte-level search would never match the body actually sent.
+	for _, field := range []string{"input", "messages"} {
+		for _, item := range gjson.GetBytes(body, field).Array() {
+			// The client-sent form, before Grok body normalization runs.
+			if isOpenAICompactionType(item.Get("type").String()) {
+				return true
+			}
+			if grokContentCarriesCompactionSummary(item.Get("content")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func grokContentCarriesCompactionSummary(content gjson.Result) bool {
+	if content.IsArray() {
+		for _, part := range content.Array() {
+			if strings.Contains(part.Get("text").String(), grokCompactionSummaryMarker) {
+				return true
+			}
+		}
+		return false
+	}
+	return strings.Contains(content.String(), grokCompactionSummaryMarker)
+}
 
 // grokAgentIDNamespace anchors the per-account agent id derivation.
 //
@@ -105,9 +176,9 @@ func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []by
 		// Mirrors the body so the header can never route to a different model
 		// than the one the request actually asks for.
 		headers.Set(grokModelOverrideHeader, model)
-		if threshold, ok := grokCompactionThresholds[strings.ToLower(model)]; ok {
-			headers.Set(grokCompactionsLeftHeader, strconv.Itoa(grokCompactionsRemaining))
-			headers.Set(grokCompactionAtHeader, strconv.Itoa(threshold))
+		if compactionAt, ok := grokCompactionAt(model); ok {
+			headers.Set(grokCompactionsLeftHeader, strconv.Itoa(grokCompactionsRemainingForBody(body)))
+			headers.Set(grokCompactionAtHeader, strconv.FormatUint(compactionAt, 10))
 		}
 	}
 
@@ -117,15 +188,21 @@ func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []by
 	}
 	// The capture shows session id and conversation id carrying the same value.
 	headers.Set(grokSessionIDHeader, conversationID)
-	headers.Set(grokTurnIndexHeader, strconv.Itoa(grokTurnIndexFromBody(body)))
+	turn := defaultGrokTurnTracker.observe(
+		fmt.Sprintf("%d:%s", account.ID, conversationID),
+		grokTurnIndexFromBody(body),
+		time.Now(),
+	)
+	headers.Set(grokTurnIndexHeader, strconv.Itoa(turn))
 }
 
-// grokTurnIndexFromBody approximates the CLI's per-session turn counter.
+// grokTurnIndexFromBody derives a turn index from the request body.
 //
-// Sub2API holds no per-conversation turn state, but a conversation's user turns
-// accumulate in the request body, so counting them grows monotonically within a
-// conversation exactly as the CLI's counter does. The captured first turn carried
-// x-grok-turn-idx: 1 with a single user message.
+// A conversation's user turns accumulate in the body, so counting them tracks
+// the CLI's per-session counter for as long as the client replays full history.
+// The captured first turn carried x-grok-turn-idx: 1 with a single user message.
+// Clients that trim history would make this number fall, which is what
+// grokTurnTracker exists to prevent.
 func grokTurnIndexFromBody(body []byte) int {
 	turns := countGrokUserTurns(gjson.GetBytes(body, "input"))
 	if turns == 0 {
@@ -161,4 +238,140 @@ func newTraceParentHeader() string {
 		return fmt.Sprintf("00-%s-%s-01", sum[:32], sum[32:48])
 	}
 	return fmt.Sprintf("00-%s-%s-01", hex.EncodeToString(ids[:16]), hex.EncodeToString(ids[16:]))
+}
+
+// Turn index bookkeeping.
+//
+// The CLI's x-grok-turn-idx is a per-session counter that only ever grows. A
+// body-derived count tracks it while the client replays full history, but a
+// client that trims older turns (or a Responses request continued through
+// previous_response_id) would send fewer user items and make the reported index
+// fall - a session whose turn index goes backwards is not something the official
+// client can produce.
+//
+// The highest index seen per conversation is therefore remembered. State lives in
+// process, matching how this package already tracks per-session upstream response
+// ids (openaiCompatSessionResponses): the value is a cosmetic counter, so paying
+// for a shared store is not worth a round trip on the inference path. Across
+// several sub2api processes the counter is per process, which stays monotonic per
+// process but can differ between them.
+const (
+	grokTurnTrackerTTL        = 12 * time.Hour
+	grokTurnTrackerMaxEntries = 8192
+)
+
+type grokTurnEntry struct {
+	turn      int
+	expiresAt time.Time
+}
+
+type grokTurnTracker struct {
+	mu         sync.Mutex
+	entries    map[string]grokTurnEntry
+	ttl        time.Duration
+	maxEntries int
+}
+
+func newGrokTurnTracker(ttl time.Duration, maxEntries int) *grokTurnTracker {
+	return &grokTurnTracker{
+		entries:    make(map[string]grokTurnEntry),
+		ttl:        ttl,
+		maxEntries: maxEntries,
+	}
+}
+
+var defaultGrokTurnTracker = newGrokTurnTracker(grokTurnTrackerTTL, grokTurnTrackerMaxEntries)
+
+// observe records derived for key and returns the turn index to report, which is
+// never lower than one already reported for the same conversation.
+//
+// Retrying the same turn reports the same index because the derived value is
+// unchanged, matching the CLI: a retry is still one turn.
+func (t *grokTurnTracker) observe(key string, derived int, now time.Time) int {
+	if t == nil || strings.TrimSpace(key) == "" {
+		return derived
+	}
+	if derived < 1 {
+		derived = 1
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	turn := derived
+	if existing, ok := t.entries[key]; ok && !existing.expiresAt.Before(now) && existing.turn > turn {
+		turn = existing.turn
+	}
+	t.entries[key] = grokTurnEntry{turn: turn, expiresAt: now.Add(t.ttl)}
+	t.evictLocked(now)
+	return turn
+}
+
+// evictLocked drops expired entries and, if the map is still over its cap, the
+// entries closest to expiry. A uniform TTL makes that the least recently used.
+func (t *grokTurnTracker) evictLocked(now time.Time) {
+	if len(t.entries) <= t.maxEntries {
+		return
+	}
+	for key, entry := range t.entries {
+		if entry.expiresAt.Before(now) {
+			delete(t.entries, key)
+		}
+	}
+	if len(t.entries) <= t.maxEntries {
+		return
+	}
+	keys := make([]string, 0, len(t.entries))
+	for key := range t.entries {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return t.entries[keys[i]].expiresAt.Before(t.entries[keys[j]].expiresAt)
+	})
+	for _, key := range keys[:len(t.entries)-t.maxEntries] {
+		delete(t.entries, key)
+	}
+}
+
+// Conversation identity shape.
+//
+// The captured x-grok-conv-id (019fa403-f32f-79e3-847e-1f2f97589a86) is a
+// UUIDv7: a 48-bit millisecond timestamp followed by random bits, version nibble
+// 7. Sub2API derives its conversation identity from a hash so multi-turn traffic
+// keeps hitting the same server-side prompt cache, and the generic helper used
+// for that forces version 4 - a shape the official client never emits, and one a
+// gateway can match on with a single nibble comparison.
+const grokConversationIDWindow = 24 * time.Hour
+
+// grokConversationUUID formats seed as a UUIDv7 that stays stable for as long as
+// the prompt cache can plausibly be reused.
+//
+// The timestamp cannot simply be "now": the value has to survive across the turns
+// of one conversation or the prompt-cache routing it exists for breaks. It is
+// therefore derived from the seed inside a window anchored to the current day,
+// which keeps the id stable within a UTC day and always in the past - a v7
+// timestamp in the future would be a giveaway on its own. Rotating daily costs at
+// most one cold prompt cache per conversation that spans midnight.
+func grokConversationUUID(seed string, now time.Time) string {
+	digest := sha256.Sum256([]byte("grok-conv-id:v7:" + seed))
+
+	windowMillis := int64(grokConversationIDWindow / time.Millisecond)
+	// Anchor one window back so the offset can never land after now.
+	anchor := (now.UTC().UnixMilli()/windowMillis - 1) * windowMillis
+	offset := int64(binary.BigEndian.Uint64(digest[16:24]) % uint64(windowMillis))
+	timestamp := anchor + offset
+
+	var raw [16]byte
+	raw[0] = byte(timestamp >> 40)
+	raw[1] = byte(timestamp >> 32)
+	raw[2] = byte(timestamp >> 24)
+	raw[3] = byte(timestamp >> 16)
+	raw[4] = byte(timestamp >> 8)
+	raw[5] = byte(timestamp)
+	copy(raw[6:], digest[:10])
+	// Version 7 in the high nibble of byte 6, RFC 9562 variant in byte 8.
+	raw[6] = (raw[6] & 0x0f) | 0x70
+	raw[8] = (raw[8] & 0x3f) | 0x80
+
+	return uuid.UUID(raw).String()
 }

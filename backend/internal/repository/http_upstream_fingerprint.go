@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
@@ -107,7 +108,42 @@ func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint
 // transport whose connection preamble is rewritten to the profile's shape;
 // hosts that decline h2 fall back to an HTTP/1.1-only fingerprint, mirroring
 // what the emulated client does when its h2 attempt fails.
+// applyProfilePoolProfile narrows the pool to the emulated client's reuse
+// behavior. Only the values the emulated client actually pins are touched, so
+// operator configuration keeps deciding everything else.
+func applyProfilePoolProfile(settings poolSettings, profile *tlsfingerprint.Profile) poolSettings {
+	if profile == nil || profile.Pool == nil {
+		return settings
+	}
+	if profile.Pool.MaxIdleConnsPerHost > 0 && profile.Pool.MaxIdleConnsPerHost < settings.maxIdleConnsPerHost {
+		settings.maxIdleConnsPerHost = profile.Pool.MaxIdleConnsPerHost
+	}
+	if profile.Pool.IdleConnTimeout > 0 {
+		settings.idleConnTimeout = profile.Pool.IdleConnTimeout
+	}
+	return settings
+}
+
+// newFingerprintSessionCache returns the ticket store for one transport, or nil
+// when the profile does not resume.
+//
+// One store per transport is what keeps resumption from linking accounts: the
+// caller pins a resumption-capable transport to a single account, so the tickets
+// in this store only ever describe that account's connections.
+func newFingerprintSessionCache(profile *tlsfingerprint.Profile) utls.ClientSessionCache {
+	if profile == nil || !profile.ResumeSessions {
+		return nil
+	}
+	// rustls' default client session store keeps 256 entries; sub2api talks to
+	// one host per transport, so the capacity only bounds ticket churn.
+	return utls.NewLRUClientSessionCache(256)
+}
+
 func buildUpstreamTransportWithTLSFingerprint(settings poolSettings, proxyURL *url.URL, profile *tlsfingerprint.Profile) (http.RoundTripper, error) {
+	settings = applyProfilePoolProfile(settings, profile)
+	if cache := newFingerprintSessionCache(profile); cache != nil {
+		profile = profile.WithSessionCache(cache)
+	}
 	if !profile.AdvertisesHTTP2() {
 		dial, supported := fingerprintDialer(profile, proxyURL)
 		if !supported {
