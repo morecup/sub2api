@@ -114,6 +114,39 @@ const (
 	grokCLIH2PingTimeout  = 5 * time.Second
 )
 
+// grokCLIHTTP2PseudoHeaderOrder and grokCLIHTTP2RegularHeaderOrder come from
+// the independent 18-header capture documented at the top of
+// internal/service/openai_gateway_grok_cli_session.go. The ordinary header
+// order is copied exactly from that decoded request shape rather than from any
+// inferred Rust map iteration behavior.
+var grokCLIHTTP2PseudoHeaderOrder = []string{
+	":method",
+	":scheme",
+	":authority",
+	":path",
+}
+
+var grokCLIHTTP2RegularHeaderOrder = []string{
+	"content-type",
+	"user-agent",
+	"x-compactions-remaining",
+	"x-compaction-at",
+	"x-grok-client-version",
+	"x-grok-user-id",
+	"x-grok-client-identifier",
+	"authorization",
+	"traceparent",
+	"x-grok-conv-id",
+	"x-grok-req-id",
+	"x-grok-model-override",
+	"x-grok-session-id",
+	"x-grok-agent-id",
+	"x-grok-turn-idx",
+	"accept",
+	"accept-encoding",
+	"content-length",
+}
+
 // GrokCLIProfile returns the TLS and HTTP/2 fingerprint of the official Grok
 // Build CLI.
 func GrokCLIProfile() *Profile {
@@ -125,7 +158,8 @@ func GrokCLIProfile() *Profile {
 		SignatureAlgorithms: grokCLISignatureAlgorithms,
 		// reqwest offers both protocols unless the caller forces one
 		// (HttpVersionPref::All).
-		ALPNProtocols: []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
+		ALPNProtocols:         []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
+		UseGrokHTTP2Transport: true,
 		// rustls offers TLS 1.3 then TLS 1.2.
 		SupportedVersions: []uint16{0x0304, 0x0303},
 		// rustls sends a single key share for its preferred group.
@@ -162,6 +196,8 @@ func GrokCLIHTTP2Profile() *HTTP2Profile {
 		ConnectionWindowUpdate: grokCLIH2ConnectionWindowUpdate,
 		PingInterval:           grokCLIH2PingInterval,
 		PingTimeout:            grokCLIH2PingTimeout,
+		PseudoHeaderOrder:      append([]string{}, grokCLIHTTP2PseudoHeaderOrder...),
+		RegularHeaderOrder:     append([]string{}, grokCLIHTTP2RegularHeaderOrder...),
 	}
 }
 

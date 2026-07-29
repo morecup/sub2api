@@ -1,0 +1,635 @@
+{
+  "bindings": {
+    "session_hash": "ef94bd8e1a7724d26f083ae5",
+    "target_hash": "d2da8087251c4e645ec146d7"
+  },
+  "evidence": {
+    "local_psk_offered": true,
+    "local_psk_selected_by_server": true,
+    "official_psk_offered": true,
+    "official_psk_selected_by_server": true,
+    "same_official_process": true,
+    "same_official_session": true,
+    "tcp_reconnect_forced_between_prompts": true
+  },
+  "limitations": {
+    "randomized_extension_order_compared_by_set_and_invariants": true,
+    "single_official_resumption_sample": true,
+    "ticket_and_binder_bytes_are_intentionally_unavailable_from_report": true
+  },
+  "local_grok_profile": {
+    "fresh_client_hello": {
+      "cipher_suites": [
+        4866,
+        4865,
+        4867,
+        49196,
+        49195,
+        52393,
+        49200,
+        49199,
+        52392,
+        255
+      ],
+      "compression_methods": [
+        0
+      ],
+      "extension_order": [
+        0,
+        13,
+        5,
+        11,
+        51,
+        16,
+        43,
+        10,
+        23,
+        35,
+        45
+      ],
+      "extensions": [
+        {
+          "id": 0,
+          "length": 21,
+          "names": [
+            {
+              "length": 16,
+              "type": 0
+            }
+          ]
+        },
+        {
+          "algorithms": [
+            1283,
+            1027,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "id": 13,
+          "length": 20
+        },
+        {
+          "id": 5,
+          "length": 5
+        },
+        {
+          "formats": [
+            0
+          ],
+          "id": 11,
+          "length": 2
+        },
+        {
+          "id": 51,
+          "length": 38,
+          "shares": [
+            {
+              "group": 29,
+              "key_exchange_length": 32
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 43,
+          "length": 5,
+          "versions": [
+            772,
+            771
+          ]
+        },
+        {
+          "groups": [
+            29,
+            23,
+            24
+          ],
+          "id": 10,
+          "length": 8
+        },
+        {
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 35,
+          "length": 0
+        },
+        {
+          "id": 45,
+          "length": 2,
+          "modes": [
+            1
+          ]
+        }
+      ],
+      "handshake_length": 256,
+      "legacy_version": 771,
+      "pre_shared_key_last": false,
+      "pre_shared_key_present": false,
+      "session_id_length": 32
+    },
+    "resumed_client_hello": {
+      "cipher_suites": [
+        4866,
+        4865,
+        4867,
+        49196,
+        49195,
+        52393,
+        49200,
+        49199,
+        52392,
+        255
+      ],
+      "compression_methods": [
+        0
+      ],
+      "extension_order": [
+        43,
+        45,
+        5,
+        16,
+        11,
+        23,
+        51,
+        0,
+        10,
+        13,
+        41
+      ],
+      "extensions": [
+        {
+          "id": 43,
+          "length": 5,
+          "versions": [
+            772,
+            771
+          ]
+        },
+        {
+          "id": 45,
+          "length": 2,
+          "modes": [
+            1
+          ]
+        },
+        {
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "formats": [
+            0
+          ],
+          "id": 11,
+          "length": 2
+        },
+        {
+          "id": 23,
+          "length": 0
+        },
+        {
+          "id": 51,
+          "length": 38,
+          "shares": [
+            {
+              "group": 29,
+              "key_exchange_length": 32
+            }
+          ]
+        },
+        {
+          "id": 0,
+          "length": 21,
+          "names": [
+            {
+              "length": 16,
+              "type": 0
+            }
+          ]
+        },
+        {
+          "groups": [
+            29,
+            23,
+            24
+          ],
+          "id": 10,
+          "length": 8
+        },
+        {
+          "algorithms": [
+            1283,
+            1027,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "id": 13,
+          "length": 20
+        },
+        {
+          "binder_lengths": [
+            48
+          ],
+          "id": 41,
+          "identities": [
+            {
+              "identity_bound_hash": "89ddb1d70c331a8eb92dd207",
+              "identity_length": 262,
+              "obfuscated_ticket_age": 3622372159
+            }
+          ],
+          "length": 321
+        }
+      ],
+      "handshake_length": 577,
+      "legacy_version": 771,
+      "pre_shared_key_last": true,
+      "pre_shared_key_present": true,
+      "session_id_length": 32
+    },
+    "resumed_server_hello": {
+      "cipher_suite": 4866,
+      "compression_method": 0,
+      "extension_order": [
+        41,
+        51,
+        43
+      ],
+      "handshake_length": 128,
+      "legacy_version": 771,
+      "resumption_accepted": true,
+      "selected_psk_identity": 0,
+      "selected_version": 772,
+      "session_id_length": 32
+    }
+  },
+  "official": {
+    "fresh_client_hello": {
+      "cipher_suites": [
+        4866,
+        4865,
+        4867,
+        49196,
+        49195,
+        52393,
+        49200,
+        49199,
+        52392,
+        255
+      ],
+      "compression_methods": [
+        0
+      ],
+      "extension_order": [
+        0,
+        43,
+        10,
+        35,
+        5,
+        16,
+        23,
+        13,
+        51,
+        45,
+        11
+      ],
+      "extensions": [
+        {
+          "id": 0,
+          "length": 21,
+          "names": [
+            {
+              "length": 16,
+              "type": 0
+            }
+          ]
+        },
+        {
+          "id": 43,
+          "length": 5,
+          "versions": [
+            772,
+            771
+          ]
+        },
+        {
+          "groups": [
+            29,
+            23,
+            24
+          ],
+          "id": 10,
+          "length": 8
+        },
+        {
+          "id": 35,
+          "length": 0
+        },
+        {
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 23,
+          "length": 0
+        },
+        {
+          "algorithms": [
+            1283,
+            1027,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "id": 13,
+          "length": 20
+        },
+        {
+          "id": 51,
+          "length": 38,
+          "shares": [
+            {
+              "group": 29,
+              "key_exchange_length": 32
+            }
+          ]
+        },
+        {
+          "id": 45,
+          "length": 2,
+          "modes": [
+            1
+          ]
+        },
+        {
+          "formats": [
+            0
+          ],
+          "id": 11,
+          "length": 2
+        }
+      ],
+      "handshake_length": 256,
+      "legacy_version": 771,
+      "pre_shared_key_last": false,
+      "pre_shared_key_present": false,
+      "session_id_length": 32
+    },
+    "resumed_client_hello": {
+      "cipher_suites": [
+        4866,
+        4865,
+        4867,
+        49196,
+        49195,
+        52393,
+        49200,
+        49199,
+        52392,
+        255
+      ],
+      "compression_methods": [
+        0
+      ],
+      "extension_order": [
+        0,
+        16,
+        23,
+        13,
+        45,
+        5,
+        51,
+        11,
+        10,
+        43,
+        41
+      ],
+      "extensions": [
+        {
+          "id": 0,
+          "length": 21,
+          "names": [
+            {
+              "length": 16,
+              "type": 0
+            }
+          ]
+        },
+        {
+          "id": 16,
+          "length": 14,
+          "protocols": [
+            "h2",
+            "http/1.1"
+          ]
+        },
+        {
+          "id": 23,
+          "length": 0
+        },
+        {
+          "algorithms": [
+            1283,
+            1027,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "id": 13,
+          "length": 20
+        },
+        {
+          "id": 45,
+          "length": 2,
+          "modes": [
+            1
+          ]
+        },
+        {
+          "id": 5,
+          "length": 5
+        },
+        {
+          "id": 51,
+          "length": 38,
+          "shares": [
+            {
+              "group": 29,
+              "key_exchange_length": 32
+            }
+          ]
+        },
+        {
+          "formats": [
+            0
+          ],
+          "id": 11,
+          "length": 2
+        },
+        {
+          "groups": [
+            29,
+            23,
+            24
+          ],
+          "id": 10,
+          "length": 8
+        },
+        {
+          "id": 43,
+          "length": 5,
+          "versions": [
+            772,
+            771
+          ]
+        },
+        {
+          "binder_lengths": [
+            48
+          ],
+          "id": 41,
+          "identities": [
+            {
+              "identity_bound_hash": "15f2ccff3b43a0ebfb3ba172",
+              "identity_length": 262,
+              "obfuscated_ticket_age": 2837619751
+            }
+          ],
+          "length": 321
+        }
+      ],
+      "handshake_length": 577,
+      "legacy_version": 771,
+      "pre_shared_key_last": true,
+      "pre_shared_key_present": true,
+      "session_id_length": 32
+    },
+    "resumed_server_hello": {
+      "cipher_suite": 4866,
+      "compression_method": 0,
+      "extension_order": [
+        41,
+        51,
+        43
+      ],
+      "handshake_length": 128,
+      "legacy_version": 771,
+      "resumption_accepted": true,
+      "selected_psk_identity": 0,
+      "selected_version": 772,
+      "session_id_length": 32
+    }
+  },
+  "official_binary": {
+    "process_hash": "0ad59a86fb23af397817ddeb",
+    "sha256": "2469bd182af212c7fcb84f2981999e4e8a6a7a2e4172bad3ae7f787a1f11407c",
+    "version": "grok 0.2.112 (9bbd559437)"
+  },
+  "parity": {
+    "extension_order_exact_match_required": false,
+    "extension_order_reason": "rustls shuffles non-PSK extensions per connection; PSK remains last",
+    "fresh": {
+      "all_required_equal": true,
+      "checks": {
+        "alpn": true,
+        "cipher_suites": true,
+        "compression_methods": true,
+        "ec_point_formats": true,
+        "extension_set": true,
+        "key_share": true,
+        "legacy_version": true,
+        "pre_shared_key_last": true,
+        "psk_binder_lengths": true,
+        "psk_identity_lengths": true,
+        "psk_modes": true,
+        "session_id_length": true,
+        "signature_algorithms": true,
+        "supported_groups": true,
+        "supported_versions": true
+      }
+    },
+    "required_checks_passed": true,
+    "resumed": {
+      "all_required_equal": true,
+      "checks": {
+        "alpn": true,
+        "cipher_suites": true,
+        "compression_methods": true,
+        "ec_point_formats": true,
+        "extension_set": true,
+        "key_share": true,
+        "legacy_version": true,
+        "pre_shared_key_last": true,
+        "psk_binder_lengths": true,
+        "psk_identity_lengths": true,
+        "psk_modes": true,
+        "session_id_length": true,
+        "signature_algorithms": true,
+        "supported_groups": true,
+        "supported_versions": true
+      }
+    },
+    "server": {
+      "cipher_suite": true,
+      "resumption_accepted": true,
+      "selected_psk_identity": true,
+      "selected_version": true
+    }
+  },
+  "safety": {
+    "config_unchanged": true,
+    "hostname_persisted": false,
+    "parent_proxy_environment_unchanged": true,
+    "request_or_response_persisted": false,
+    "ticket_identity_hash_is_run_salted": true,
+    "ticket_identity_persisted": false,
+    "tls_bytes_modified": false,
+    "tls_terminated_by_capture_proxy": false,
+    "windows_root_store_modified": false
+  },
+  "schema_version": 1,
+  "status": "OFFICIAL-TLS-RESUMPTION-STRUCTURALLY-ALIGNED"
+}

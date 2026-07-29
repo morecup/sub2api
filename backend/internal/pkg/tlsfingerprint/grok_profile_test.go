@@ -122,9 +122,19 @@ func TestGrokCLIProfileAdvertisesHTTP2(t *testing.T) {
 	if !profile.AdvertisesHTTP2() {
 		t.Fatal("Grok CLI profile must offer h2 during ALPN")
 	}
+	if !profile.RequiresGrokHTTP2Transport() {
+		t.Fatal("Grok CLI profile must opt into the Grok-specific HTTP/2 transport fork")
+	}
 	http1 := profile.WithALPNProtocols(ALPNProtocolHTTP1)
 	if http1.AdvertisesHTTP2() {
 		t.Fatal("the HTTP/1.1 companion must not offer h2")
+	}
+	if !http1.RequiresGrokHTTP2Transport() {
+		t.Fatal("changing ALPN must not clear the explicit Grok fork capability")
+	}
+	synthetic := &Profile{ALPNProtocols: []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1}}
+	if synthetic.RequiresGrokHTTP2Transport() {
+		t.Fatal("advertising h2 alone must not opt a profile into the Grok fork")
 	}
 	assertSliceEqual(t, "http1_alpn", http1.EffectiveALPNProtocols(), []string{"http/1.1"})
 	// The companion must keep the same handshake shape, only the ALPN differs.

@@ -527,6 +527,9 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	// 上的 Anthropic 与 Grok 账号会复用彼此的客户端。
 	profileKey := profile.CacheKey()
 	cacheKey := "tls:" + profileKey + "|" + buildCacheKey(isolation, proxyKey, accountID, upstreamProtocolModeDefault)
+	if upstreamProfile == service.HTTPUpstreamProfileGrokControlPlane {
+		cacheKey += "|grok_control_plane"
+	}
 	if profile.ResumeSessions {
 		// 会话复用画像的 transport 持有 TLS 票据仓库，票据本身就把两条连接
 		// 绑定成同一个客户端。proxy 隔离模式下 accountID 不进 key，若不在此
@@ -536,6 +539,9 @@ func (s *httpUpstreamService) getClientEntryWithTLS(proxyURL string, accountID i
 	}
 	settings = applyProfilePoolProfile(settings, profile)
 	poolKey := buildPoolKey(settings, upstreamProtocolModeDefault) + ":tls:" + profileKey
+	if upstreamProfile == service.HTTPUpstreamProfileGrokControlPlane {
+		poolKey += ":grok_control_plane"
+	}
 
 	now := time.Now()
 	nowUnix := now.UnixNano()
@@ -695,8 +701,14 @@ func (s *httpUpstreamService) getClientEntry(proxyURL string, accountID int64, a
 	settings = s.applyProfilePoolSettings(settings, profile)
 	// 构建缓存键（根据隔离策略不同）
 	cacheKey := buildCacheKey(isolation, proxyKey, accountID, protocolMode)
+	if profile == service.HTTPUpstreamProfileGrokControlPlane {
+		cacheKey += "|grok_control_plane"
+	}
 	// 构建连接池配置键（用于检测配置变更）
 	poolKey := buildPoolKey(settings, protocolMode)
+	if profile == service.HTTPUpstreamProfileGrokControlPlane {
+		poolKey += ":grok_control_plane"
+	}
 
 	now := time.Now()
 	nowUnix := now.UnixNano()

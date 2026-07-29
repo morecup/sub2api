@@ -211,15 +211,14 @@ func TestGrokCLIProfileEmitsCapturedWireShape(t *testing.T) {
 // the HTTP/2 fingerprint does not depend on the credential type.
 const (
 	capturedGrokCLIAkamaiFingerprint = "2:0;4:2097152;5:16384;6:16384|5177345|0|m,s,a,p"
-	// What this transport actually produces. The SETTINGS block and the
-	// WINDOW_UPDATE match the capture exactly; the pseudo-header order is
-	// hardcoded in golang.org/x/net/http2 and cannot be changed without forking
-	// it, so it stays the one observable difference.
-	emittedAkamaiFingerprint = "2:0;4:2097152;5:16384;6:16384|5177345|0|a,m,p,s"
 )
 
 // TestGrokCLIHTTP2ProfileMatchesCapturedPreamble pins the SETTINGS order and
 // values plus the connection WINDOW_UPDATE against the captured preamble.
+//
+// Header ordering now belongs to the Grok fork tests: this package only owns
+// the profile data itself, so the observable request-head block order is locked
+// closer to the encoder path.
 func TestGrokCLIHTTP2ProfileMatchesCapturedPreamble(t *testing.T) {
 	profile := GrokCLIHTTP2Profile()
 
@@ -227,17 +226,14 @@ func TestGrokCLIHTTP2ProfileMatchesCapturedPreamble(t *testing.T) {
 	for _, setting := range profile.Settings {
 		settings = append(settings, fmt.Sprintf("%d:%d", setting.ID, setting.Value))
 	}
-	got := fmt.Sprintf("%s|%d|0|a,m,p,s", strings.Join(settings, ";"), profile.ConnectionWindowUpdate)
-	if got != emittedAkamaiFingerprint {
-		t.Fatalf("emitted Akamai fingerprint = %s, want %s", got, emittedAkamaiFingerprint)
+	got := fmt.Sprintf("%s|%d", strings.Join(settings, ";"), profile.ConnectionWindowUpdate)
+	if got != "2:0;4:2097152;5:16384;6:16384|5177345" {
+		t.Fatalf("SETTINGS/WINDOW_UPDATE = %s, want 2:0;4:2097152;5:16384;6:16384|5177345", got)
 	}
 
-	// Everything except the pseudo-header order must be byte-identical to the
-	// captured official client.
 	capturedPrefix, _, _ := strings.Cut(capturedGrokCLIAkamaiFingerprint, "|0|")
-	emittedPrefix, _, _ := strings.Cut(emittedAkamaiFingerprint, "|0|")
-	if capturedPrefix != emittedPrefix {
-		t.Fatalf("SETTINGS/WINDOW_UPDATE diverged from the capture:\n got: %s\nwant: %s", emittedPrefix, capturedPrefix)
+	if got != capturedPrefix {
+		t.Fatalf("SETTINGS/WINDOW_UPDATE diverged from the capture:\n got: %s\nwant: %s", got, capturedPrefix)
 	}
 }
 

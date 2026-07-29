@@ -115,7 +115,7 @@ func (s *OpenAIGatewayService) forwardGrokResponses(
 	upstreamStart := time.Now()
 	var resp *http.Response
 	for attempt := 0; ; attempt++ {
-		upstreamReq, buildErr := buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity, s.cfg)
+		upstreamReq, buildErr := s.buildGrokResponsesRequest(upstreamCtx, c, account, patchedBody, token, cacheIdentity, s.cfg)
 		if buildErr != nil {
 			return nil, buildErr
 		}
@@ -901,7 +901,7 @@ func (s *OpenAIGatewayService) describeGrokComposerImage(
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
 	// Image-description probes are auxiliary requests, not conversation turns.
 	// Do not bind them to the caller's Grok prompt-cache identity.
-	upstreamReq, err := buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "", s.cfg)
+	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, body, token, "", s.cfg)
 	releaseUpstreamCtx()
 	if err != nil {
 		return "", OpenAIUsage{}, fmt.Errorf("build grok composer image bridge request: %w", err)
@@ -1067,6 +1067,42 @@ func addOpenAIUsage(dst *OpenAIUsage, usage OpenAIUsage) {
 }
 
 func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config) (*http.Request, error) {
+	return buildGrokResponsesRequestWithTurnStore(ctx, c, account, body, token, cacheIdentity, cfg, nil)
+}
+
+func (s *OpenAIGatewayService) buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, cacheIdentity string, cfg *config.Config) (*http.Request, error) {
+	var turnStore GrokTurnIndexStore
+	if s != nil && s.cache != nil {
+		turnStore, _ = s.cache.(GrokTurnIndexStore)
+	}
+	catalog := s.resolveGrokCompactionCatalog(ctx, account, token)
+	return buildGrokResponsesRequestWithState(ctx, c, account, body, token, cacheIdentity, cfg, turnStore, catalog)
+}
+
+func buildGrokResponsesRequestWithTurnStore(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	token string,
+	cacheIdentity string,
+	cfg *config.Config,
+	turnStore GrokTurnIndexStore,
+) (*http.Request, error) {
+	return buildGrokResponsesRequestWithState(ctx, c, account, body, token, cacheIdentity, cfg, turnStore, nil)
+}
+
+func buildGrokResponsesRequestWithState(
+	ctx context.Context,
+	c *gin.Context,
+	account *Account,
+	body []byte,
+	token string,
+	cacheIdentity string,
+	cfg *config.Config,
+	turnStore GrokTurnIndexStore,
+	catalog *GrokCompactionCatalog,
+) (*http.Request, error) {
 	targetURL, err := buildGrokResponsesURL(account, cfg)
 	if err != nil {
 		return nil, err
@@ -1087,7 +1123,7 @@ func buildGrokResponsesRequest(ctx context.Context, c *gin.Context, account *Acc
 	}
 	if account.IsGrokOAuth() {
 		applyGrokCLIInferenceHeaders(req.Header)
-		applyGrokCLISessionHeaders(req.Header, account, body, cacheIdentity)
+		applyGrokCLISessionHeadersWithState(ctx, req.Header, account, body, cacheIdentity, turnStore, catalog)
 	}
 	applyGrokCacheHeaders(req.Header, cacheIdentity)
 	if c != nil {

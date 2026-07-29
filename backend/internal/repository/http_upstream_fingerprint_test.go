@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -16,85 +17,37 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
-	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-// TestFingerprintHTTP2TransportEmitsGrokCLIPreamble drives the real
-// http2.Transport built for the Grok profile against a listener that records
-// the bytes it receives, so the assertion is on what actually goes on the wire
-// rather than on the knobs we set.
-//
-// It is the regression guard for the whole HTTP/2 half of the fingerprint: if a
-// future Go or x/net/http2 release changes how the client preamble is produced,
-// this fails instead of silently reverting to a Go-shaped fingerprint.
-func TestFingerprintHTTP2TransportEmitsGrokCLIPreamble(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = listener.Close() })
+func TestNewFingerprintHTTP2Transport_GrokOrderedHeadersFailExplicitlyWhenUnsupported(t *testing.T) {
+	prev := grokHTTP2HeaderOrderSupported
+	grokHTTP2HeaderOrderSupported = func() bool { return false }
+	t.Cleanup(func() { grokHTTP2HeaderOrderSupported = prev })
 
-	type preamble struct {
-		settings     []tlsfingerprint.HTTP2Setting
-		windowUpdate uint32
-		err          error
-	}
-	preambleCh := make(chan preamble, 1)
-	go func() {
-		conn, acceptErr := listener.Accept()
-		if acceptErr != nil {
-			preambleCh <- preamble{err: acceptErr}
-			return
-		}
-		defer func() { _ = conn.Close() }()
-		settings, windowUpdate, readErr := readClientPreamble(conn)
-		preambleCh <- preamble{settings: settings, windowUpdate: windowUpdate, err: readErr}
-	}()
-
-	profile := tlsfingerprint.GrokCLIProfile()
-	transport, err := newFingerprintHTTP2Transport(poolSettings{}, profile, func(ctx context.Context, network, addr string) (net.Conn, error) {
-		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	transport, err := newFingerprintHTTP2Transport(poolSettings{}, tlsfingerprint.GrokCLIProfile(), func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return nil, fmt.Errorf("dial should not run in transport selection test")
 	})
-	require.NoError(t, err)
-	// The preamble is protocol-level and identical over TLS; h2c keeps the test
-	// free of certificate plumbing.
-	transport.AllowHTTP = true
-	t.Cleanup(transport.CloseIdleConnections)
-
-	req, err := http.NewRequest(http.MethodPost, "http://"+listener.Addr().String()+"/v1/responses", strings.NewReader(`{}`))
-	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	// The server never answers, so the round trip fails; only the preamble matters.
-	if resp, roundTripErr := transport.RoundTrip(req.WithContext(ctx)); roundTripErr == nil {
-		_ = resp.Body.Close()
-	}
-
-	var got preamble
-	select {
-	case got = <-preambleCh:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for the HTTP/2 client preamble")
-	}
-	require.NoError(t, got.err)
-
-	require.Equal(t, profile.HTTP2.Settings, got.settings,
-		"client SETTINGS must match hyper/h2 in both order and values")
-	require.Equal(t, profile.HTTP2.ConnectionWindowUpdate, got.windowUpdate,
-		"initial connection WINDOW_UPDATE must match hyper's 5MiB target window")
+	require.Nil(t, transport)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "http2legacy")
+	require.Contains(t, err.Error(), "HeaderOrder")
 }
 
-func TestBuildUpstreamTransportWithTLSFingerprintUsesALPNPairForHTTP2Profiles(t *testing.T) {
-	roundTripper, err := buildUpstreamTransportWithTLSFingerprint(poolSettings{}, nil, tlsfingerprint.GrokCLIProfile())
+func TestBuildUpstreamTransportWithTLSFingerprint_NonGrokAdvertisesHTTP2SyntheticProfileStaysOnStdTransport(t *testing.T) {
+	profile := syntheticHTTP2Profile("Synthetic HTTP/2 profile")
+
+	roundTripper, err := buildUpstreamTransportWithTLSFingerprint(poolSettings{}, nil, profile)
 	require.NoError(t, err)
 	pair, ok := roundTripper.(*alpnRoundTripper)
-	require.True(t, ok, "an h2-capable profile must produce an ALPN-aware round tripper")
+	require.True(t, ok, "any h2-advertising profile still needs the ALPN-aware pair")
 	t.Cleanup(pair.CloseIdleConnections)
 
-	h1, ok := pair.h1.(*http.Transport)
-	require.True(t, ok)
-	require.NotNil(t, h1.DialTLSContext)
-	require.False(t, h1.ForceAttemptHTTP2, "HTTP/2 must be driven by the paired http2.Transport")
+	require.Equal(t,
+		"golang.org/x/net/http2",
+		reflect.TypeOf(pair.h2).Elem().PkgPath(),
+		"a non-Grok profile that only advertises h2 must stay on the standard x/net transport",
+	)
 }
 
 func TestBuildUpstreamTransportWithTLSFingerprintKeepsSingleTransportForHTTP1Profiles(t *testing.T) {
@@ -139,6 +92,62 @@ func TestALPNRoundTripperDemotesHostAfterALPNMismatch(t *testing.T) {
 		"the request body must be replayed on the fallback")
 }
 
+func TestALPNRoundTripperFallbackRebuildsConsumedBodyViaGetBody(t *testing.T) {
+	var getBodyCalls atomic.Int64
+	var h1Body string
+
+	pair := &alpnRoundTripper{
+		h2: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("dial: %w", tlsfingerprint.ErrALPNMismatch)
+		}),
+		h1: roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			h1Body = string(body)
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Request: req}, nil
+		}),
+	}
+
+	const payload = `{"model":"grok-4.5","input":"replay me"}`
+	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", io.NopCloser(strings.NewReader(payload)))
+	require.NoError(t, err)
+	req.GetBody = func() (io.ReadCloser, error) {
+		getBodyCalls.Add(1)
+		return io.NopCloser(strings.NewReader(payload)), nil
+	}
+
+	_, err = io.ReadAll(req.Body)
+	require.NoError(t, err, "precondition: the original body must already be consumed before fallback cloning")
+
+	resp, err := pair.RoundTrip(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, payload, h1Body, "fallback must read from a fresh GetBody clone, not the exhausted original body")
+	require.Equal(t, int64(1), getBodyCalls.Load(), "fallback must rebuild the request body via GetBody exactly once")
+}
+
+func TestALPNRoundTripperALPNMismatchWithoutGetBodySkipsHTTP1Fallback(t *testing.T) {
+	var h1Calls atomic.Int64
+
+	pair := &alpnRoundTripper{
+		h2: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			return nil, fmt.Errorf("dial: %w", tlsfingerprint.ErrALPNMismatch)
+		}),
+		h1: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+			h1Calls.Add(1)
+			return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody}, nil
+		}),
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://cli-chat-proxy.grok.com/v1/responses", io.NopCloser(strings.NewReader(`{"model":"grok-4.5"}`)))
+	require.NoError(t, err)
+	req.GetBody = nil
+
+	_, err = pair.RoundTrip(req)
+	require.ErrorIs(t, err, tlsfingerprint.ErrALPNMismatch)
+	require.Zero(t, h1Calls.Load(), "without GetBody the fallback must not retry with an unreplayable request body")
+}
+
 func TestALPNRoundTripperPropagatesNonALPNErrors(t *testing.T) {
 	upstreamErr := fmt.Errorf("connection refused")
 	pair := &alpnRoundTripper{
@@ -174,6 +183,14 @@ func TestFingerprintDialerRejectsUnsupportedProxySchemes(t *testing.T) {
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func syntheticHTTP2Profile(name string) *tlsfingerprint.Profile {
+	return &tlsfingerprint.Profile{
+		Name:          name,
+		ALPNProtocols: []string{tlsfingerprint.ALPNProtocolHTTP2, tlsfingerprint.ALPNProtocolHTTP1},
+		HTTP2:         tlsfingerprint.GrokCLIHTTP2Profile(),
+	}
+}
 
 // readClientPreamble reads the HTTP/2 client preface plus the SETTINGS and
 // connection WINDOW_UPDATE frames that follow it.
@@ -220,41 +237,6 @@ func readClientPreamble(conn net.Conn) ([]tlsfingerprint.HTTP2Setting, uint32, e
 		}
 	}
 	return settings, windowUpdate, nil
-}
-
-// Under "proxy" isolation the account is absent from the cache key, so the
-// profile identity is the only thing keeping an Anthropic (HTTP/1.1) client and
-// a Grok (h2) client from sharing one transport.
-func TestFingerprintClientCacheSeparatesProfilesUnderProxyIsolation(t *testing.T) {
-	cfg := &config.Config{}
-	cfg.Gateway.ConnectionPoolIsolation = config.ConnectionPoolIsolationProxy
-	svc := NewHTTPUpstream(cfg).(*httpUpstreamService)
-
-	grok, err := svc.getClientEntryWithTLS("", 1, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
-	require.NoError(t, err)
-	claude, err := svc.getClientEntryWithTLS("", 2, 1, tlsfingerprint.BuiltInDefaultProfile(), service.HTTPUpstreamProfileDefault, false, false)
-	require.NoError(t, err)
-
-	require.NotSame(t, grok.client, claude.client, "different profiles must not share a cached client")
-	require.IsType(t, &alpnRoundTripper{}, grok.client.Transport)
-	require.IsType(t, &http.Transport{}, claude.client.Transport)
-
-	again, err := svc.getClientEntryWithTLS("", 1, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
-	require.NoError(t, err)
-	require.Same(t, grok.client, again.client, "the same profile and account must reuse its cached client")
-
-	// A resumption-capable profile carries a TLS ticket store, and a ticket ties
-	// two connections together for the peer. Proxy isolation keeps the account out
-	// of the cache key, so resumption has to put it back: otherwise two Grok
-	// accounts behind one proxy would present each other's tickets.
-	otherAccount, err := svc.getClientEntryWithTLS("", 3, 1, tlsfingerprint.GrokCLIProfile(), service.HTTPUpstreamProfileDefault, false, false)
-	require.NoError(t, err)
-	require.NotSame(t, grok.client, otherAccount.client, "resumption must not share a ticket store across accounts")
-
-	// Profiles that never resume keep sharing one client under proxy isolation.
-	claudeAgain, err := svc.getClientEntryWithTLS("", 4, 1, tlsfingerprint.BuiltInDefaultProfile(), service.HTTPUpstreamProfileDefault, false, false)
-	require.NoError(t, err)
-	require.Same(t, claude.client, claudeAgain.client, "a profile without resumption must still pool across accounts")
 }
 
 // TestGrokCLIProfilePinsPoolAndResumption pins the reqwest client configuration

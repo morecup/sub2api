@@ -53,6 +53,10 @@ type Profile struct {
 	// only consulted when the profile negotiates h2; nil keeps the local
 	// HTTP/2 stack's own preamble.
 	HTTP2 *HTTP2Profile
+	// UseGrokHTTP2Transport opts this profile into the repository-local
+	// Grok-specific HTTP/2 transport fork. It is intentionally explicit:
+	// advertising h2 alone must not move a profile off the standard path.
+	UseGrokHTTP2Transport bool
 	// Pool describes the emulated client's connection pool and dial timeouts.
 	// nil keeps the local pool configuration.
 	Pool *PoolProfile
@@ -128,6 +132,12 @@ func (p *Profile) AdvertisesHTTP2() bool {
 		}
 	}
 	return false
+}
+
+// RequiresGrokHTTP2Transport reports whether this profile must use the
+// repository-local Grok HTTP/2 transport fork.
+func (p *Profile) RequiresGrokHTTP2Transport() bool {
+	return p != nil && p.UseGrokHTTP2Transport
 }
 
 // WithALPNProtocols returns a shallow copy of the profile that advertises only
@@ -408,6 +418,9 @@ func performTLSHandshake(ctx context.Context, conn net.Conn, profile *Profile, a
 	}
 
 	spec := buildClientHelloSpecFromProfile(profile)
+	if profile != nil && profile.ExtensionOrder == ExtensionOrderRustls && cachedSessionUsesTLS13(profile.SessionCache, host) {
+		spec.Extensions = omitLegacySessionTicketExtension(spec.Extensions)
+	}
 	config := &utls.Config{ServerName: host}
 	if profile.ResumesSessions() {
 		config.ClientSessionCache = profile.SessionCache
@@ -429,6 +442,11 @@ func performTLSHandshake(ctx context.Context, conn net.Conn, profile *Profile, a
 	}
 
 	state := tlsConn.ConnectionState()
+	if profile != nil {
+		if cache, ok := profile.SessionCache.(negotiatedVersionSessionCache); ok {
+			cache.recordNegotiatedVersion(host, state.Version)
+		}
+	}
 	slog.Debug("tls_fingerprint_handshake_success",
 		"host", host,
 		"version", state.Version,
@@ -436,6 +454,26 @@ func performTLSHandshake(ctx context.Context, conn net.Conn, profile *Profile, a
 		"alpn", state.NegotiatedProtocol)
 
 	return tlsConn, nil
+}
+
+func cachedSessionUsesTLS13(cache utls.ClientSessionCache, key string) bool {
+	tracked, ok := cache.(negotiatedVersionSessionCache)
+	if !ok {
+		return false
+	}
+	version, ok := tracked.cachedVersion(key)
+	return ok && version == utls.VersionTLS13
+}
+
+func omitLegacySessionTicketExtension(extensions []utls.TLSExtension) []utls.TLSExtension {
+	filtered := make([]utls.TLSExtension, 0, len(extensions))
+	for _, extension := range extensions {
+		if _, ok := extension.(*utls.SessionTicketExtension); ok {
+			continue
+		}
+		filtered = append(filtered, extension)
+	}
+	return filtered
 }
 
 // toUTLSCurves converts uint16 slice to utls.CurveID slice.

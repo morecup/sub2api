@@ -1,0 +1,186 @@
+{
+  "binary_audit": {
+    "binary_sha256": "2469bd182af212c7fcb84f2981999e4e8a6a7a2e4172bad3ae7f787a1f11407c",
+    "declared_scenario_wire_affecting_patch_observed": false,
+    "embedded_component_versions": {
+      "h2": [
+        "0.4.15"
+      ],
+      "http": [
+        "0.2.12",
+        "1.4.0"
+      ],
+      "hyper": [
+        "1.8.1"
+      ],
+      "hyper-util": [
+        "0.1.20"
+      ],
+      "reqwest": [
+        "0.12.24",
+        "0.13.4"
+      ]
+    },
+    "embedded_git_h2_source_marker_count": 0,
+    "expected_binary_sha256_match": true,
+    "h2_anchors_valid_against_local_crates_io_source": true,
+    "h2_crate_checksum": "6cb093c84e8bd9b188d4c4a8cb6579fc016968d14c99882163cd3ff402a4f155",
+    "h2_crates_io_registry_path_observed": true,
+    "h2_line_anchor_count": 235,
+    "h2_source_file_anchor_count": 415,
+    "h2_unique_source_file_count": 31,
+    "private_patch_absence_proven": false,
+    "public_cargo_lock_sha256": "852e088a2b4ac3586142592a6c6bbd3f78b8446a8fa8a24b5131baa44b31fd38",
+    "public_cargo_lock_sha256_match": true,
+    "public_lock_uses_registry_h2_0_4_15": true,
+    "public_sync_commit": "47348d13ec4508dcfe440e34c6d511bb02998fb2",
+    "replacement_or_patch_evidence_found": false,
+    "verdict": "NO_PATCH_EVIDENCE_AND_DECLARED_SCENARIO_WIRE_ALIGNED"
+  },
+  "bindings": {
+    "connection_hash": "4b87c2504132ecfe6a24aa5f",
+    "session_hash": "68667f321b06fad2103d1db5"
+  },
+  "captured_at_utc": "2026-07-28T15:24:03.100115+00:00",
+  "limitations": {
+    "private_patch_absence_is_not_mathematically_provable_from_stripped_binary": true,
+    "repository_report_cannot_reconstruct_credentials_or_raw_header_blocks": true,
+    "wire_conclusion_is_limited_to_the_two_declared_requests_and_preceding_blocks_on_the_same_connection": true
+  },
+  "official_binary": {
+    "process_hash": "2678ad1d88f8c233ac294d83",
+    "sha256": "2469bd182af212c7fcb84f2981999e4e8a6a7a2e4172bad3ae7f787a1f11407c",
+    "version": "grok 0.2.112 (9bbd559437)"
+  },
+  "parity": {
+    "all_header_blocks_on_target_connection_compared": 3,
+    "all_header_blocks_on_target_connection_equal": true,
+    "dynamic_table_reuse_observed": true,
+    "huffman_branch_aligned": true,
+    "sensitive_never_index_observed": false,
+    "skip_policy_aligned": true,
+    "target_header_blocks_equal": true
+  },
+  "requests": [
+    {
+      "branch_fingerprint_sha256": "08c743160189e8da4f308d2856e64eeecee243037e1ce80c20ecd2ef49a6f1e0",
+      "byte_equal": true,
+      "completed": true,
+      "decoded_header_count": 24,
+      "dynamic_reference_count": 15,
+      "frame_count": 1,
+      "frames": [
+        {
+          "flags": 4,
+          "fragment_length": 994,
+          "payload_length": 994,
+          "payload_sha256": "cc29b8a2ef38fe907fccbeb4ff7a93847fe765be6defa67caffd8c7b7e71624e",
+          "type": "HEADERS"
+        }
+      ],
+      "literal_nonempty_all_huffman": true,
+      "local_header_block_length": 994,
+      "local_header_block_sha256": "cc29b8a2ef38fe907fccbeb4ff7a93847fe765be6defa67caffd8c7b7e71624e",
+      "official_header_block_length": 994,
+      "official_header_block_sha256": "cc29b8a2ef38fe907fccbeb4ff7a93847fe765be6defa67caffd8c7b7e71624e",
+      "representation_counts": {
+        "indexed": 13,
+        "literal_incremental": 8,
+        "literal_without_indexing": 3
+      },
+      "sensitive_never_index_count": 0,
+      "skip_field_count": 3,
+      "skip_policy_aligned": true,
+      "skip_without_or_never_index_count": 3,
+      "stream_id": 3
+    },
+    {
+      "branch_fingerprint_sha256": "81e3ce3499d9275a9af14cb254abcecb0c93b29d8dc1e1aaba842e2e49afedcc",
+      "byte_equal": true,
+      "completed": true,
+      "decoded_header_count": 24,
+      "dynamic_reference_count": 19,
+      "frame_count": 1,
+      "frames": [
+        {
+          "flags": 4,
+          "fragment_length": 833,
+          "payload_length": 833,
+          "payload_sha256": "845bcb1c11bdf151f5adbb00e070d0bfad184152a4b1a15500e4469844294800",
+          "type": "HEADERS"
+        }
+      ],
+      "literal_nonempty_all_huffman": true,
+      "local_header_block_length": 833,
+      "local_header_block_sha256": "845bcb1c11bdf151f5adbb00e070d0bfad184152a4b1a15500e4469844294800",
+      "official_header_block_length": 833,
+      "official_header_block_sha256": "845bcb1c11bdf151f5adbb00e070d0bfad184152a4b1a15500e4469844294800",
+      "representation_counts": {
+        "indexed": 18,
+        "literal_incremental": 3,
+        "literal_without_indexing": 3
+      },
+      "sensitive_never_index_count": 0,
+      "skip_field_count": 3,
+      "skip_policy_aligned": true,
+      "skip_without_or_never_index_count": 3,
+      "stream_id": 5
+    }
+  ],
+  "safety": {
+    "authorization_persisted": false,
+    "config_sha256_after": "bf00790f1a9edbbe24e2380bc9459fbc57e6e0144911294680c297fcb715d1f4",
+    "config_sha256_before": "bf00790f1a9edbbe24e2380bc9459fbc57e6e0144911294680c297fcb715d1f4",
+    "config_unchanged": true,
+    "decoded_headers_persisted": false,
+    "parent_proxy_environment_unchanged": true,
+    "production_endpoint_persisted": false,
+    "raw_headers_persisted": false,
+    "request_or_response_body_persisted": false,
+    "temporary_ca_deleted_on_exit": true,
+    "windows_root_store_modified": false
+  },
+  "schema_version": 1,
+  "scope": {
+    "consecutive_odd_streams": true,
+    "official_connection_count": 1,
+    "official_process_count": 1,
+    "official_session_count": 1,
+    "same_connection": true,
+    "same_process": true,
+    "same_session": true,
+    "target_request_count": 2
+  },
+  "status": "OFFICIAL-WIRE-ALIGNED",
+  "transport": {
+    "alpn": "h2",
+    "client_preface_exact": true,
+    "client_settings": [
+      {
+        "id": 2,
+        "value": 0
+      },
+      {
+        "id": 4,
+        "value": 2097152
+      },
+      {
+        "id": 5,
+        "value": 16384
+      },
+      {
+        "id": 6,
+        "value": 16384
+      }
+    ],
+    "close_observed": true,
+    "goaway_observed": false,
+    "peer_header_table_size_updates": [],
+    "settings_ack": true,
+    "stream_ids": [
+      3,
+      5
+    ],
+    "upstream_certificate_sha256": "e0771d8d37e2d93166639f8d0203489d68a63a8bc53a44c2a903497476c338ce"
+  }
+}

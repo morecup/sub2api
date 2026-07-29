@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -13,6 +14,23 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
 )
+
+type grokTurnIndexStoreStub struct {
+	turn  int
+	err   error
+	calls int
+}
+
+func (s *grokTurnIndexStoreStub) ObserveGrokTurnIndex(_ context.Context, _ int64, _ string, derived int, _ time.Duration) (int, error) {
+	s.calls++
+	if s.err != nil {
+		return 0, s.err
+	}
+	if s.turn < derived {
+		s.turn = derived
+	}
+	return s.turn, nil
+}
 
 // uuidV7Time reads the 48-bit millisecond timestamp of a UUIDv7. uuid.UUID.Time
 // decodes the v1 Gregorian layout, which is not what v7 stores.
@@ -234,6 +252,44 @@ func TestApplyGrokCLISessionHeadersTurnIndexNeverFallsBack(t *testing.T) {
 	other := make(http.Header)
 	applyGrokCLISessionHeaders(other, account, trimmed, "conv-trim-other")
 	require.Equal(t, "1", other.Get(grokTurnIndexHeader))
+}
+
+func TestApplyGrokCLISessionHeadersUsesSharedTurnMaximum(t *testing.T) {
+	t.Parallel()
+
+	account := grokCLISessionTestAccount(7131, "user")
+	store := &grokTurnIndexStoreStub{turn: 7}
+	headers := make(http.Header)
+	applyGrokCLISessionHeadersWithStore(
+		context.Background(),
+		headers,
+		account,
+		[]byte(`{"model":"grok-4.5","input":[{"role":"user","content":"trimmed"}]}`),
+		"conv-shared-max",
+		store,
+	)
+
+	require.Equal(t, "7", headers.Get(grokTurnIndexHeader))
+	require.Equal(t, 1, store.calls)
+}
+
+func TestApplyGrokCLISessionHeadersFallsBackWhenSharedStoreFails(t *testing.T) {
+	t.Parallel()
+
+	account := grokCLISessionTestAccount(7132, "user")
+	store := &grokTurnIndexStoreStub{err: errors.New("redis unavailable")}
+	headers := make(http.Header)
+	applyGrokCLISessionHeadersWithStore(
+		context.Background(),
+		headers,
+		account,
+		[]byte(`{"model":"grok-4.5","input":[{"role":"user","content":"one"},{"role":"user","content":"two"}]}`),
+		"conv-shared-fallback",
+		store,
+	)
+
+	require.Equal(t, "2", headers.Get(grokTurnIndexHeader))
+	require.Equal(t, 1, store.calls)
 }
 
 func TestGrokTurnTrackerEvictsExpiredAndOldestEntries(t *testing.T) {

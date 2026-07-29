@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -148,7 +149,38 @@ func grokAgentIDForAccount(accountID int64) string {
 // conversationID is the already-derived Grok conversation identity; when it is
 // empty the request is not a conversation turn (probes, /responses/compact) and
 // the session headers are skipped rather than invented.
+
+// GrokTurnIndexStore is optionally implemented by the shared gateway cache.
+// Keeping it separate from GatewayCache avoids forcing every test cache and
+// cache decorator to grow a Grok-specific method.
+type GrokTurnIndexStore interface {
+	ObserveGrokTurnIndex(ctx context.Context, accountID int64, conversationID string, derived int, ttl time.Duration) (int, error)
+}
+
 func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []byte, conversationID string) {
+	applyGrokCLISessionHeadersWithStore(context.Background(), headers, account, body, conversationID, nil)
+}
+
+func applyGrokCLISessionHeadersWithStore(
+	ctx context.Context,
+	headers http.Header,
+	account *Account,
+	body []byte,
+	conversationID string,
+	store GrokTurnIndexStore,
+) {
+	applyGrokCLISessionHeadersWithState(ctx, headers, account, body, conversationID, store, nil)
+}
+
+func applyGrokCLISessionHeadersWithState(
+	ctx context.Context,
+	headers http.Header,
+	account *Account,
+	body []byte,
+	conversationID string,
+	store GrokTurnIndexStore,
+	catalog *GrokCompactionCatalog,
+) {
 	if headers == nil || account == nil {
 		return
 	}
@@ -176,10 +208,7 @@ func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []by
 		// Mirrors the body so the header can never route to a different model
 		// than the one the request actually asks for.
 		headers.Set(grokModelOverrideHeader, model)
-		if compactionAt, ok := grokCompactionAt(model); ok {
-			headers.Set(grokCompactionsLeftHeader, strconv.Itoa(grokCompactionsRemainingForBody(body)))
-			headers.Set(grokCompactionAtHeader, strconv.FormatUint(compactionAt, 10))
-		}
+		applyGrokCompactionHeaders(headers, model, body, catalog)
 	}
 
 	conversationID = strings.TrimSpace(conversationID)
@@ -188,12 +217,62 @@ func applyGrokCLISessionHeaders(headers http.Header, account *Account, body []by
 	}
 	// The capture shows session id and conversation id carrying the same value.
 	headers.Set(grokSessionIDHeader, conversationID)
-	turn := defaultGrokTurnTracker.observe(
-		fmt.Sprintf("%d:%s", account.ID, conversationID),
-		grokTurnIndexFromBody(body),
-		time.Now(),
-	)
+	turn := resolveGrokTurnIndex(ctx, store, account.ID, conversationID, grokTurnIndexFromBody(body), time.Now())
 	headers.Set(grokTurnIndexHeader, strconv.Itoa(turn))
+}
+
+func applyGrokCompactionHeaders(headers http.Header, model string, body []byte, catalog *GrokCompactionCatalog) {
+	if headers == nil {
+		return
+	}
+	if catalog == nil {
+		// The only fallback is the value observed on a real official request.
+		// Guessed values for other models would be internally inconsistent.
+		if compactionAt, ok := grokCompactionAt(model); ok {
+			headers.Set(grokCompactionsLeftHeader, strconv.Itoa(grokCompactionsRemainingForBody(body)))
+			headers.Set(grokCompactionAtHeader, strconv.FormatUint(compactionAt, 10))
+		}
+		return
+	}
+
+	config, ok := catalog.Models[strings.ToLower(strings.TrimSpace(model))]
+	if !ok {
+		return
+	}
+	// These controls are independent in the official model schema. One can be
+	// enabled while the other is absent or false.
+	if config.CompactionAt.Enabled {
+		headers.Set(grokCompactionAtHeader, strconv.FormatUint(config.CompactionAt.Value, 10))
+	}
+	if config.CompactionsRemaining.Enabled {
+		remaining := config.CompactionsRemaining.Value
+		if config.CompactionsRemaining.Dynamic {
+			remaining = uint8(grokCompactionsRemainingForBody(body))
+		}
+		headers.Set(grokCompactionsLeftHeader, strconv.FormatUint(uint64(remaining), 10))
+	}
+}
+
+func resolveGrokTurnIndex(
+	ctx context.Context,
+	store GrokTurnIndexStore,
+	accountID int64,
+	conversationID string,
+	derived int,
+	now time.Time,
+) int {
+	key := fmt.Sprintf("%d:%s", accountID, conversationID)
+	// Seed the shared max with the process-local max. This prevents a temporary
+	// Redis loss or a Redis restart from making this process report a lower turn.
+	local := defaultGrokTurnTracker.observe(key, derived, now)
+	if store == nil {
+		return local
+	}
+	shared, err := store.ObserveGrokTurnIndex(ctx, accountID, conversationID, local, grokTurnTrackerTTL)
+	if err != nil || shared < 1 {
+		return local
+	}
+	return defaultGrokTurnTracker.observe(key, shared, now)
 }
 
 // grokTurnIndexFromBody derives a turn index from the request body.
@@ -249,12 +328,10 @@ func newTraceParentHeader() string {
 // fall - a session whose turn index goes backwards is not something the official
 // client can produce.
 //
-// The highest index seen per conversation is therefore remembered. State lives in
-// process, matching how this package already tracks per-session upstream response
-// ids (openaiCompatSessionResponses): the value is a cosmetic counter, so paying
-// for a shared store is not worth a round trip on the inference path. Across
-// several sub2api processes the counter is per process, which stays monotonic per
-// process but can differ between them.
+// The highest index seen per conversation is therefore remembered in Redis when
+// the concrete gateway cache supports GrokTurnIndexStore. The local tracker is a
+// hot fallback for tests and Redis outages; successful shared observations are
+// fed back into it so a later outage cannot move the process backwards.
 const (
 	grokTurnTrackerTTL        = 12 * time.Hour
 	grokTurnTrackerMaxEntries = 8192

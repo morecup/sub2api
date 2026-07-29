@@ -1,0 +1,139 @@
+{
+  "limitations": {
+    "conclusion_is_scoped_to_current_official_oauth_and_api_key_request_builders": true,
+    "never_index_support_remains_in_local_encoder_for_future_sensitive_inputs": true,
+    "private_binary_source_is_not_available": true,
+    "public_source_commit_differs_from_installed_private_revision": true
+  },
+  "network_isolation": {
+    "accepted_local_connect_count": 3,
+    "blocked_nonlocal_connect_count": 5,
+    "nonlocal_connect_allowed": false
+  },
+  "official_binary": {
+    "process_hash": "f88af0c4b68c55409ada4fca",
+    "sha256": "2469bd182af212c7fcb84f2981999e4e8a6a7a2e4172bad3ae7f787a1f11407c",
+    "version": "grok 0.2.112 (9bbd559437)"
+  },
+  "safety": {
+    "authorization_persisted": false,
+    "decoded_headers_persisted": false,
+    "parent_proxy_environment_unchanged": true,
+    "production_endpoint_persisted": false,
+    "raw_headers_persisted": false,
+    "request_or_response_body_persisted": false,
+    "synthetic_key_persisted_outside_temporary_home": false,
+    "user_auth_file_modified": false,
+    "user_auth_file_read": false,
+    "user_config_unchanged": true,
+    "windows_root_store_modified": false
+  },
+  "schema_version": 1,
+  "scope": {
+    "all_synthetic_auth_values_matched_in_memory": true,
+    "local_endpoint_only": true,
+    "synthetic_api_key_auth_advertised": true,
+    "target_request_count": 2,
+    "target_request_streams": [
+      1,
+      3
+    ],
+    "temporary_grok_home": true
+  },
+  "sensitive_branch": {
+    "api_key_live_never_index_count": 0,
+    "classification": "NOT_APPLICABLE_FOR_OBSERVED_OFFICIAL_GROK_AUTH_BUILDERS",
+    "not_applicable_evidence_complete": true,
+    "oauth_baseline": {
+      "all_blocks_byte_equal": true,
+      "never_index_count": 0,
+      "report_sha256": "ab4332a2b2bb7d0411c73cbf92c502ff3ef96881871704079ba8fdd12fd20729",
+      "request_count": 2
+    },
+    "official_auth_builders_mark_sensitive": false,
+    "public_source_audit": {
+      "archive_sha256": "8480bd11ed1911827fcac0af5526ea84860ecf427a21f7767ea6326036949f4f",
+      "bearer_auth_call_count": 0,
+      "commit": "47348d13ec4508dcfe440e34c6d511bb02998fb2",
+      "header_sensitive_call_count": 0,
+      "rust_files_scanned": 2365,
+      "sensitive_marking_api_observed": false,
+      "set_sensitive_call_count": 0
+    }
+  },
+  "status": "OFFICIAL-CONTINUATION-ALIGNED_SENSITIVE-NEVER-INDEX-NOT-APPLICABLE",
+  "transport": {
+    "all_connection_header_blocks_equal": true,
+    "alpn": "h2",
+    "client_preface_exact": true,
+    "connection_header_blocks_compared": 2,
+    "continuation_aligned": true,
+    "settings_ack": true,
+    "targets": [
+      {
+        "auth_header_decoder_sensitive": false,
+        "auth_header_representation": "literal_without_indexing",
+        "auth_value_huffman": true,
+        "byte_equal": true,
+        "continuation_count": 1,
+        "frame_flags": [
+          0,
+          4
+        ],
+        "frame_fragment_lengths": [
+          16384,
+          6742
+        ],
+        "frame_split_equal": true,
+        "frame_types": [
+          "HEADERS",
+          "CONTINUATION"
+        ],
+        "header_block_length": 23126,
+        "header_block_sha256": "ee40f13d1f77c776d1054b7d45d0d2d035bfd8b3f0983d683e95c5cc8e49964a",
+        "header_count": 20,
+        "local_frame_fragment_lengths": [
+          16384,
+          6742
+        ],
+        "local_header_block_length": 23126,
+        "local_header_block_sha256": "ee40f13d1f77c776d1054b7d45d0d2d035bfd8b3f0983d683e95c5cc8e49964a",
+        "never_index_count": 0,
+        "path_length": 14014,
+        "stream_id": 1
+      },
+      {
+        "auth_header_decoder_sensitive": false,
+        "auth_header_representation": "literal_without_indexing",
+        "auth_value_huffman": true,
+        "byte_equal": true,
+        "continuation_count": 1,
+        "frame_flags": [
+          0,
+          4
+        ],
+        "frame_fragment_lengths": [
+          16384,
+          6679
+        ],
+        "frame_split_equal": true,
+        "frame_types": [
+          "HEADERS",
+          "CONTINUATION"
+        ],
+        "header_block_length": 23063,
+        "header_block_sha256": "ef1f07fc4453c678f664fa49f075ae1e43e90009408eff3b15939a63f2bc97ca",
+        "header_count": 24,
+        "local_frame_fragment_lengths": [
+          16384,
+          6679
+        ],
+        "local_header_block_length": 23063,
+        "local_header_block_sha256": "ef1f07fc4453c678f664fa49f075ae1e43e90009408eff3b15939a63f2bc97ca",
+        "never_index_count": 0,
+        "path_length": 14014,
+        "stream_id": 3
+      }
+    ]
+  }
+}

@@ -59,7 +59,7 @@ func RequireALPN(proto string, profile *Profile, dial DialTLSFunc) DialTLSFunc {
 }
 
 // CacheKey returns a short, stable identity for the profile's observable
-// handshake configuration. Callers that pool connections per profile use it so
+// transport configuration. Callers that pool connections per profile use it so
 // two profiles can never share a transport: the ALPN offer alone already
 // changes the transport's shape (HTTP/1.1 only versus an h2 pair), and sharing
 // would also leak one client's identity onto another's connections.
@@ -72,6 +72,13 @@ func (p *Profile) CacheKey() string {
 		_, _ = digest.Write([]byte(value))
 		_, _ = digest.Write([]byte{0})
 	}
+	writeStrings := func(name string, values []string) {
+		writeString(name)
+		writeString(strconv.Itoa(len(values)))
+		for _, value := range values {
+			writeString(value)
+		}
+	}
 	writeUint16s := func(values []uint16) {
 		var buf [2]byte
 		for _, value := range values {
@@ -83,6 +90,8 @@ func (p *Profile) CacheKey() string {
 
 	writeString(p.Name)
 	writeString(string(p.ExtensionOrder))
+	writeString("use-grok-http2-transport")
+	writeString(strconv.FormatBool(p.UseGrokHTTP2Transport))
 	if p.EnableGREASE {
 		writeString("grease")
 	}
@@ -118,6 +127,8 @@ func (p *Profile) CacheKey() string {
 		var buf [4]byte
 		binary.BigEndian.PutUint32(buf[:], p.HTTP2.ConnectionWindowUpdate)
 		_, _ = digest.Write(buf[:])
+		writeStrings("http2-pseudo-header-order", p.HTTP2.PseudoHeaderOrder)
+		writeStrings("http2-regular-header-order", p.HTTP2.RegularHeaderOrder)
 	}
 	return strconv.FormatUint(digest.Sum64(), 16)
 }

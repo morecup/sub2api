@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -14,6 +15,8 @@ import (
 
 const stickySessionPrefix = "sticky_session:"
 const liveCallPrefix = "live:call:"
+const grokTurnIndexPrefix = "grok_turn_index:"
+const grokCompactionCatalogPrefix = "grok_compaction_catalog:"
 
 type gatewayCache struct {
 	rdb *redis.Client
@@ -59,6 +62,109 @@ func (c *gatewayCache) DeleteSessionAccountID(ctx context.Context, groupID int64
 // Compile-time assertion: gatewayCache must implement CyberSessionBlockStore.
 var _ service.CyberSessionBlockStore = (*gatewayCache)(nil)
 var _ service.LiveCallStore = (*gatewayCache)(nil)
+var _ service.GrokTurnIndexStore = (*gatewayCache)(nil)
+var _ service.GrokCompactionCatalogStore = (*gatewayCache)(nil)
+
+var observeGrokTurnIndexScript = redis.NewScript(`
+	local key = KEYS[1]
+	local derived = tonumber(ARGV[1]) or 1
+	local ttl = tonumber(ARGV[2]) or 1
+	if derived < 1 then
+		derived = 1
+	end
+	local current = tonumber(redis.call('GET', key)) or 0
+	if current > derived then
+		derived = current
+	end
+	redis.call('SET', key, derived, 'EX', ttl)
+	return derived
+`)
+
+func grokTurnIndexKey(accountID int64, conversationID string) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%d:%s", accountID, conversationID)))
+	return grokTurnIndexPrefix + hex.EncodeToString(sum[:])
+}
+
+// ObserveGrokTurnIndex atomically stores max(current, derived) and refreshes
+// its TTL. Retrying the same request is idempotent because this is a max, not an
+// increment; the raw conversation id never enters Redis.
+func (c *gatewayCache) ObserveGrokTurnIndex(
+	ctx context.Context,
+	accountID int64,
+	conversationID string,
+	derived int,
+	ttl time.Duration,
+) (int, error) {
+	if c == nil || c.rdb == nil {
+		return 0, fmt.Errorf("gateway cache is unavailable")
+	}
+	if derived < 1 {
+		derived = 1
+	}
+	ttlSeconds := int64(ttl / time.Second)
+	if ttlSeconds < 1 {
+		ttlSeconds = 1
+	}
+	return observeGrokTurnIndexScript.Run(
+		ctx,
+		c.rdb,
+		[]string{grokTurnIndexKey(accountID, conversationID)},
+		derived,
+		ttlSeconds,
+	).Int()
+}
+
+func grokCompactionCatalogKey(accountID int64) string {
+	return grokCompactionCatalogPrefix + strconv.FormatInt(accountID, 10)
+}
+
+func (c *gatewayCache) GetGrokCompactionCatalog(
+	ctx context.Context,
+	accountID int64,
+) (service.GrokCompactionCatalog, bool, error) {
+	if c == nil || c.rdb == nil {
+		return service.GrokCompactionCatalog{}, false, fmt.Errorf("gateway cache is unavailable")
+	}
+	raw, err := c.rdb.HGet(ctx, grokCompactionCatalogKey(accountID), "payload").Bytes()
+	if err == redis.Nil {
+		return service.GrokCompactionCatalog{}, false, nil
+	}
+	if err != nil {
+		return service.GrokCompactionCatalog{}, false, err
+	}
+	var catalog service.GrokCompactionCatalog
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		return service.GrokCompactionCatalog{}, false, fmt.Errorf("decode Grok compaction catalog: %w", err)
+	}
+	return catalog, true, nil
+}
+
+func (c *gatewayCache) SetGrokCompactionCatalog(
+	ctx context.Context,
+	accountID int64,
+	catalog service.GrokCompactionCatalog,
+	ttl time.Duration,
+) error {
+	if c == nil || c.rdb == nil {
+		return fmt.Errorf("gateway cache is unavailable")
+	}
+	if accountID <= 0 {
+		return fmt.Errorf("invalid Grok account id")
+	}
+	if ttl <= 0 {
+		return fmt.Errorf("invalid Grok compaction catalog TTL")
+	}
+	raw, err := json.Marshal(catalog)
+	if err != nil {
+		return fmt.Errorf("encode Grok compaction catalog: %w", err)
+	}
+	key := grokCompactionCatalogKey(accountID)
+	pipe := c.rdb.TxPipeline()
+	pipe.HSet(ctx, key, "schema", 1, "payload", raw)
+	pipe.Expire(ctx, key, ttl)
+	_, err = pipe.Exec(ctx)
+	return err
+}
 
 const cyberSessionBlockPrefix = "cyber_session_block:"
 

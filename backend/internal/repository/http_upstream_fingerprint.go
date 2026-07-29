@@ -11,11 +11,14 @@ import (
 	"strings"
 	"sync"
 
+	grokhttp2 "github.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2"
 	utls "github.com/refraction-networking/utls"
 	"golang.org/x/net/http2"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 )
+
+var grokHTTP2HeaderOrderSupported = grokhttp2.SupportsHeaderOrder
 
 // fingerprintDialer resolves the uTLS dialer to use for the configured proxy.
 //
@@ -70,7 +73,7 @@ func newFingerprintHTTP1Transport(settings poolSettings, dial tlsfingerprint.Dia
 // returned HTTP/2 transport. The carrier transport exists solely to hold that
 // configuration: ConfigureTransports registers an alternate "https" round
 // tripper on it, so it must never serve requests itself.
-func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint.Profile, dial tlsfingerprint.DialTLSFunc) (*http2.Transport, error) {
+func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint.Profile, dial tlsfingerprint.DialTLSFunc) (http.RoundTripper, error) {
 	if profile.HTTP2 == nil {
 		// A profile that offers h2 without an HTTP/2 preamble still has to speak
 		// HTTP/2 once the server selects it, but the connection preface will be
@@ -82,6 +85,25 @@ func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint
 		ResponseHeaderTimeout: settings.responseHeaderTimeout,
 	}
 	profile.HTTP2.ConfigureTransports(carrier, nil)
+
+	if profile.RequiresGrokHTTP2Transport() {
+		if profileRequestsOrderedHeaders(profile.HTTP2) && !grokHTTP2HeaderOrderSupported() {
+			return nil, errors.New("grok ordered HTTP/2 fingerprint unsupported on go1.27 wrapper path; build with http2legacy to retain HeaderOrder support")
+		}
+		transport, err := grokhttp2.ConfigureTransports(carrier)
+		if err != nil {
+			return nil, err
+		}
+		transport.ConnPool = nil
+		transport.IdleConnTimeout = settings.idleConnTimeout
+		applyHTTP2ProfileToGrokTransport(profile.HTTP2, transport)
+
+		requireH2 := tlsfingerprint.RequireALPN(tlsfingerprint.ALPNProtocolHTTP2, profile, dial)
+		transport.DialTLSContext = func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			return requireH2(ctx, network, addr)
+		}
+		return transport, nil
+	}
 
 	transport, err := http2.ConfigureTransports(carrier)
 	if err != nil {
@@ -99,6 +121,34 @@ func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint
 		return requireH2(ctx, network, addr)
 	}
 	return transport, nil
+}
+
+func profileRequestsOrderedHeaders(profile *tlsfingerprint.HTTP2Profile) bool {
+	return profile != nil && (len(profile.PseudoHeaderOrder) > 0 || len(profile.RegularHeaderOrder) > 0)
+}
+
+func applyHTTP2ProfileToGrokTransport(profile *tlsfingerprint.HTTP2Profile, transport *grokhttp2.Transport) {
+	if profile == nil || transport == nil {
+		return
+	}
+	if len(profile.PseudoHeaderOrder) > 0 || len(profile.RegularHeaderOrder) > 0 {
+		transport.HeaderOrder = &grokhttp2.HeaderOrder{
+			Pseudo:  append([]string{}, profile.PseudoHeaderOrder...),
+			Regular: append([]string{}, profile.RegularHeaderOrder...),
+		}
+	}
+	if value, ok := profile.Setting(tlsfingerprint.HTTP2SettingMaxFrameSize); ok {
+		transport.MaxReadFrameSize = value
+	}
+	if value, ok := profile.Setting(tlsfingerprint.HTTP2SettingMaxHeaderListSize); ok {
+		transport.MaxHeaderListSize = value
+	}
+	if profile.PingInterval > 0 {
+		transport.ReadIdleTimeout = profile.PingInterval
+	}
+	if profile.PingTimeout > 0 {
+		transport.PingTimeout = profile.PingTimeout
+	}
 }
 
 // buildUpstreamTransportWithTLSFingerprint builds the upstream round tripper
@@ -136,7 +186,7 @@ func newFingerprintSessionCache(profile *tlsfingerprint.Profile) utls.ClientSess
 	}
 	// rustls' default client session store keeps 256 entries; sub2api talks to
 	// one host per transport, so the capacity only bounds ticket churn.
-	return utls.NewLRUClientSessionCache(256)
+	return tlsfingerprint.NewVersionedLRUClientSessionCache(256)
 }
 
 func buildUpstreamTransportWithTLSFingerprint(settings poolSettings, proxyURL *url.URL, profile *tlsfingerprint.Profile) (http.RoundTripper, error) {

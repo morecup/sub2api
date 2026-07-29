@@ -49,23 +49,20 @@ type HTTP2Setting struct {
 	Value uint32
 }
 
-// HTTP2Profile describes the HTTP/2 connection preamble of the client being
-// emulated: the SETTINGS entries in wire order, the initial connection-level
-// WINDOW_UPDATE increment, and the keepalive PING cadence.
+// HTTP2Profile describes the HTTP/2 client behavior that is externally visible
+// to an upstream peer: the connection preamble (SETTINGS and initial
+// WINDOW_UPDATE), the request header enumeration order when a repository-local
+// fork supports it, and the keepalive PING cadence.
 //
 // These three values are what HTTP/2 fingerprinting (Akamai-style
 // "SETTINGS|WINDOW_UPDATE|PRIORITY|pseudo-header-order") clusters on. Go's
 // net/http2 client sends a distinctive preamble of its own, so a TLS
 // fingerprint alone is not enough to look like a non-Go client.
 //
-// Known limitation: the pseudo-header order is hardcoded in
-// golang.org/x/net/http2 (:authority, :method, :path, :scheme) and cannot be
-// configured, so that one component of the Akamai fingerprint still reads as
-// Go. Everything else in the preamble is reproduced exactly. Measured against
-// the official Grok Build CLI 0.2.112:
-//
-//	captured: 2:0;4:2097152;5:16384;6:16384|5177345|0|m,s,a,p
-//	emitted : 2:0;4:2097152;5:16384;6:16384|5177345|0|a,m,p,s
+// Standard golang.org/x/net/http2 transports still keep Go's upstream request
+// header ordering. The repository-local Grok fork can additionally consume
+// PseudoHeaderOrder and RegularHeaderOrder, while transports without ordering
+// data retain upstream behavior.
 type HTTP2Profile struct {
 	// Name identifies the emulated client for logs.
 	Name string
@@ -80,6 +77,12 @@ type HTTP2Profile struct {
 	// keepalive. Zero leaves the local defaults in place.
 	PingInterval time.Duration
 	PingTimeout  time.Duration
+	// PseudoHeaderOrder optionally pins request pseudo-header emission order for
+	// a transport that explicitly supports profile-driven ordering.
+	PseudoHeaderOrder []string
+	// RegularHeaderOrder optionally pins ordinary request header emission order
+	// for a transport that explicitly supports profile-driven ordering.
+	RegularHeaderOrder []string
 }
 
 // Setting returns the configured value for id.
