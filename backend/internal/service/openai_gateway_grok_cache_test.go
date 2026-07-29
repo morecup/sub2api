@@ -249,7 +249,7 @@ func TestOpenCodeResponsesHeaderAndBodyCacheSignalsConverge(t *testing.T) {
 	require.Equal(t, first, second)
 	require.Equal(t, first, bodyOnly)
 
-	patched, err := applyGrokResponsesCacheIdentity(secondBody, secondBody, second, false)
+	patched, err := applyGrokResponsesCacheIdentity(secondBody, second)
 	require.NoError(t, err)
 	require.Equal(t, second, gjson.GetBytes(patched, "prompt_cache_key").String())
 	headers := make(http.Header)
@@ -310,14 +310,13 @@ func TestGrokConversationHeaderIsScopedToGrokRequestScheduling(t *testing.T) {
 	)
 }
 
-func TestApplyGrokCacheIdentityWritesResponsesBodyAndHeader(t *testing.T) {
+func TestApplyGrokCacheIdentityWritesIdentityWithoutInjectingTools(t *testing.T) {
 	sourceBody := []byte(`{"model":"grok-4.5","prompt_cache_key":"raw-client-key"}`)
-	body, err := applyGrokResponsesCacheIdentity(sourceBody, sourceBody, "isolated-id", true)
+	body, err := applyGrokResponsesCacheIdentity(sourceBody, "isolated-id")
 	require.NoError(t, err)
 	require.Equal(t, "isolated-id", gjson.GetBytes(body, "prompt_cache_key").String())
-	require.Equal(t, "web_search", gjson.GetBytes(body, "tools.0.type").String())
-	require.Equal(t, "x_search", gjson.GetBytes(body, "tools.1.type").String())
-	require.Equal(t, grokFreeCacheDisabledToolChoice, gjson.GetBytes(body, "tool_choice").String())
+	require.False(t, gjson.GetBytes(body, "tools").Exists())
+	require.False(t, gjson.GetBytes(body, "tool_choice").Exists())
 
 	headers := make(http.Header)
 	headers.Set(grokConversationIDHeader, "spoofed-client-value")
@@ -331,7 +330,7 @@ func TestApplyGrokCacheIdentityWritesResponsesBodyAndHeader(t *testing.T) {
 	require.False(t, gjson.GetBytes(chatBody, "prompt_cache_key").Exists())
 
 	unscopedSourceBody := []byte(`{"model":"grok","prompt_cache_key":"raw-client-key"}`)
-	unscopedBody, err := applyGrokResponsesCacheIdentity(unscopedSourceBody, unscopedSourceBody, "", true)
+	unscopedBody, err := applyGrokResponsesCacheIdentity(unscopedSourceBody, "")
 	require.NoError(t, err)
 	require.False(t, gjson.GetBytes(unscopedBody, "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(unscopedBody, "tools").Exists())
@@ -353,7 +352,7 @@ func TestGrokFreeMessagesClientToolCacheDefaultsOnForKnownFree(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			intentBody := []byte(`{"model":"grok","tools":[{"type":"function","name":"lookup","description":"look up a value","parameters":{"type":"object"}},{"type":"function","name":"save","parameters":{"type":"object"}}]` + tt.toolChoiceJSON + `}`)
-			body, err := applyGrokResponsesCacheIdentity(intentBody, intentBody, "isolated-id", true)
+			body, err := applyGrokResponsesCacheIdentity(intentBody, "isolated-id")
 			require.NoError(t, err)
 			body, err = applyGrokFreeMessagesFunctionToolCacheRoute(body, intentBody, account, "isolated-id")
 
@@ -406,7 +405,7 @@ func TestApplyGrokCacheIdentityAppendsNativeToolsWhenSearchPresent(t *testing.T)
 
 	// Function tools INCLUDING web_search → convert + complement with x_search.
 	intentBody := []byte(`{"model":"grok","tools":[{"type":"function","name":"lookup","description":"look up a value","parameters":{"type":"object"}},{"type":"function","name":"web_search","description":"search","parameters":{"type":"object"}}]}`)
-	body, err := applyGrokResponsesCacheIdentity(intentBody, intentBody, "isolated-id", true)
+	body, err := applyGrokResponsesCacheIdentity(intentBody, "isolated-id")
 	require.NoError(t, err)
 	body, err = applyGrokFreeMessagesFunctionToolCacheRoute(body, intentBody, account, "isolated-id")
 	require.NoError(t, err)
@@ -425,7 +424,7 @@ func TestGrokFreeClientToolCacheAccountOptIn(t *testing.T) {
 	account.Extra = map[string]any{grokClientToolCacheOptInExtraKey: true}
 	intentBody := []byte(`{"model":"grok","tools":[{"type":"function","name":"view_image","parameters":{"type":"object"}},{"type":"function","name":"read_file","parameters":{"type":"object"}}],"tool_choice":"auto"}`)
 
-	body, err := applyGrokResponsesCacheIdentity(intentBody, intentBody, "isolated-id", true)
+	body, err := applyGrokResponsesCacheIdentity(intentBody, "isolated-id")
 	require.NoError(t, err)
 	body, err = applyGrokFreeMessagesFunctionToolCacheRoute(body, intentBody, account, "isolated-id")
 	require.NoError(t, err)
@@ -472,7 +471,7 @@ func TestGrokFreeClientToolCacheRequestOptInOverridesAccountOptOut(t *testing.T)
 	c.Request.Header.Set(grokClientToolCacheOptInHeader, "prefer-cache")
 	intentBody := []byte(`{"model":"grok","tools":[{"type":"function","name":"view_image","parameters":{"type":"object"}}],"tool_choice":"auto"}`)
 
-	body, err := applyGrokResponsesCacheIdentity(intentBody, intentBody, "isolated-id", true)
+	body, err := applyGrokResponsesCacheIdentity(intentBody, "isolated-id")
 	require.NoError(t, err)
 	body, err = applyGrokFreeRequestToolCacheRoute(c, body, intentBody, account, "isolated-id")
 	require.NoError(t, err)
@@ -699,11 +698,10 @@ func TestGrokFreeRequestToolChoiceNoneUsesSafeCacheRoute(t *testing.T) {
 	require.Equal(t, "none", gjson.GetBytes(patched, "tool_choice").String())
 }
 
-func TestApplyGrokCacheIdentityRecognizesResponsesLiteAdditionalTools(t *testing.T) {
-	intentBody := []byte(`{"model":"grok","input":[{"type":"additional_tools","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}]},{"type":"message","role":"user","content":"hello"}]}`)
+func TestApplyGrokCacheIdentityPreservesPromotedResponsesLiteAdditionalTools(t *testing.T) {
 	patchedBody := []byte(`{"model":"grok-4.5","tools":[{"type":"function","name":"lookup","parameters":{"type":"object"}}],"input":[{"type":"message","role":"user","content":"hello"}]}`)
 
-	patched, err := applyGrokResponsesCacheIdentity(patchedBody, intentBody, "isolated-id", true)
+	patched, err := applyGrokResponsesCacheIdentity(patchedBody, "isolated-id")
 
 	require.NoError(t, err)
 	tools := gjson.GetBytes(patched, "tools").Array()
@@ -718,7 +716,7 @@ func TestGrokFreeCacheRoutePreservesMixedSupportedToolsWithSearchIntent(t *testi
 	account.Credentials["subscription_tier"] = "free"
 	intentBody := []byte(`{"model":"grok","tools":[{"type":"function","name":"view_image","parameters":{"type":"object"}},{"type":"shell"},{"type":"web_search"}],"tool_choice":"auto"}`)
 
-	body, err := applyGrokResponsesCacheIdentity(intentBody, intentBody, "isolated-id", true)
+	body, err := applyGrokResponsesCacheIdentity(intentBody, "isolated-id")
 	require.NoError(t, err)
 	body, err = applyGrokFreeMessagesFunctionToolCacheRoute(body, intentBody, account, "isolated-id")
 	require.NoError(t, err)
@@ -760,7 +758,7 @@ func TestApplyGrokCacheIdentityRequiresPatchedFunctionTools(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			beforeTools := gjson.Get(tt.patchedBody, "tools")
-			body, err := applyGrokResponsesCacheIdentity([]byte(tt.patchedBody), intentBody, "isolated-id", true)
+			body, err := applyGrokResponsesCacheIdentity([]byte(tt.patchedBody), "isolated-id")
 			require.NoError(t, err)
 			body, err = applyGrokFreeMessagesFunctionToolCacheRoute(body, intentBody, account, "isolated-id")
 
@@ -977,7 +975,7 @@ func TestApplyGrokCacheIdentityPreservesIneligibleClientToolFields(t *testing.T)
 		t.Run(tt.name, func(t *testing.T) {
 			beforeTools := gjson.Get(tt.body, "tools")
 			beforeChoice := gjson.Get(tt.body, "tool_choice")
-			body, err := applyGrokResponsesCacheIdentity([]byte(tt.body), []byte(tt.body), "isolated-id", true)
+			body, err := applyGrokResponsesCacheIdentity([]byte(tt.body), "isolated-id")
 			require.NoError(t, err)
 			require.Equal(t, "isolated-id", gjson.GetBytes(body, "prompt_cache_key").String())
 			require.Equal(t, beforeTools.Exists(), gjson.GetBytes(body, "tools").Exists())
@@ -988,39 +986,9 @@ func TestApplyGrokCacheIdentityPreservesIneligibleClientToolFields(t *testing.T)
 	}
 }
 
-func TestApplyGrokCacheIdentityUsesPreSanitizationToolIntent(t *testing.T) {
-	tests := []struct {
-		name       string
-		intentBody string
-	}{
-		{
-			name:       "unsupported tools removed by sanitizer",
-			intentBody: `{"model":"grok","tools":[{"type":"namespace","name":"client_tools"}]}`,
-		},
-		{
-			name:       "tool choice removed with unsupported tool",
-			intentBody: `{"model":"grok","tools":[{"type":"namespace","name":"client_tools"}],"tool_choice":{"type":"namespace","name":"client_tools"}}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This is the shape apply receives after patchGrokResponsesBody has
-			// removed unsupported tools and their associated tool_choice.
-			patchedBody := []byte(`{"model":"grok-4.5","input":"hello"}`)
-			body, err := applyGrokResponsesCacheIdentity(patchedBody, []byte(tt.intentBody), "isolated-id", true)
-
-			require.NoError(t, err)
-			require.Equal(t, "isolated-id", gjson.GetBytes(body, "prompt_cache_key").String())
-			require.False(t, gjson.GetBytes(body, "tools").Exists())
-			require.False(t, gjson.GetBytes(body, "tool_choice").Exists())
-		})
-	}
-}
-
-func TestApplyGrokCacheIdentityWithoutFreeTierRoutingOnlyWritesIdentity(t *testing.T) {
+func TestApplyGrokCacheIdentityOnlyWritesIdentity(t *testing.T) {
 	sourceBody := []byte(`{"model":"grok-4.5","input":"hello"}`)
-	body, err := applyGrokResponsesCacheIdentity(sourceBody, sourceBody, "isolated-id", false)
+	body, err := applyGrokResponsesCacheIdentity(sourceBody, "isolated-id")
 
 	require.NoError(t, err)
 	require.Equal(t, "isolated-id", gjson.GetBytes(body, "prompt_cache_key").String())
@@ -1035,7 +1003,7 @@ func TestGrokCompactRequestSkipsCacheIdentityAndNativeTools(t *testing.T) {
 	body := []byte(`{"model":"grok","input":"compact this","prompt_cache_key":"raw-client-key"}`)
 
 	identity := resolveGrokCacheIdentity(c, body, "", "grok-4.5")
-	patched, err := applyGrokResponsesCacheIdentity(body, body, identity, true)
+	patched, err := applyGrokResponsesCacheIdentity(body, identity)
 
 	require.NoError(t, err)
 	require.Empty(t, identity)

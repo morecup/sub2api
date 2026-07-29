@@ -18,7 +18,6 @@ const (
 	grokConversationIDHeader         = "X-Grok-Conv-Id"
 	claudeCodeSessionHeader          = "X-Claude-Code-Session-Id"
 	grokClientToolCacheOptInHeader   = "X-Sub2API-Grok-Client-Tool-Cache"
-	grokFreeCacheNativeToolsJSON     = `[{"type":"web_search"},{"type":"x_search"}]`
 	grokFreeCacheDisabledToolChoice  = "none"
 	grokClientToolCacheOptInExtraKey = "grok_client_tool_cache_enabled"
 )
@@ -69,9 +68,8 @@ func resolveGrokCacheIdentity(c *gin.Context, body []byte, explicitKey, upstream
 	if apiKeyID <= 0 {
 		return ""
 	}
-	// /responses/compact rejects tool_choice and does not represent a normal
-	// conversation turn. Keep both cache identity and Free-tier routing
-	// augmentation out of this path.
+	// /responses/compact does not represent a normal conversation turn. Keep
+	// the cache identity out of this path.
 	if isOpenAIResponsesCompactPath(c) {
 		return ""
 	}
@@ -146,13 +144,8 @@ func isGrokRequestContext(c *gin.Context) bool {
 // applyGrokResponsesCacheIdentity writes the cache routing identity into an
 // xAI Responses request. Existing client values are deliberately replaced by
 // the tenant-isolated value to prevent collisions on shared OAuth accounts.
-//
-// Free OAuth requests without native search tools are routed by xAI to the
-// non-cacheable build-free model. For otherwise tool-free requests, add the
-// native tools with tool_choice=none: this selects the cache-capable tier
-// without allowing an actual search. Explicit client function tools are handled by
-// applyGrokFreeMessagesFunctionToolCacheRoute (Messages bridge and native Responses).
-func applyGrokResponsesCacheIdentity(body, intentSourceBody []byte, identity string, injectFreeTierTools bool) ([]byte, error) {
+// It never invents tools or tool_choice for a request that did not declare them.
+func applyGrokResponsesCacheIdentity(body []byte, identity string) ([]byte, error) {
 	identity = strings.TrimSpace(identity)
 	if identity == "" {
 		if gjson.GetBytes(body, "prompt_cache_key").Exists() {
@@ -160,44 +153,7 @@ func applyGrokResponsesCacheIdentity(body, intentSourceBody []byte, identity str
 		}
 		return body, nil
 	}
-	out, err := sjson.SetBytes(body, "prompt_cache_key", identity)
-	if err != nil {
-		return nil, err
-	}
-	if !injectFreeTierTools {
-		return out, nil
-	}
-	// Inspect the pre-sanitization source. patchGrokResponsesBody may remove an
-	// unsupported client tool and its tool_choice; that must not turn an
-	// explicit client tool intent into an eligible native-tool request.
-	if hasGrokResponsesToolIntent(intentSourceBody) {
-		return out, nil
-	}
-	out, err = sjson.SetRawBytes(out, "tools", []byte(grokFreeCacheNativeToolsJSON))
-	if err != nil {
-		return nil, err
-	}
-	return sjson.SetBytes(out, "tool_choice", grokFreeCacheDisabledToolChoice)
-}
-
-func hasGrokResponsesToolIntent(body []byte) bool {
-	if gjson.GetBytes(body, "tools").Exists() || gjson.GetBytes(body, "tool_choice").Exists() {
-		return true
-	}
-	input := gjson.GetBytes(body, "input")
-	if !input.IsArray() {
-		return false
-	}
-	for _, item := range input.Array() {
-		if strings.TrimSpace(item.Get("type").String()) != "additional_tools" {
-			continue
-		}
-		tools := item.Get("tools")
-		if !tools.Exists() || !tools.IsArray() || len(tools.Array()) > 0 {
-			return true
-		}
-	}
-	return false
+	return sjson.SetBytes(body, "prompt_cache_key", identity)
 }
 
 // applyGrokFreeMessagesFunctionToolCacheRoute enables xAI's cache-capable
