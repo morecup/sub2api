@@ -882,6 +882,8 @@ func buildSchedulerMetadataAccount(account service.Account) service.Account {
 		OverloadUntil:           account.OverloadUntil,
 		TempUnschedulableUntil:  account.TempUnschedulableUntil,
 		TempUnschedulableReason: account.TempUnschedulableReason,
+		StandbyForAccountID:     account.StandbyForAccountID,
+		StandbyTriggerTypes:     append([]string{}, account.StandbyTriggerTypes...),
 		SessionWindowStart:      account.SessionWindowStart,
 		SessionWindowEnd:        account.SessionWindowEnd,
 		SessionWindowStatus:     account.SessionWindowStatus,

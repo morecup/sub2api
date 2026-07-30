@@ -255,6 +255,9 @@ func (s *GeminiMessagesCompatService) isAccountUsableForRequestWithPrecheck(
 	useMixedScheduling bool,
 	precheckResult map[int64]bool,
 ) bool {
+	if !accountSchedulableWithStandby(ctx, account, s.lookupStandbyPrimaryAccount) {
+		return false
+	}
 	// 检查模型调度能力
 	// Check model scheduling capability
 	if !account.IsSchedulableForModelWithContext(ctx, requestedModel) {
@@ -429,6 +432,22 @@ func (s *GeminiMessagesCompatService) getSchedulableAccount(ctx context.Context,
 	return s.accountRepo.GetByID(ctx, accountID)
 }
 
+func (s *GeminiMessagesCompatService) lookupStandbyPrimaryAccount(ctx context.Context, accountID int64) (*Account, error) {
+	if s == nil || accountID <= 0 {
+		return nil, nil
+	}
+	if s.schedulerSnapshot != nil {
+		account, err := s.schedulerSnapshot.GetAccount(ctx, accountID)
+		if err == nil && account != nil {
+			return account, nil
+		}
+	}
+	if s.accountRepo == nil {
+		return nil, nil
+	}
+	return s.accountRepo.GetByID(ctx, accountID)
+}
+
 func (s *GeminiMessagesCompatService) hydrateSelectedAccount(ctx context.Context, account *Account) (*Account, error) {
 	if account == nil || s.schedulerSnapshot == nil {
 		return account, nil
@@ -489,7 +508,12 @@ func (s *GeminiMessagesCompatService) HasAntigravityAccounts(ctx context.Context
 	if err != nil {
 		return false, err
 	}
-	return len(accounts) > 0, nil
+	for i := range accounts {
+		if accountSchedulableWithStandby(ctx, &accounts[i], s.lookupStandbyPrimaryAccount) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // SelectAccountForAIStudioEndpoints selects an account that is likely to succeed against
@@ -540,6 +564,9 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 	var selected *Account
 	for i := range accounts {
 		acc := &accounts[i]
+		if !accountSchedulableWithStandby(ctx, acc, s.lookupStandbyPrimaryAccount) {
+			continue
+		}
 		if selected == nil {
 			selected = acc
 			continue

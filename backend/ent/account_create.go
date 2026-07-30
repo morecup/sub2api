@@ -349,6 +349,26 @@ func (_c *AccountCreate) SetNillableTempUnschedulableReason(v *string) *AccountC
 	return _c
 }
 
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (_c *AccountCreate) SetStandbyForAccountID(v int64) *AccountCreate {
+	_c.mutation.SetStandbyForAccountID(v)
+	return _c
+}
+
+// SetNillableStandbyForAccountID sets the "standby_for_account_id" field if the given value is not nil.
+func (_c *AccountCreate) SetNillableStandbyForAccountID(v *int64) *AccountCreate {
+	if v != nil {
+		_c.SetStandbyForAccountID(*v)
+	}
+	return _c
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (_c *AccountCreate) SetStandbyTriggerTypes(v []string) *AccountCreate {
+	_c.mutation.SetStandbyTriggerTypes(v)
+	return _c
+}
+
 // SetSessionWindowStart sets the "session_window_start" field.
 func (_c *AccountCreate) SetSessionWindowStart(v time.Time) *AccountCreate {
 	_c.mutation.SetSessionWindowStart(v)
@@ -473,6 +493,40 @@ func (_c *AccountCreate) AddChildren(v ...*Account) *AccountCreate {
 	return _c.AddChildIDs(ids...)
 }
 
+// SetStandbyForID sets the "standby_for" edge to the Account entity by ID.
+func (_c *AccountCreate) SetStandbyForID(id int64) *AccountCreate {
+	_c.mutation.SetStandbyForID(id)
+	return _c
+}
+
+// SetNillableStandbyForID sets the "standby_for" edge to the Account entity by ID if the given value is not nil.
+func (_c *AccountCreate) SetNillableStandbyForID(id *int64) *AccountCreate {
+	if id != nil {
+		_c = _c.SetStandbyForID(*id)
+	}
+	return _c
+}
+
+// SetStandbyFor sets the "standby_for" edge to the Account entity.
+func (_c *AccountCreate) SetStandbyFor(v *Account) *AccountCreate {
+	return _c.SetStandbyForID(v.ID)
+}
+
+// AddStandbyAccountIDs adds the "standby_accounts" edge to the Account entity by IDs.
+func (_c *AccountCreate) AddStandbyAccountIDs(ids ...int64) *AccountCreate {
+	_c.mutation.AddStandbyAccountIDs(ids...)
+	return _c
+}
+
+// AddStandbyAccounts adds the "standby_accounts" edges to the Account entity.
+func (_c *AccountCreate) AddStandbyAccounts(v ...*Account) *AccountCreate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddStandbyAccountIDs(ids...)
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
 func (_c *AccountCreate) AddUsageLogIDs(ids ...int64) *AccountCreate {
 	_c.mutation.AddUsageLogIDs(ids...)
@@ -577,6 +631,10 @@ func (_c *AccountCreate) defaults() error {
 		v := account.DefaultSchedulable
 		_c.mutation.SetSchedulable(v)
 	}
+	if _, ok := _c.mutation.StandbyTriggerTypes(); !ok {
+		v := account.DefaultStandbyTriggerTypes
+		_c.mutation.SetStandbyTriggerTypes(v)
+	}
 	if _, ok := _c.mutation.QuotaDimension(); !ok {
 		v := account.DefaultQuotaDimension
 		_c.mutation.SetQuotaDimension(v)
@@ -644,6 +702,9 @@ func (_c *AccountCreate) check() error {
 	}
 	if _, ok := _c.mutation.Schedulable(); !ok {
 		return &ValidationError{Name: "schedulable", err: errors.New(`ent: missing required field "Account.schedulable"`)}
+	}
+	if _, ok := _c.mutation.StandbyTriggerTypes(); !ok {
+		return &ValidationError{Name: "standby_trigger_types", err: errors.New(`ent: missing required field "Account.standby_trigger_types"`)}
 	}
 	if v, ok := _c.mutation.SessionWindowStatus(); ok {
 		if err := account.SessionWindowStatusValidator(v); err != nil {
@@ -785,6 +846,10 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 		_spec.SetField(account.FieldTempUnschedulableReason, field.TypeString, value)
 		_node.TempUnschedulableReason = &value
 	}
+	if value, ok := _c.mutation.StandbyTriggerTypes(); ok {
+		_spec.SetField(account.FieldStandbyTriggerTypes, field.TypeJSON, value)
+		_node.StandbyTriggerTypes = value
+	}
 	if value, ok := _c.mutation.SessionWindowStart(); ok {
 		_spec.SetField(account.FieldSessionWindowStart, field.TypeTime, value)
 		_node.SessionWindowStart = &value
@@ -861,6 +926,39 @@ func (_c *AccountCreate) createSpec() (*Account, *sqlgraph.CreateSpec) {
 			Inverse: false,
 			Table:   account.ChildrenTable,
 			Columns: []string{account.ChildrenColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.StandbyForIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   account.StandbyForTable,
+			Columns: []string{account.StandbyForColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_node.StandbyForAccountID = &nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.StandbyAccountsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
@@ -1344,6 +1442,36 @@ func (u *AccountUpsert) UpdateTempUnschedulableReason() *AccountUpsert {
 // ClearTempUnschedulableReason clears the value of the "temp_unschedulable_reason" field.
 func (u *AccountUpsert) ClearTempUnschedulableReason() *AccountUpsert {
 	u.SetNull(account.FieldTempUnschedulableReason)
+	return u
+}
+
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (u *AccountUpsert) SetStandbyForAccountID(v int64) *AccountUpsert {
+	u.Set(account.FieldStandbyForAccountID, v)
+	return u
+}
+
+// UpdateStandbyForAccountID sets the "standby_for_account_id" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateStandbyForAccountID() *AccountUpsert {
+	u.SetExcluded(account.FieldStandbyForAccountID)
+	return u
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (u *AccountUpsert) ClearStandbyForAccountID() *AccountUpsert {
+	u.SetNull(account.FieldStandbyForAccountID)
+	return u
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (u *AccountUpsert) SetStandbyTriggerTypes(v []string) *AccountUpsert {
+	u.Set(account.FieldStandbyTriggerTypes, v)
+	return u
+}
+
+// UpdateStandbyTriggerTypes sets the "standby_trigger_types" field to the value that was provided on create.
+func (u *AccountUpsert) UpdateStandbyTriggerTypes() *AccountUpsert {
+	u.SetExcluded(account.FieldStandbyTriggerTypes)
 	return u
 }
 
@@ -1949,6 +2077,41 @@ func (u *AccountUpsertOne) UpdateTempUnschedulableReason() *AccountUpsertOne {
 func (u *AccountUpsertOne) ClearTempUnschedulableReason() *AccountUpsertOne {
 	return u.Update(func(s *AccountUpsert) {
 		s.ClearTempUnschedulableReason()
+	})
+}
+
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (u *AccountUpsertOne) SetStandbyForAccountID(v int64) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetStandbyForAccountID(v)
+	})
+}
+
+// UpdateStandbyForAccountID sets the "standby_for_account_id" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateStandbyForAccountID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateStandbyForAccountID()
+	})
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (u *AccountUpsertOne) ClearStandbyForAccountID() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearStandbyForAccountID()
+	})
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (u *AccountUpsertOne) SetStandbyTriggerTypes(v []string) *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetStandbyTriggerTypes(v)
+	})
+}
+
+// UpdateStandbyTriggerTypes sets the "standby_trigger_types" field to the value that was provided on create.
+func (u *AccountUpsertOne) UpdateStandbyTriggerTypes() *AccountUpsertOne {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateStandbyTriggerTypes()
 	})
 }
 
@@ -2734,6 +2897,41 @@ func (u *AccountUpsertBulk) UpdateTempUnschedulableReason() *AccountUpsertBulk {
 func (u *AccountUpsertBulk) ClearTempUnschedulableReason() *AccountUpsertBulk {
 	return u.Update(func(s *AccountUpsert) {
 		s.ClearTempUnschedulableReason()
+	})
+}
+
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (u *AccountUpsertBulk) SetStandbyForAccountID(v int64) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetStandbyForAccountID(v)
+	})
+}
+
+// UpdateStandbyForAccountID sets the "standby_for_account_id" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateStandbyForAccountID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateStandbyForAccountID()
+	})
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (u *AccountUpsertBulk) ClearStandbyForAccountID() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.ClearStandbyForAccountID()
+	})
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (u *AccountUpsertBulk) SetStandbyTriggerTypes(v []string) *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.SetStandbyTriggerTypes(v)
+	})
+}
+
+// UpdateStandbyTriggerTypes sets the "standby_trigger_types" field to the value that was provided on create.
+func (u *AccountUpsertBulk) UpdateStandbyTriggerTypes() *AccountUpsertBulk {
+	return u.Update(func(s *AccountUpsert) {
+		s.UpdateStandbyTriggerTypes()
 	})
 }
 

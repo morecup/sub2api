@@ -1650,15 +1650,7 @@ func (s *defaultOpenAIAccountScheduler) lookupShadowParentAccount(ctx context.Co
 	if s == nil || s.service == nil {
 		return nil
 	}
-	if s.service.schedulerSnapshot != nil {
-		if account, err := s.service.schedulerSnapshot.GetAccount(ctx, id); err == nil && account != nil {
-			return account
-		}
-	}
-	if s.service.accountRepo == nil {
-		return nil
-	}
-	account, _ := s.service.accountRepo.GetByID(ctx, id)
+	account, _ := s.service.lookupStandbyPrimaryAccount(ctx, id)
 	return account
 }
 
@@ -1691,6 +1683,15 @@ func (s *defaultOpenAIAccountScheduler) isAccountRequestCompatibleReason(ctx con
 			reason += "_" + decision.window
 		}
 		return false, reason
+	}
+	if account.HasStandbyConfiguration() {
+		var standbyLookup func(context.Context, int64) (*Account, error)
+		if s != nil && s.service != nil {
+			standbyLookup = s.service.lookupStandbyPrimaryAccount
+		}
+		if !accountSchedulableWithStandby(ctx, account, standbyLookup) {
+			return false, "standby_inactive"
+		}
 	}
 	// 母账号健康联动：影子账号的凭据来自母账号，母账号不可调度时影子也不应被选中。
 	// Parent-health gate: shadow borrows the parent's credentials; an unschedulable

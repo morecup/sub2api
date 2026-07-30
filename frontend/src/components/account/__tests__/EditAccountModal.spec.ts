@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
+const { updateAccountMock, listAccountsMock, checkMixedChannelRiskMock, authIsSimpleMode } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
+  listAccountsMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
   authIsSimpleMode: { value: true }
 }))
@@ -28,6 +29,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       update: updateAccountMock,
+      list: listAccountsMock,
       checkMixedChannelRisk: checkMixedChannelRiskMock
     },
     settings: {
@@ -314,6 +316,30 @@ function mountModal(account = buildAccount()) {
 describe('EditAccountModal', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    listAccountsMock.mockReset()
+    listAccountsMock.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1000, pages: 0 })
+  })
+
+  it('configures a primary account and multiple OR takeover conditions', async () => {
+    const account = buildAccount()
+    const primary = { ...buildAccount(), id: 2, name: 'Primary OpenAI Key' }
+    listAccountsMock.mockResolvedValue({ items: [account, primary], total: 2, page: 1, page_size: 1000, pages: 1 })
+    updateAccountMock.mockReset()
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    await wrapper.get('[data-testid="standby-enabled-toggle"]').trigger('click')
+    await Promise.resolve()
+    await wrapper.get('[data-testid="standby-primary-select"]').setValue('2')
+    await wrapper.get('[data-testid="standby-trigger-quota_7d_exhausted"]').setValue(false)
+    await wrapper.get('[data-testid="standby-trigger-account_error"]').setValue(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      standby_for_account_id: 2,
+      standby_trigger_types: ['quota_5h_exhausted', 'rate_limited', 'account_error']
+    })
   })
 
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {

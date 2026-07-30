@@ -1250,6 +1250,9 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	hasAnyMapping := false
 
 	for _, acc := range accounts {
+		if acc.HasStandbyConfiguration() && !s.isAccountSchedulableForSelection(ctx, &acc) {
+			continue
+		}
 		mapping := acc.GetModelMapping()
 		if len(mapping) > 0 {
 			hasAnyMapping = true
@@ -1302,6 +1305,9 @@ func (s *GatewayService) GetSchedulablePlatforms(ctx context.Context, groupID *i
 	}
 
 	for _, acc := range accounts {
+		if acc.HasStandbyConfiguration() && !s.isAccountSchedulableForSelection(ctx, &acc) {
+			continue
+		}
 		platform := strings.TrimSpace(acc.Platform)
 		if platform != "" {
 			platforms[platform] = struct{}{}

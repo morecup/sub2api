@@ -940,7 +940,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 
 				canonicalModel := canonicalOpenAIAccountSchedulingModel(account, upstreamModel)
 				shouldDisable := s.handleFailoverSideEffectsWithCodexToolFrameSuppression(ctx, resp, account, respBody, body, c, false, upstreamMsg, canonicalModel)
-				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account, body)
+				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account)
 				return nil, newOpenAIUpstreamFailoverError(
 					failoverStatus,
 					resp.Header,

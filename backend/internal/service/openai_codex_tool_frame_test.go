@@ -99,10 +99,7 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, nil, body))
 }
 
-func TestRewriteCodexToolFrame429FailoverForClient(t *testing.T) {
-	body, changed := appendCodexToolFrameIfNeeded([]byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`))
-	require.True(t, changed)
-
+func TestRewriteCodexToolFrame429FailoverForClientWhenEnabled(t *testing.T) {
 	account := &Account{
 		Platform: PlatformOpenAI,
 		Type:     AccountTypeOAuth,
@@ -110,12 +107,22 @@ func TestRewriteCodexToolFrame429FailoverForClient(t *testing.T) {
 			openAICodexToolFrameNever429Key: true,
 		},
 	}
-	status, rewritten := rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{"error":{"type":"rate_limit_error"}}`), account, body)
+	status, rewritten := rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{"error":{"type":"rate_limit_error"}}`), account)
 	require.Equal(t, http.StatusServiceUnavailable, status)
 	require.Equal(t, "upstream_error", gjson.GetBytes(rewritten, "error.type").String())
 
-	status, _ = rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{}`), account, []byte(`{"input":[]}`))
+	account.Extra[openAICodexToolFrameNever429Key] = false
+	status, _ = rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{}`), account)
 	require.Equal(t, http.StatusTooManyRequests, status)
+
+	account.Extra[openAICodexToolFrameNever429Key] = true
+	account.Type = AccountTypeAPIKey
+	status, _ = rewriteCodexToolFrame429Failover(http.StatusTooManyRequests, []byte(`{}`), account)
+	require.Equal(t, http.StatusTooManyRequests, status)
+
+	account.Type = AccountTypeOAuth
+	status, _ = rewriteCodexToolFrame429Failover(http.StatusBadGateway, []byte(`{}`), account)
+	require.Equal(t, http.StatusBadGateway, status)
 }
 
 func TestAppendCodexToolFrameIfNeeded(t *testing.T) {

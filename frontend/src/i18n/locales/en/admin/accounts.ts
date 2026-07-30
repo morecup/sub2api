@@ -99,6 +99,58 @@ export default {
       schedulableEnabled: 'Scheduling enabled',
       schedulableDisabled: 'Scheduling disabled',
       failedToToggleSchedulable: 'Failed to toggle scheduling status',
+      standby: {
+        title: 'Automatic standby takeover',
+        description: 'This account joins scheduling when any selected condition matches the primary. Manually disabling scheduling always keeps it off.',
+        primaryAccount: 'Primary account',
+        selectPrimary: 'Select the primary account to monitor',
+        searchPrimary: 'Search same-platform accounts...',
+        loadingAccounts: 'Loading accounts...',
+        noAccounts: 'No same-platform accounts available',
+        loadAccountsFailed: 'Failed to load primary accounts. Close and retry.',
+        primaryHint: 'Only same-platform accounts can be linked. One primary may have multiple standby accounts.',
+        conditions: 'Takeover conditions',
+        orMode: 'Take over when any condition matches (OR)',
+        failbackHint: 'When all selected conditions clear, traffic automatically fails back and this account returns to standby.',
+        primaryRequired: 'Select a primary account',
+        conditionRequired: 'Select at least one takeover condition',
+        cannotSelectSelf: 'An account cannot be its own primary',
+        accountIdFallback: 'Account #{id} (not visible in the current list)',
+        triggers: {
+          quota_5h_exhausted: {
+            label: '5h usage exhausted',
+            description: 'The primary reaches its 5h auto-pause threshold, or 100% when no threshold is configured.'
+          },
+          quota_7d_exhausted: {
+            label: '7d usage exhausted',
+            description: 'The primary reaches its 7d auto-pause threshold, or 100% when no threshold is configured.'
+          },
+          rate_limited: {
+            label: 'Account rate limited',
+            description: 'The primary is still inside its global rate-limit cooldown window.'
+          },
+          quota_exhausted: {
+            label: 'Configured quota exhausted',
+            description: 'The primary has exhausted a total, daily, weekly, or Grok quota.'
+          },
+          account_expired: {
+            label: 'Account expired',
+            description: 'The primary account expiration time has passed.'
+          },
+          account_error: {
+            label: 'Account error',
+            description: 'The primary account status is marked as error.'
+          },
+          temp_unschedulable: {
+            label: 'Temporarily unschedulable',
+            description: 'The primary is still inside a temporary unschedulable window.'
+          },
+          manual_disabled: {
+            label: 'Primary manually disabled',
+            description: 'The primary is inactive or its scheduling switch is off. Not selected by default.'
+          }
+        }
+      },
       groupCountTotal: '{count} groups total',
       platforms: {
         anthropic: 'Anthropic',
@@ -574,7 +626,7 @@ export default {
           'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame; any 429 after Tool Frame is already present will never cooldown the account.',
         codexToolFrameNever429: 'Never return 429 with Tool Frame',
         codexToolFrameNever429Desc:
-          'Disabled by default. When enabled, 429s after Tool Frame still trigger account failover; if every attempt fails, the client receives 503 instead of 429.',
+          'Disabled by default. When enabled, any upstream 429 for this OpenAI OAuth account still triggers account failover; if every attempt fails, the client receives 503 instead of 429, even when the request has no Tool Frame.',
         codexCLIOnlyAppServer: 'Allow Codex app-server clients',
         codexCLIOnlyAppServerDesc:
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",

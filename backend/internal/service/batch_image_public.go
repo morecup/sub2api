@@ -637,7 +637,7 @@ func (s *BatchImagePublicService) ListModels(ctx context.Context, owner BatchIma
 		}
 		for i := range accounts {
 			account := accounts[i]
-			if !account.IsSchedulable() || !provider.SupportsAccount(&account) {
+			if !s.isAccountSchedulableForBatchImage(ctx, &account) || !provider.SupportsAccount(&account) {
 				continue
 			}
 			for _, model := range batchImageModelsFromAccountMapping(&account) {
@@ -952,7 +952,7 @@ func (s *BatchImagePublicService) selectProviderAndAccount(ctx context.Context, 
 		})
 		for i := range accounts {
 			account := accounts[i]
-			if !account.IsSchedulable() || !account.IsModelSupported(model) {
+			if !s.isAccountSchedulableForBatchImage(ctx, &account) || !account.IsModelSupported(model) {
 				continue
 			}
 			if provider.SupportsAccount(&account) {
@@ -974,6 +974,13 @@ func (s *BatchImagePublicService) listCandidateAccounts(ctx context.Context, gro
 		return s.AccountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
 	}
 	return s.AccountRepo.ListSchedulableByPlatform(ctx, platform)
+}
+
+func (s *BatchImagePublicService) isAccountSchedulableForBatchImage(ctx context.Context, account *Account) bool {
+	if s == nil || s.AccountRepo == nil {
+		return false
+	}
+	return accountSchedulableWithStandby(ctx, account, s.AccountRepo.GetByID)
 }
 
 func (s *BatchImagePublicService) ensureGroupAllowsBatchImage(ctx context.Context, groupID *int64) error {

@@ -472,6 +472,15 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		Status:      StatusActive,
 		Schedulable: true,
 	}
+	standbyTriggers, err := NormalizeStandbyTriggerTypes(input.StandbyTriggerTypes)
+	if err != nil {
+		return nil, infraerrors.BadRequest("INVALID_STANDBY_TRIGGER_TYPE", err.Error())
+	}
+	account.StandbyTriggerTypes = standbyTriggers
+	if input.StandbyForAccountID != nil && *input.StandbyForAccountID > 0 {
+		primaryID := *input.StandbyForAccountID
+		account.StandbyForAccountID = &primaryID
+	}
 	if input.ProbeEnabled != nil && *input.ProbeEnabled {
 		if !isUpstreamBillingProbeAccount(account) {
 			return nil, ErrUpstreamBillingProbeAccountInvalid
@@ -553,6 +562,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 
 	account, err := buildAccountForCreate(input, accountExtra)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.validateStandbyAccountConfiguration(ctx, account); err != nil {
 		return nil, err
 	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
@@ -791,6 +803,15 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if input.AutoPauseOnExpired != nil {
 		account.AutoPauseOnExpired = *input.AutoPauseOnExpired
 	}
+	standbyConfigUpdated, err := applyStandbyAccountUpdate(account, input)
+	if err != nil {
+		return nil, err
+	}
+	if standbyConfigUpdated {
+		if err := s.validateStandbyAccountConfiguration(ctx, account); err != nil {
+			return nil, err
+		}
+	}
 
 	// 先验证分组是否存在（在任何写操作之前）
 	if input.GroupIDs != nil {
@@ -849,6 +870,100 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	return updated, nil
+}
+
+func applyStandbyAccountUpdate(account *Account, input *UpdateAccountInput) (bool, error) {
+	if account == nil || input == nil {
+		return false, nil
+	}
+	targetUpdated := input.StandbyForAccountID != nil
+	triggersUpdated := input.StandbyTriggerTypes != nil
+	if !targetUpdated && !triggersUpdated {
+		return false, nil
+	}
+
+	if targetUpdated {
+		if *input.StandbyForAccountID <= 0 {
+			account.StandbyForAccountID = nil
+			if !triggersUpdated {
+				account.StandbyTriggerTypes = []string{}
+			}
+		} else {
+			primaryID := *input.StandbyForAccountID
+			account.StandbyForAccountID = &primaryID
+		}
+	}
+	if triggersUpdated {
+		normalized, err := NormalizeStandbyTriggerTypes(*input.StandbyTriggerTypes)
+		if err != nil {
+			return false, infraerrors.BadRequest("INVALID_STANDBY_TRIGGER_TYPE", err.Error())
+		}
+		account.StandbyTriggerTypes = normalized
+	}
+	return true, nil
+}
+
+func (s *adminServiceImpl) validateStandbyAccountConfiguration(ctx context.Context, account *Account) error {
+	if account == nil {
+		return infraerrors.BadRequest("INVALID_STANDBY_CONFIGURATION", "standby account configuration is invalid")
+	}
+	if account.StandbyForAccountID == nil && len(account.StandbyTriggerTypes) == 0 {
+		return nil
+	}
+	if account.StandbyForAccountID == nil || *account.StandbyForAccountID <= 0 {
+		return infraerrors.BadRequest("STANDBY_PRIMARY_REQUIRED", "standby primary account is required when takeover conditions are configured")
+	}
+	if len(account.StandbyTriggerTypes) == 0 {
+		return infraerrors.BadRequest("STANDBY_TRIGGER_REQUIRED", "at least one standby takeover condition is required")
+	}
+	normalized, err := NormalizeStandbyTriggerTypes(account.StandbyTriggerTypes)
+	if err != nil {
+		return infraerrors.BadRequest("INVALID_STANDBY_TRIGGER_TYPE", err.Error())
+	}
+	account.StandbyTriggerTypes = normalized
+
+	primaryID := *account.StandbyForAccountID
+	if account.ID > 0 && primaryID == account.ID {
+		return infraerrors.BadRequest("STANDBY_SELF_REFERENCE", "an account cannot be its own standby primary")
+	}
+	if s == nil || s.accountRepo == nil {
+		return infraerrors.BadRequest("STANDBY_PRIMARY_NOT_FOUND", "standby primary account could not be loaded")
+	}
+	primary, err := s.accountRepo.GetByID(ctx, primaryID)
+	if err != nil || primary == nil {
+		return infraerrors.BadRequest("STANDBY_PRIMARY_NOT_FOUND", "standby primary account does not exist")
+	}
+	if primary.Platform != account.Platform {
+		return infraerrors.BadRequest("STANDBY_PLATFORM_MISMATCH", "standby and primary accounts must use the same platform")
+	}
+
+	seen := make(map[int64]struct{})
+	if account.ID > 0 {
+		seen[account.ID] = struct{}{}
+	}
+	current := primary
+	for current != nil {
+		if _, duplicate := seen[current.ID]; duplicate {
+			return infraerrors.BadRequest("STANDBY_CYCLE", "standby account relationships cannot contain a cycle")
+		}
+		seen[current.ID] = struct{}{}
+		if current.StandbyForAccountID == nil || *current.StandbyForAccountID <= 0 {
+			break
+		}
+		nextID := *current.StandbyForAccountID
+		if account.ID > 0 && nextID == account.ID {
+			return infraerrors.BadRequest("STANDBY_CYCLE", "standby account relationships cannot contain a cycle")
+		}
+		next, lookupErr := s.accountRepo.GetByID(ctx, nextID)
+		if lookupErr != nil || next == nil {
+			return infraerrors.BadRequest("STANDBY_PRIMARY_NOT_FOUND", "standby primary chain contains a missing account")
+		}
+		if next.Platform != account.Platform {
+			return infraerrors.BadRequest("STANDBY_PLATFORM_MISMATCH", "all accounts in a standby chain must use the same platform")
+		}
+		current = next
+	}
+	return nil
 }
 
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键

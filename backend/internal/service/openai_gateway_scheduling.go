@@ -303,6 +303,29 @@ func isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *A
 	return true
 }
 
+func (s *OpenAIGatewayService) isOpenAICompatibleAccountEligibleForRequest(ctx context.Context, account *Account, platform string, requestedModel string, requireCompact bool, requiredCapability OpenAIEndpointCapability) bool {
+	if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
+		return false
+	}
+	return accountSchedulableWithStandby(ctx, account, s.lookupStandbyPrimaryAccount)
+}
+
+func (s *OpenAIGatewayService) lookupStandbyPrimaryAccount(ctx context.Context, accountID int64) (*Account, error) {
+	if s == nil || accountID <= 0 {
+		return nil, nil
+	}
+	if s.schedulerSnapshot != nil {
+		account, err := s.schedulerSnapshot.GetAccount(ctx, accountID)
+		if err == nil && account != nil {
+			return account, nil
+		}
+	}
+	if s.accountRepo == nil {
+		return nil, nil
+	}
+	return s.accountRepo.GetByID(ctx, accountID)
+}
+
 type openAIQuotaAutoPauseDecision struct {
 	window      string
 	threshold   float64
@@ -310,6 +333,10 @@ type openAIQuotaAutoPauseDecision struct {
 }
 
 func shouldAutoPauseGrokAccountByQuota(account *Account) (bool, openAIQuotaAutoPauseDecision) {
+	return shouldAutoPauseGrokAccountByQuotaAt(account, time.Now())
+}
+
+func shouldAutoPauseGrokAccountByQuotaAt(account *Account, now time.Time) (bool, openAIQuotaAutoPauseDecision) {
 	if account == nil || !account.IsGrok() || account.Type != AccountTypeOAuth {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
@@ -317,7 +344,6 @@ func shouldAutoPauseGrokAccountByQuota(account *Account) (bool, openAIQuotaAutoP
 	if err != nil || snapshot == nil {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
-	now := time.Now()
 	if grokQuotaSnapshotStaleForPause(snapshot, now) {
 		return false, openAIQuotaAutoPauseDecision{}
 	}
@@ -714,7 +740,7 @@ func (s *OpenAIGatewayService) tryStickySessionHit(ctx context.Context, groupID 
 
 	// 验证账号是否可用于当前请求
 	// Verify account is usable for current request
-	if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
+	if !s.isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
 		return nil
 	}
 	if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
@@ -919,7 +945,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 				if clearSticky {
 					_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
 				}
-				if !clearSticky && isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
+				if !clearSticky && s.isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, false, requiredCapability) {
 					account = s.recheckSelectedOpenAIAccountFromDB(ctx, account, groupID, platform, requestedModel, requireCompact, requiredCapability)
 					if account == nil {
 						_ = s.deleteStickySessionAccountID(ctx, groupID, sessionHash)
@@ -982,7 +1008,7 @@ func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Contex
 		// Scheduler snapshots can be temporarily stale (bucket rebuild is throttled);
 		// re-check schedulability here so recently rate-limited/overloaded accounts
 		// are not selected again before the bucket is rebuilt.
-		if !isOpenAICompatibleAccountEligibleForRequest(ctx, acc, platform, requestedModel, false, requiredCapability) {
+		if !s.isOpenAICompatibleAccountEligibleForRequest(ctx, acc, platform, requestedModel, false, requiredCapability) {
 			continue
 		}
 		if !parentHealthyForShadow(acc, parentLookupL2) {
@@ -1236,7 +1262,7 @@ func (s *OpenAIGatewayService) resolveFreshSchedulableOpenAIAccount(ctx context.
 		fresh = current
 	}
 
-	if !isOpenAICompatibleAccountEligibleForRequest(ctx, fresh, platform, requestedModel, requireCompact, requiredCapability) {
+	if !s.isOpenAICompatibleAccountEligibleForRequest(ctx, fresh, platform, requestedModel, requireCompact, requiredCapability) {
 		return nil
 	}
 	if !parentHealthyForShadow(fresh, s.parentAccountLookup(ctx)) {
@@ -1271,7 +1297,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 	}
 	platform = normalizeOpenAICompatiblePlatform(platform)
 	if s.schedulerSnapshot == nil || s.accountRepo == nil {
-		if !isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
+		if !s.isOpenAICompatibleAccountEligibleForRequest(ctx, account, platform, requestedModel, requireCompact, requiredCapability) {
 			return nil
 		}
 		if !parentHealthyForShadow(account, s.parentAccountLookup(ctx)) {
@@ -1290,7 +1316,7 @@ func (s *OpenAIGatewayService) recheckSelectedOpenAIAccountFromDB(ctx context.Co
 	if !s.openAIAccountMatchesSchedulingGroup(latest, groupID) {
 		return nil
 	}
-	if !isOpenAICompatibleAccountEligibleForRequest(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
+	if !s.isOpenAICompatibleAccountEligibleForRequest(ctx, latest, platform, requestedModel, requireCompact, requiredCapability) {
 		return nil
 	}
 	if !parentHealthyForShadow(latest, s.parentAccountLookup(ctx)) {

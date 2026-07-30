@@ -626,7 +626,7 @@ func (s *OpenAIGatewayService) handleFailoverErrorResponsePassthrough(
 		Detail:               upstreamDetail,
 		UpstreamResponseBody: upstreamDetail,
 	})
-	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, body, account, requestBody)
+	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, body, account)
 	failoverErr := newOpenAIUpstreamFailoverError(
 		failoverStatus,
 		resp.Header,
@@ -1042,7 +1042,7 @@ func (s *OpenAIGatewayService) newOpenAIStreamFailoverError(
 			"message": message,
 		},
 	})
-	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(upstreamStatus, body, account, currentOpsOpenAIUpstreamRequestBody(c))
+	failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(upstreamStatus, body, account)
 	return &UpstreamFailoverError{
 		StatusCode:             failoverStatus,
 		ResponseBody:           failoverBody,

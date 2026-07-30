@@ -76,18 +76,15 @@ func shouldSuppressCodexToolFrame429AccountMark(account *Account, headers http.H
 	return shouldRetryCodexToolFrameFromUsageLimit(account, headers, time.Now())
 }
 
-func shouldRewriteCodexToolFrame429ForClient(account *Account, requestBody []byte) bool {
+func shouldRewriteCodexToolFrame429ForClient(account *Account) bool {
 	if account == nil || !account.IsOpenAIOAuth() {
 		return false
 	}
-	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameNever429Key) {
-		return false
-	}
-	return openAIRequestBodyHasCodexToolFrame(requestBody)
+	return resolveAccountExtraBool(account.Extra, openAICodexToolFrameNever429Key)
 }
 
-func rewriteCodexToolFrame429Failover(statusCode int, responseBody []byte, account *Account, requestBody []byte) (int, []byte) {
-	if statusCode != http.StatusTooManyRequests || !shouldRewriteCodexToolFrame429ForClient(account, requestBody) {
+func rewriteCodexToolFrame429Failover(statusCode int, responseBody []byte, account *Account) (int, []byte) {
+	if statusCode != http.StatusTooManyRequests || !shouldRewriteCodexToolFrame429ForClient(account) {
 		return statusCode, responseBody
 	}
 	body := make([]byte, len(codexToolFrameNever429ClientBody))

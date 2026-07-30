@@ -97,6 +97,58 @@ export default {
       schedulableEnabled: '调度已开启',
       schedulableDisabled: '调度已关闭',
       failedToToggleSchedulable: '切换调度状态失败',
+      standby: {
+        title: '备用账号自动接管',
+        description: '主账号命中任一所选条件时，此账号自动参与调度；人工关闭调度后不会被自动启用。',
+        primaryAccount: '关联主账号',
+        selectPrimary: '请选择要监控的主账号',
+        searchPrimary: '搜索同平台账号...',
+        loadingAccounts: '正在加载账号...',
+        noAccounts: '没有可关联的同平台账号',
+        loadAccountsFailed: '主账号列表加载失败，请关闭后重试',
+        primaryHint: '只能关联同平台账号；一个主账号可以配置多个备用账号。',
+        conditions: '接管条件',
+        orMode: '满足任一条件即可接管（OR）',
+        failbackHint: '所有已选条件解除后会自动切回，备用账号重新进入待命状态。',
+        primaryRequired: '请选择关联主账号',
+        conditionRequired: '请至少选择一个接管条件',
+        cannotSelectSelf: '不能把当前账号设为自己的主账号',
+        accountIdFallback: '账号 #{id}（当前列表中不可见）',
+        triggers: {
+          quota_5h_exhausted: {
+            label: '5h 用量耗尽',
+            description: '达到主账号的 5h 自动暂停阈值；未配置阈值时按 100%。'
+          },
+          quota_7d_exhausted: {
+            label: '7d 用量耗尽',
+            description: '达到主账号的 7d 自动暂停阈值；未配置阈值时按 100%。'
+          },
+          rate_limited: {
+            label: '账号被限流',
+            description: '主账号仍处于全局限流冷却窗口。'
+          },
+          quota_exhausted: {
+            label: '配置额度耗尽',
+            description: '主账号的总额度、日/周额度或 Grok 配额已耗尽。'
+          },
+          account_expired: {
+            label: '账号已过期',
+            description: '主账号设置的过期时间已经到达。'
+          },
+          account_error: {
+            label: '账号状态异常',
+            description: '主账号状态被标记为错误。'
+          },
+          temp_unschedulable: {
+            label: '临时不可调度',
+            description: '主账号仍处于临时不可调度窗口。'
+          },
+          manual_disabled: {
+            label: '主账号被人工关闭',
+            description: '主账号非启用状态或已关闭“参与调度”；默认不建议勾选。'
+          }
+        }
+      },
       groupCountTotal: '共 {count} 个分组',
       columns: {
         name: '名称',
@@ -635,7 +687,7 @@ export default {
           '默认关闭。开启后只要 5h 额度已耗尽，就不再判断 7d 额度，仍然添加 Tool Frame；已带 Tool Frame 后遇到任何 429 都不会冷却账号。',
         codexToolFrameNever429: 'Tool Frame 永不返回 429',
         codexToolFrameNever429Desc:
-          '默认关闭。开启后已带 Tool Frame 的 429 会继续触发账号切换；最终仍失败时返回 503，而不是向客户端返回 429。',
+          '默认关闭。开启后该 OpenAI OAuth 账号的任何上游 429 都会继续触发账号切换；最终仍失败时返回 503，而不是向客户端返回 429，不要求请求已带 Tool Frame。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
         codexImageTool: 'Codex 图片桥接策略',

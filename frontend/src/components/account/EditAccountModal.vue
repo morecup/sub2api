@@ -1494,6 +1494,88 @@
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
         </div>
       </div>
+
+      <!-- 主备账号自动接管 -->
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600" data-testid="standby-failover-section">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.standby.title') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.standby.description') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            data-testid="standby-enabled-toggle"
+            :aria-checked="standbyEnabled"
+            @click="toggleStandbyEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              standbyEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                standbyEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+
+        <div v-if="standbyEnabled" class="mt-4 space-y-4 rounded-lg bg-gray-50 p-4 dark:bg-dark-800/60">
+          <div>
+            <label class="input-label">{{ t('admin.accounts.standby.primaryAccount') }}</label>
+            <Select
+              v-model="standbyPrimarySelectValue"
+              data-testid="standby-primary-select"
+              :options="standbyPrimaryOptions"
+              :disabled="loadingStandbyAccounts"
+              :placeholder="loadingStandbyAccounts
+                ? t('admin.accounts.standby.loadingAccounts')
+                : t('admin.accounts.standby.selectPrimary')"
+              :search-placeholder="t('admin.accounts.standby.searchPrimary')"
+              :empty-text="t('admin.accounts.standby.noAccounts')"
+              :searchable="true"
+            />
+            <p v-if="standbyAccountsLoadFailed" class="mt-1 text-xs text-red-500">
+              {{ t('admin.accounts.standby.loadAccountsFailed') }}
+            </p>
+            <p v-else class="input-hint">{{ t('admin.accounts.standby.primaryHint') }}</p>
+          </div>
+
+          <div>
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <label class="input-label mb-0">{{ t('admin.accounts.standby.conditions') }}</label>
+              <span class="text-xs font-medium text-primary-600 dark:text-primary-400">
+                {{ t('admin.accounts.standby.orMode') }}
+              </span>
+            </div>
+            <div class="mt-2 grid gap-2 sm:grid-cols-2">
+              <label
+                v-for="option in standbyTriggerOptions"
+                :key="option.value"
+                class="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 transition-colors hover:border-primary-300 dark:border-dark-600 dark:bg-dark-800 dark:hover:border-primary-700"
+              >
+                <input
+                  v-model="standbyTriggerTypes"
+                  type="checkbox"
+                  class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  :data-testid="`standby-trigger-${option.value}`"
+                  :value="option.value"
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm font-medium text-gray-800 dark:text-gray-100">{{ option.label }}</span>
+                  <span class="mt-0.5 block text-xs text-gray-500 dark:text-gray-400">{{ option.description }}</span>
+                </span>
+              </label>
+            </div>
+            <p class="input-hint">{{ t('admin.accounts.standby.failbackHint') }}</p>
+          </div>
+        </div>
+      </div>
+
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <input v-model="expiresAtInput" type="datetime-local" class="input" />
@@ -1595,8 +1677,8 @@
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token' || account?.type === 'apikey')"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.wsMode') }}</label>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.wsModeDesc') }}
@@ -1605,7 +1687,7 @@
               {{ t(openAIWSModeConcurrencyHintKey) }}
             </p>
           </div>
-          <div class="w-52">
+          <div class="w-full sm:w-52 sm:flex-shrink-0">
             <Select v-model="openaiResponsesWebSocketV2Mode" data-testid="edit-openai-ws-mode-select" :options="openAIWSModeOptions" />
           </div>
         </div>
@@ -1616,14 +1698,14 @@
         v-if="account?.platform === 'openai' && account?.type === 'apikey'"
         class="space-y-4 border-t border-gray-200 pt-4 dark:border-dark-600"
       >
-        <div class="flex items-center justify-between gap-4">
-          <div>
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="min-w-0">
             <label class="input-label mb-0">{{ t('admin.accounts.openai.responsesMode') }}</label>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.openai.responsesModeDesc') }}
             </p>
           </div>
-          <div class="w-56">
+          <div class="w-full sm:w-56 sm:flex-shrink-0">
             <Select
               v-model="openAIResponsesMode"
               :options="openAIResponsesModeOptions"
@@ -2772,6 +2854,7 @@ import type {
   OpenAICompactMode,
   OpenAIResponsesMode,
   OpenAIEndpointCapability,
+  StandbyTriggerType,
   OllamaCloudUsageState
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
@@ -2960,6 +3043,13 @@ const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
 const autoPause7dDisabled = ref(false)
+const standbyEnabled = ref(false)
+const standbyForAccountId = ref<number | null>(null)
+const standbyTriggerTypes = ref<StandbyTriggerType[]>([])
+const standbyAccounts = ref<Account[]>([])
+const loadingStandbyAccounts = ref(false)
+const standbyAccountsLoadFailed = ref(false)
+let standbyAccountsLoadSequence = 0
 const upstreamBillingAutoProbeEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 const allowOverages = ref(false) // For antigravity accounts: enable AI Credits overages
@@ -3326,6 +3416,53 @@ const defaultBaseUrl = computed(() => {
   return 'https://api.anthropic.com'
 })
 
+const defaultStandbyTriggerTypes: StandbyTriggerType[] = [
+  'quota_5h_exhausted',
+  'quota_7d_exhausted',
+  'rate_limited'
+]
+
+const standbyTriggerOptions = computed(() => {
+  const values: StandbyTriggerType[] = [
+    'quota_5h_exhausted',
+    'quota_7d_exhausted',
+    'rate_limited',
+    'quota_exhausted',
+    'account_expired',
+    'account_error',
+    'temp_unschedulable',
+    'manual_disabled'
+  ]
+  return values.map((value) => ({
+    value,
+    label: t(`admin.accounts.standby.triggers.${value}.label`),
+    description: t(`admin.accounts.standby.triggers.${value}.description`)
+  }))
+})
+
+const standbyPrimaryOptions = computed(() => {
+  const options = standbyAccounts.value.map((candidate) => ({
+    value: candidate.id,
+    label: `${candidate.name} (#${candidate.id})`
+  }))
+  const selectedID = standbyForAccountId.value
+  if (selectedID && !options.some((option) => option.value === selectedID)) {
+    options.unshift({
+      value: selectedID,
+      label: t('admin.accounts.standby.accountIdFallback', { id: selectedID })
+    })
+  }
+  return options
+})
+
+const standbyPrimarySelectValue = computed<number | null>({
+  get: () => standbyForAccountId.value,
+  set: (value) => {
+    const parsed = Number(value)
+    standbyForAccountId.value = Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+})
+
 const mixedChannelWarningMessageText = computed(() => {
   if (mixedChannelWarningDetails.value) {
     return t('admin.accounts.mixedChannelWarning', mixedChannelWarningDetails.value)
@@ -3435,6 +3572,15 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     : 'active'
   form.group_ids = newAccount.group_ids || []
   form.expires_at = newAccount.expires_at ?? null
+  standbyEnabled.value =
+    (newAccount.standby_for_account_id ?? 0) > 0 || (newAccount.standby_trigger_types?.length ?? 0) > 0
+  standbyForAccountId.value = newAccount.standby_for_account_id ?? null
+  standbyTriggerTypes.value = [...(newAccount.standby_trigger_types ?? [])]
+  standbyAccounts.value = []
+  standbyAccountsLoadFailed.value = false
+  if (standbyEnabled.value) {
+    void loadStandbyAccounts(newAccount)
+  }
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
@@ -3761,6 +3907,45 @@ async function loadTLSProfiles() {
   } catch {
     tlsFingerprintProfiles.value = []
   }
+}
+
+async function loadStandbyAccounts(account = props.account) {
+  if (!account) return
+  const sequence = ++standbyAccountsLoadSequence
+  loadingStandbyAccounts.value = true
+  standbyAccountsLoadFailed.value = false
+  try {
+    const result = await adminAPI.accounts.list(1, 1000, {
+      platform: account.platform,
+      sort_by: 'name',
+      sort_order: 'asc'
+    })
+    if (sequence !== standbyAccountsLoadSequence || props.account?.id !== account.id) return
+    standbyAccounts.value = result.items.filter(
+      (candidate) => candidate.id !== account.id && candidate.platform === account.platform
+    )
+  } catch {
+    if (sequence !== standbyAccountsLoadSequence) return
+    standbyAccounts.value = []
+    standbyAccountsLoadFailed.value = true
+  } finally {
+    if (sequence === standbyAccountsLoadSequence) {
+      loadingStandbyAccounts.value = false
+    }
+  }
+}
+
+const toggleStandbyEnabled = () => {
+  standbyEnabled.value = !standbyEnabled.value
+  if (standbyEnabled.value) {
+    if (standbyTriggerTypes.value.length === 0) {
+      standbyTriggerTypes.value = [...defaultStandbyTriggerTypes]
+    }
+    void loadStandbyAccounts()
+    return
+  }
+  standbyForAccountId.value = null
+  standbyTriggerTypes.value = []
 }
 
 watch(
@@ -4249,6 +4434,25 @@ const handleSubmit = async () => {
       updatePayload.load_factor = 0
     }
     updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
+    if (standbyEnabled.value) {
+      if (!standbyForAccountId.value) {
+        appStore.showError(t('admin.accounts.standby.primaryRequired'))
+        return
+      }
+      if (standbyForAccountId.value === accountID) {
+        appStore.showError(t('admin.accounts.standby.cannotSelectSelf'))
+        return
+      }
+      if (standbyTriggerTypes.value.length === 0) {
+        appStore.showError(t('admin.accounts.standby.conditionRequired'))
+        return
+      }
+      updatePayload.standby_for_account_id = standbyForAccountId.value
+      updatePayload.standby_trigger_types = [...standbyTriggerTypes.value]
+    } else {
+      updatePayload.standby_for_account_id = 0
+      updatePayload.standby_trigger_types = []
+    }
 
     // For apikey type, handle credentials update
     if (props.account.type === 'apikey') {

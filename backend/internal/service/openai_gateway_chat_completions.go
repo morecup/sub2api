@@ -346,7 +346,7 @@ sendChatCompatRequest:
 					s.shouldSuppressCodexToolFrame429AccountMark(c, account, resp.Header, responsesBody, false, resp.Header.Get("x-request-id"), upstreamMsg)) {
 					s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody, upstreamModel)
 				}
-				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account, responsesBody)
+				failoverStatus, failoverBody := rewriteCodexToolFrame429Failover(resp.StatusCode, respBody, account)
 				return nil, newOpenAIUpstreamFailoverError(
 					failoverStatus,
 					resp.Header,

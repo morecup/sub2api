@@ -213,6 +213,8 @@ type Account struct {
 
 	TempUnschedulableUntil  *time.Time `json:"temp_unschedulable_until"`
 	TempUnschedulableReason string     `json:"temp_unschedulable_reason"`
+	StandbyForAccountID     *int64     `json:"standby_for_account_id"`
+	StandbyTriggerTypes     []string   `json:"standby_trigger_types"`
 
 	SessionWindowStart  *time.Time `json:"session_window_start"`
 	SessionWindowEnd    *time.Time `json:"session_window_end"`

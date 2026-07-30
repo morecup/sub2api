@@ -52,6 +52,11 @@ type Account struct {
 	TempUnschedulableUntil  *time.Time
 	TempUnschedulableReason string
 
+	// StandbyForAccountID 非空时，本账号是关联主账号的备用账号。
+	// Schedulable 仍是人工硬开关；只有选中的接管条件命中时，备用账号才进入调度候选池。
+	StandbyForAccountID *int64
+	StandbyTriggerTypes []string
+
 	SessionWindowStart  *time.Time
 	SessionWindowEnd    *time.Time
 	SessionWindowStatus string

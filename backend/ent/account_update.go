@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/Wei-Shaw/sub2api/ent/account"
 	"github.com/Wei-Shaw/sub2api/ent/group"
@@ -470,6 +471,38 @@ func (_u *AccountUpdate) ClearTempUnschedulableReason() *AccountUpdate {
 	return _u
 }
 
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (_u *AccountUpdate) SetStandbyForAccountID(v int64) *AccountUpdate {
+	_u.mutation.SetStandbyForAccountID(v)
+	return _u
+}
+
+// SetNillableStandbyForAccountID sets the "standby_for_account_id" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableStandbyForAccountID(v *int64) *AccountUpdate {
+	if v != nil {
+		_u.SetStandbyForAccountID(*v)
+	}
+	return _u
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (_u *AccountUpdate) ClearStandbyForAccountID() *AccountUpdate {
+	_u.mutation.ClearStandbyForAccountID()
+	return _u
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (_u *AccountUpdate) SetStandbyTriggerTypes(v []string) *AccountUpdate {
+	_u.mutation.SetStandbyTriggerTypes(v)
+	return _u
+}
+
+// AppendStandbyTriggerTypes appends value to the "standby_trigger_types" field.
+func (_u *AccountUpdate) AppendStandbyTriggerTypes(v []string) *AccountUpdate {
+	_u.mutation.AppendStandbyTriggerTypes(v)
+	return _u
+}
+
 // SetSessionWindowStart sets the "session_window_start" field.
 func (_u *AccountUpdate) SetSessionWindowStart(v time.Time) *AccountUpdate {
 	_u.mutation.SetSessionWindowStart(v)
@@ -618,6 +651,40 @@ func (_u *AccountUpdate) AddChildren(v ...*Account) *AccountUpdate {
 	return _u.AddChildIDs(ids...)
 }
 
+// SetStandbyForID sets the "standby_for" edge to the Account entity by ID.
+func (_u *AccountUpdate) SetStandbyForID(id int64) *AccountUpdate {
+	_u.mutation.SetStandbyForID(id)
+	return _u
+}
+
+// SetNillableStandbyForID sets the "standby_for" edge to the Account entity by ID if the given value is not nil.
+func (_u *AccountUpdate) SetNillableStandbyForID(id *int64) *AccountUpdate {
+	if id != nil {
+		_u = _u.SetStandbyForID(*id)
+	}
+	return _u
+}
+
+// SetStandbyFor sets the "standby_for" edge to the Account entity.
+func (_u *AccountUpdate) SetStandbyFor(v *Account) *AccountUpdate {
+	return _u.SetStandbyForID(v.ID)
+}
+
+// AddStandbyAccountIDs adds the "standby_accounts" edge to the Account entity by IDs.
+func (_u *AccountUpdate) AddStandbyAccountIDs(ids ...int64) *AccountUpdate {
+	_u.mutation.AddStandbyAccountIDs(ids...)
+	return _u
+}
+
+// AddStandbyAccounts adds the "standby_accounts" edges to the Account entity.
+func (_u *AccountUpdate) AddStandbyAccounts(v ...*Account) *AccountUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddStandbyAccountIDs(ids...)
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
 func (_u *AccountUpdate) AddUsageLogIDs(ids ...int64) *AccountUpdate {
 	_u.mutation.AddUsageLogIDs(ids...)
@@ -690,6 +757,33 @@ func (_u *AccountUpdate) RemoveChildren(v ...*Account) *AccountUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveChildIDs(ids...)
+}
+
+// ClearStandbyFor clears the "standby_for" edge to the Account entity.
+func (_u *AccountUpdate) ClearStandbyFor() *AccountUpdate {
+	_u.mutation.ClearStandbyFor()
+	return _u
+}
+
+// ClearStandbyAccounts clears all "standby_accounts" edges to the Account entity.
+func (_u *AccountUpdate) ClearStandbyAccounts() *AccountUpdate {
+	_u.mutation.ClearStandbyAccounts()
+	return _u
+}
+
+// RemoveStandbyAccountIDs removes the "standby_accounts" edge to Account entities by IDs.
+func (_u *AccountUpdate) RemoveStandbyAccountIDs(ids ...int64) *AccountUpdate {
+	_u.mutation.RemoveStandbyAccountIDs(ids...)
+	return _u
+}
+
+// RemoveStandbyAccounts removes "standby_accounts" edges to Account entities.
+func (_u *AccountUpdate) RemoveStandbyAccounts(v ...*Account) *AccountUpdate {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveStandbyAccountIDs(ids...)
 }
 
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
@@ -925,6 +1019,14 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.TempUnschedulableReasonCleared() {
 		_spec.ClearField(account.FieldTempUnschedulableReason, field.TypeString)
 	}
+	if value, ok := _u.mutation.StandbyTriggerTypes(); ok {
+		_spec.SetField(account.FieldStandbyTriggerTypes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedStandbyTriggerTypes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, account.FieldStandbyTriggerTypes, value)
+		})
+	}
 	if value, ok := _u.mutation.SessionWindowStart(); ok {
 		_spec.SetField(account.FieldSessionWindowStart, field.TypeTime, value)
 	}
@@ -1096,6 +1198,80 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Inverse: false,
 			Table:   account.ChildrenTable,
 			Columns: []string{account.ChildrenColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StandbyForCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   account.StandbyForTable,
+			Columns: []string{account.StandbyForColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StandbyForIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   account.StandbyForTable,
+			Columns: []string{account.StandbyForColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StandbyAccountsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedStandbyAccountsIDs(); len(nodes) > 0 && !_u.mutation.StandbyAccountsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StandbyAccountsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
@@ -1610,6 +1786,38 @@ func (_u *AccountUpdateOne) ClearTempUnschedulableReason() *AccountUpdateOne {
 	return _u
 }
 
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (_u *AccountUpdateOne) SetStandbyForAccountID(v int64) *AccountUpdateOne {
+	_u.mutation.SetStandbyForAccountID(v)
+	return _u
+}
+
+// SetNillableStandbyForAccountID sets the "standby_for_account_id" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableStandbyForAccountID(v *int64) *AccountUpdateOne {
+	if v != nil {
+		_u.SetStandbyForAccountID(*v)
+	}
+	return _u
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (_u *AccountUpdateOne) ClearStandbyForAccountID() *AccountUpdateOne {
+	_u.mutation.ClearStandbyForAccountID()
+	return _u
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (_u *AccountUpdateOne) SetStandbyTriggerTypes(v []string) *AccountUpdateOne {
+	_u.mutation.SetStandbyTriggerTypes(v)
+	return _u
+}
+
+// AppendStandbyTriggerTypes appends value to the "standby_trigger_types" field.
+func (_u *AccountUpdateOne) AppendStandbyTriggerTypes(v []string) *AccountUpdateOne {
+	_u.mutation.AppendStandbyTriggerTypes(v)
+	return _u
+}
+
 // SetSessionWindowStart sets the "session_window_start" field.
 func (_u *AccountUpdateOne) SetSessionWindowStart(v time.Time) *AccountUpdateOne {
 	_u.mutation.SetSessionWindowStart(v)
@@ -1758,6 +1966,40 @@ func (_u *AccountUpdateOne) AddChildren(v ...*Account) *AccountUpdateOne {
 	return _u.AddChildIDs(ids...)
 }
 
+// SetStandbyForID sets the "standby_for" edge to the Account entity by ID.
+func (_u *AccountUpdateOne) SetStandbyForID(id int64) *AccountUpdateOne {
+	_u.mutation.SetStandbyForID(id)
+	return _u
+}
+
+// SetNillableStandbyForID sets the "standby_for" edge to the Account entity by ID if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableStandbyForID(id *int64) *AccountUpdateOne {
+	if id != nil {
+		_u = _u.SetStandbyForID(*id)
+	}
+	return _u
+}
+
+// SetStandbyFor sets the "standby_for" edge to the Account entity.
+func (_u *AccountUpdateOne) SetStandbyFor(v *Account) *AccountUpdateOne {
+	return _u.SetStandbyForID(v.ID)
+}
+
+// AddStandbyAccountIDs adds the "standby_accounts" edge to the Account entity by IDs.
+func (_u *AccountUpdateOne) AddStandbyAccountIDs(ids ...int64) *AccountUpdateOne {
+	_u.mutation.AddStandbyAccountIDs(ids...)
+	return _u
+}
+
+// AddStandbyAccounts adds the "standby_accounts" edges to the Account entity.
+func (_u *AccountUpdateOne) AddStandbyAccounts(v ...*Account) *AccountUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddStandbyAccountIDs(ids...)
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by IDs.
 func (_u *AccountUpdateOne) AddUsageLogIDs(ids ...int64) *AccountUpdateOne {
 	_u.mutation.AddUsageLogIDs(ids...)
@@ -1830,6 +2072,33 @@ func (_u *AccountUpdateOne) RemoveChildren(v ...*Account) *AccountUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveChildIDs(ids...)
+}
+
+// ClearStandbyFor clears the "standby_for" edge to the Account entity.
+func (_u *AccountUpdateOne) ClearStandbyFor() *AccountUpdateOne {
+	_u.mutation.ClearStandbyFor()
+	return _u
+}
+
+// ClearStandbyAccounts clears all "standby_accounts" edges to the Account entity.
+func (_u *AccountUpdateOne) ClearStandbyAccounts() *AccountUpdateOne {
+	_u.mutation.ClearStandbyAccounts()
+	return _u
+}
+
+// RemoveStandbyAccountIDs removes the "standby_accounts" edge to Account entities by IDs.
+func (_u *AccountUpdateOne) RemoveStandbyAccountIDs(ids ...int64) *AccountUpdateOne {
+	_u.mutation.RemoveStandbyAccountIDs(ids...)
+	return _u
+}
+
+// RemoveStandbyAccounts removes "standby_accounts" edges to Account entities.
+func (_u *AccountUpdateOne) RemoveStandbyAccounts(v ...*Account) *AccountUpdateOne {
+	ids := make([]int64, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveStandbyAccountIDs(ids...)
 }
 
 // ClearUsageLogs clears all "usage_logs" edges to the UsageLog entity.
@@ -2095,6 +2364,14 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	if _u.mutation.TempUnschedulableReasonCleared() {
 		_spec.ClearField(account.FieldTempUnschedulableReason, field.TypeString)
 	}
+	if value, ok := _u.mutation.StandbyTriggerTypes(); ok {
+		_spec.SetField(account.FieldStandbyTriggerTypes, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedStandbyTriggerTypes(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, account.FieldStandbyTriggerTypes, value)
+		})
+	}
 	if value, ok := _u.mutation.SessionWindowStart(); ok {
 		_spec.SetField(account.FieldSessionWindowStart, field.TypeTime, value)
 	}
@@ -2266,6 +2543,80 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 			Inverse: false,
 			Table:   account.ChildrenTable,
 			Columns: []string{account.ChildrenColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StandbyForCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   account.StandbyForTable,
+			Columns: []string{account.StandbyForColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StandbyForIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   account.StandbyForTable,
+			Columns: []string{account.StandbyForColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StandbyAccountsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedStandbyAccountsIDs(); len(nodes) > 0 && !_u.mutation.StandbyAccountsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StandbyAccountsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   account.StandbyAccountsTable,
+			Columns: []string{account.StandbyAccountsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),

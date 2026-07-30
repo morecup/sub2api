@@ -71,6 +71,10 @@ type Account struct {
 	TempUnschedulableUntil *time.Time `json:"temp_unschedulable_until,omitempty"`
 	// TempUnschedulableReason holds the value of the "temp_unschedulable_reason" field.
 	TempUnschedulableReason *string `json:"temp_unschedulable_reason,omitempty"`
+	// Primary account id monitored by this standby account (NULL = normal account).
+	StandbyForAccountID *int64 `json:"standby_for_account_id,omitempty"`
+	// OR-combined trigger types that activate this standby account.
+	StandbyTriggerTypes []string `json:"standby_trigger_types,omitempty"`
 	// SessionWindowStart holds the value of the "session_window_start" field.
 	SessionWindowStart *time.Time `json:"session_window_start,omitempty"`
 	// SessionWindowEnd holds the value of the "session_window_end" field.
@@ -97,13 +101,17 @@ type AccountEdges struct {
 	Parent *Account `json:"parent,omitempty"`
 	// Children holds the value of the children edge.
 	Children []*Account `json:"children,omitempty"`
+	// StandbyFor holds the value of the standby_for edge.
+	StandbyFor *Account `json:"standby_for,omitempty"`
+	// StandbyAccounts holds the value of the standby_accounts edge.
+	StandbyAccounts []*Account `json:"standby_accounts,omitempty"`
 	// UsageLogs holds the value of the usage_logs edge.
 	UsageLogs []*UsageLog `json:"usage_logs,omitempty"`
 	// AccountGroups holds the value of the account_groups edge.
 	AccountGroups []*AccountGroup `json:"account_groups,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [6]bool
+	loadedTypes [8]bool
 }
 
 // GroupsOrErr returns the Groups value or an error if the edge
@@ -146,10 +154,30 @@ func (e AccountEdges) ChildrenOrErr() ([]*Account, error) {
 	return nil, &NotLoadedError{edge: "children"}
 }
 
+// StandbyForOrErr returns the StandbyFor value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e AccountEdges) StandbyForOrErr() (*Account, error) {
+	if e.StandbyFor != nil {
+		return e.StandbyFor, nil
+	} else if e.loadedTypes[4] {
+		return nil, &NotFoundError{label: account.Label}
+	}
+	return nil, &NotLoadedError{edge: "standby_for"}
+}
+
+// StandbyAccountsOrErr returns the StandbyAccounts value or an error if the edge
+// was not loaded in eager-loading.
+func (e AccountEdges) StandbyAccountsOrErr() ([]*Account, error) {
+	if e.loadedTypes[5] {
+		return e.StandbyAccounts, nil
+	}
+	return nil, &NotLoadedError{edge: "standby_accounts"}
+}
+
 // UsageLogsOrErr returns the UsageLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e AccountEdges) UsageLogsOrErr() ([]*UsageLog, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[6] {
 		return e.UsageLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_logs"}
@@ -158,7 +186,7 @@ func (e AccountEdges) UsageLogsOrErr() ([]*UsageLog, error) {
 // AccountGroupsOrErr returns the AccountGroups value or an error if the edge
 // was not loaded in eager-loading.
 func (e AccountEdges) AccountGroupsOrErr() ([]*AccountGroup, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[7] {
 		return e.AccountGroups, nil
 	}
 	return nil, &NotLoadedError{edge: "account_groups"}
@@ -169,13 +197,13 @@ func (*Account) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case account.FieldCredentials, account.FieldExtra:
+		case account.FieldCredentials, account.FieldExtra, account.FieldStandbyTriggerTypes:
 			values[i] = new([]byte)
 		case account.FieldAutoPauseOnExpired, account.FieldSchedulable:
 			values[i] = new(sql.NullBool)
 		case account.FieldRateMultiplier:
 			values[i] = new(sql.NullFloat64)
-		case account.FieldID, account.FieldProxyID, account.FieldProxyFallbackOriginID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority, account.FieldParentAccountID:
+		case account.FieldID, account.FieldProxyID, account.FieldProxyFallbackOriginID, account.FieldConcurrency, account.FieldLoadFactor, account.FieldPriority, account.FieldStandbyForAccountID, account.FieldParentAccountID:
 			values[i] = new(sql.NullInt64)
 		case account.FieldName, account.FieldNotes, account.FieldPlatform, account.FieldType, account.FieldStatus, account.FieldErrorMessage, account.FieldTempUnschedulableReason, account.FieldSessionWindowStatus, account.FieldQuotaDimension:
 			values[i] = new(sql.NullString)
@@ -375,6 +403,21 @@ func (_m *Account) assignValues(columns []string, values []any) error {
 				_m.TempUnschedulableReason = new(string)
 				*_m.TempUnschedulableReason = value.String
 			}
+		case account.FieldStandbyForAccountID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field standby_for_account_id", values[i])
+			} else if value.Valid {
+				_m.StandbyForAccountID = new(int64)
+				*_m.StandbyForAccountID = value.Int64
+			}
+		case account.FieldStandbyTriggerTypes:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field standby_trigger_types", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.StandbyTriggerTypes); err != nil {
+					return fmt.Errorf("unmarshal field standby_trigger_types: %w", err)
+				}
+			}
 		case account.FieldSessionWindowStart:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field session_window_start", values[i])
@@ -440,6 +483,16 @@ func (_m *Account) QueryParent() *AccountQuery {
 // QueryChildren queries the "children" edge of the Account entity.
 func (_m *Account) QueryChildren() *AccountQuery {
 	return NewAccountClient(_m.config).QueryChildren(_m)
+}
+
+// QueryStandbyFor queries the "standby_for" edge of the Account entity.
+func (_m *Account) QueryStandbyFor() *AccountQuery {
+	return NewAccountClient(_m.config).QueryStandbyFor(_m)
+}
+
+// QueryStandbyAccounts queries the "standby_accounts" edge of the Account entity.
+func (_m *Account) QueryStandbyAccounts() *AccountQuery {
+	return NewAccountClient(_m.config).QueryStandbyAccounts(_m)
 }
 
 // QueryUsageLogs queries the "usage_logs" edge of the Account entity.
@@ -578,6 +631,14 @@ func (_m *Account) String() string {
 		builder.WriteString("temp_unschedulable_reason=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	if v := _m.StandbyForAccountID; v != nil {
+		builder.WriteString("standby_for_account_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("standby_trigger_types=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StandbyTriggerTypes))
 	builder.WriteString(", ")
 	if v := _m.SessionWindowStart; v != nil {
 		builder.WriteString("session_window_start=")

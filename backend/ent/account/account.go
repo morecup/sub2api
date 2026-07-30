@@ -68,6 +68,10 @@ const (
 	FieldTempUnschedulableUntil = "temp_unschedulable_until"
 	// FieldTempUnschedulableReason holds the string denoting the temp_unschedulable_reason field in the database.
 	FieldTempUnschedulableReason = "temp_unschedulable_reason"
+	// FieldStandbyForAccountID holds the string denoting the standby_for_account_id field in the database.
+	FieldStandbyForAccountID = "standby_for_account_id"
+	// FieldStandbyTriggerTypes holds the string denoting the standby_trigger_types field in the database.
+	FieldStandbyTriggerTypes = "standby_trigger_types"
 	// FieldSessionWindowStart holds the string denoting the session_window_start field in the database.
 	FieldSessionWindowStart = "session_window_start"
 	// FieldSessionWindowEnd holds the string denoting the session_window_end field in the database.
@@ -86,6 +90,10 @@ const (
 	EdgeParent = "parent"
 	// EdgeChildren holds the string denoting the children edge name in mutations.
 	EdgeChildren = "children"
+	// EdgeStandbyFor holds the string denoting the standby_for edge name in mutations.
+	EdgeStandbyFor = "standby_for"
+	// EdgeStandbyAccounts holds the string denoting the standby_accounts edge name in mutations.
+	EdgeStandbyAccounts = "standby_accounts"
 	// EdgeUsageLogs holds the string denoting the usage_logs edge name in mutations.
 	EdgeUsageLogs = "usage_logs"
 	// EdgeAccountGroups holds the string denoting the account_groups edge name in mutations.
@@ -112,6 +120,14 @@ const (
 	ChildrenTable = "accounts"
 	// ChildrenColumn is the table column denoting the children relation/edge.
 	ChildrenColumn = "parent_account_id"
+	// StandbyForTable is the table that holds the standby_for relation/edge.
+	StandbyForTable = "accounts"
+	// StandbyForColumn is the table column denoting the standby_for relation/edge.
+	StandbyForColumn = "standby_for_account_id"
+	// StandbyAccountsTable is the table that holds the standby_accounts relation/edge.
+	StandbyAccountsTable = "accounts"
+	// StandbyAccountsColumn is the table column denoting the standby_accounts relation/edge.
+	StandbyAccountsColumn = "standby_for_account_id"
 	// UsageLogsTable is the table that holds the usage_logs relation/edge.
 	UsageLogsTable = "usage_logs"
 	// UsageLogsInverseTable is the table name for the UsageLog entity.
@@ -157,6 +173,8 @@ var Columns = []string{
 	FieldOverloadUntil,
 	FieldTempUnschedulableUntil,
 	FieldTempUnschedulableReason,
+	FieldStandbyForAccountID,
+	FieldStandbyTriggerTypes,
 	FieldSessionWindowStart,
 	FieldSessionWindowEnd,
 	FieldSessionWindowStatus,
@@ -218,6 +236,8 @@ var (
 	DefaultAutoPauseOnExpired bool
 	// DefaultSchedulable holds the default value on creation for the "schedulable" field.
 	DefaultSchedulable bool
+	// DefaultStandbyTriggerTypes holds the default value on creation for the "standby_trigger_types" field.
+	DefaultStandbyTriggerTypes []string
 	// SessionWindowStatusValidator is a validator for the "session_window_status" field. It is called by the builders before save.
 	SessionWindowStatusValidator func(string) error
 )
@@ -376,6 +396,11 @@ func ByTempUnschedulableReason(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTempUnschedulableReason, opts...).ToFunc()
 }
 
+// ByStandbyForAccountID orders the results by the standby_for_account_id field.
+func ByStandbyForAccountID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStandbyForAccountID, opts...).ToFunc()
+}
+
 // BySessionWindowStart orders the results by the session_window_start field.
 func BySessionWindowStart(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSessionWindowStart, opts...).ToFunc()
@@ -443,6 +468,27 @@ func ByChildren(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByStandbyForField orders the results by standby_for field.
+func ByStandbyForField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newStandbyForStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByStandbyAccountsCount orders the results by standby_accounts count.
+func ByStandbyAccountsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newStandbyAccountsStep(), opts...)
+	}
+}
+
+// ByStandbyAccounts orders the results by standby_accounts terms.
+func ByStandbyAccounts(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newStandbyAccountsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByUsageLogsCount orders the results by usage_logs count.
 func ByUsageLogsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -496,6 +542,20 @@ func newChildrenStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(Table, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ChildrenTable, ChildrenColumn),
+	)
+}
+func newStandbyForStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, StandbyForTable, StandbyForColumn),
+	)
+}
+func newStandbyAccountsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(Table, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, StandbyAccountsTable, StandbyAccountsColumn),
 	)
 }
 func newUsageLogsStep() *sqlgraph.Step {

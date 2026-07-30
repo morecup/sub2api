@@ -2315,6 +2315,8 @@ type AccountMutation struct {
 	overload_until              *time.Time
 	temp_unschedulable_until    *time.Time
 	temp_unschedulable_reason   *string
+	standby_trigger_types       *[]string
+	appendstandby_trigger_types []string
 	session_window_start        *time.Time
 	session_window_end          *time.Time
 	session_window_status       *string
@@ -2330,6 +2332,11 @@ type AccountMutation struct {
 	children                    map[int64]struct{}
 	removedchildren             map[int64]struct{}
 	clearedchildren             bool
+	standby_for                 *int64
+	clearedstandby_for          bool
+	standby_accounts            map[int64]struct{}
+	removedstandby_accounts     map[int64]struct{}
+	clearedstandby_accounts     bool
 	usage_logs                  map[int64]struct{}
 	removedusage_logs           map[int64]struct{}
 	clearedusage_logs           bool
@@ -3643,6 +3650,106 @@ func (m *AccountMutation) ResetTempUnschedulableReason() {
 	delete(m.clearedFields, account.FieldTempUnschedulableReason)
 }
 
+// SetStandbyForAccountID sets the "standby_for_account_id" field.
+func (m *AccountMutation) SetStandbyForAccountID(i int64) {
+	m.standby_for = &i
+}
+
+// StandbyForAccountID returns the value of the "standby_for_account_id" field in the mutation.
+func (m *AccountMutation) StandbyForAccountID() (r int64, exists bool) {
+	v := m.standby_for
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStandbyForAccountID returns the old "standby_for_account_id" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldStandbyForAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStandbyForAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStandbyForAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStandbyForAccountID: %w", err)
+	}
+	return oldValue.StandbyForAccountID, nil
+}
+
+// ClearStandbyForAccountID clears the value of the "standby_for_account_id" field.
+func (m *AccountMutation) ClearStandbyForAccountID() {
+	m.standby_for = nil
+	m.clearedFields[account.FieldStandbyForAccountID] = struct{}{}
+}
+
+// StandbyForAccountIDCleared returns if the "standby_for_account_id" field was cleared in this mutation.
+func (m *AccountMutation) StandbyForAccountIDCleared() bool {
+	_, ok := m.clearedFields[account.FieldStandbyForAccountID]
+	return ok
+}
+
+// ResetStandbyForAccountID resets all changes to the "standby_for_account_id" field.
+func (m *AccountMutation) ResetStandbyForAccountID() {
+	m.standby_for = nil
+	delete(m.clearedFields, account.FieldStandbyForAccountID)
+}
+
+// SetStandbyTriggerTypes sets the "standby_trigger_types" field.
+func (m *AccountMutation) SetStandbyTriggerTypes(s []string) {
+	m.standby_trigger_types = &s
+	m.appendstandby_trigger_types = nil
+}
+
+// StandbyTriggerTypes returns the value of the "standby_trigger_types" field in the mutation.
+func (m *AccountMutation) StandbyTriggerTypes() (r []string, exists bool) {
+	v := m.standby_trigger_types
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStandbyTriggerTypes returns the old "standby_trigger_types" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldStandbyTriggerTypes(ctx context.Context) (v []string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStandbyTriggerTypes is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStandbyTriggerTypes requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStandbyTriggerTypes: %w", err)
+	}
+	return oldValue.StandbyTriggerTypes, nil
+}
+
+// AppendStandbyTriggerTypes adds s to the "standby_trigger_types" field.
+func (m *AccountMutation) AppendStandbyTriggerTypes(s []string) {
+	m.appendstandby_trigger_types = append(m.appendstandby_trigger_types, s...)
+}
+
+// AppendedStandbyTriggerTypes returns the list of values that were appended to the "standby_trigger_types" field in this mutation.
+func (m *AccountMutation) AppendedStandbyTriggerTypes() ([]string, bool) {
+	if len(m.appendstandby_trigger_types) == 0 {
+		return nil, false
+	}
+	return m.appendstandby_trigger_types, true
+}
+
+// ResetStandbyTriggerTypes resets all changes to the "standby_trigger_types" field.
+func (m *AccountMutation) ResetStandbyTriggerTypes() {
+	m.standby_trigger_types = nil
+	m.appendstandby_trigger_types = nil
+}
+
 // SetSessionWindowStart sets the "session_window_start" field.
 func (m *AccountMutation) SetSessionWindowStart(t time.Time) {
 	m.session_window_start = &t
@@ -4050,6 +4157,100 @@ func (m *AccountMutation) ResetChildren() {
 	m.removedchildren = nil
 }
 
+// SetStandbyForID sets the "standby_for" edge to the Account entity by id.
+func (m *AccountMutation) SetStandbyForID(id int64) {
+	m.standby_for = &id
+}
+
+// ClearStandbyFor clears the "standby_for" edge to the Account entity.
+func (m *AccountMutation) ClearStandbyFor() {
+	m.clearedstandby_for = true
+	m.clearedFields[account.FieldStandbyForAccountID] = struct{}{}
+}
+
+// StandbyForCleared reports if the "standby_for" edge to the Account entity was cleared.
+func (m *AccountMutation) StandbyForCleared() bool {
+	return m.StandbyForAccountIDCleared() || m.clearedstandby_for
+}
+
+// StandbyForID returns the "standby_for" edge ID in the mutation.
+func (m *AccountMutation) StandbyForID() (id int64, exists bool) {
+	if m.standby_for != nil {
+		return *m.standby_for, true
+	}
+	return
+}
+
+// StandbyForIDs returns the "standby_for" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// StandbyForID instead. It exists only for internal usage by the builders.
+func (m *AccountMutation) StandbyForIDs() (ids []int64) {
+	if id := m.standby_for; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetStandbyFor resets all changes to the "standby_for" edge.
+func (m *AccountMutation) ResetStandbyFor() {
+	m.standby_for = nil
+	m.clearedstandby_for = false
+}
+
+// AddStandbyAccountIDs adds the "standby_accounts" edge to the Account entity by ids.
+func (m *AccountMutation) AddStandbyAccountIDs(ids ...int64) {
+	if m.standby_accounts == nil {
+		m.standby_accounts = make(map[int64]struct{})
+	}
+	for i := range ids {
+		m.standby_accounts[ids[i]] = struct{}{}
+	}
+}
+
+// ClearStandbyAccounts clears the "standby_accounts" edge to the Account entity.
+func (m *AccountMutation) ClearStandbyAccounts() {
+	m.clearedstandby_accounts = true
+}
+
+// StandbyAccountsCleared reports if the "standby_accounts" edge to the Account entity was cleared.
+func (m *AccountMutation) StandbyAccountsCleared() bool {
+	return m.clearedstandby_accounts
+}
+
+// RemoveStandbyAccountIDs removes the "standby_accounts" edge to the Account entity by IDs.
+func (m *AccountMutation) RemoveStandbyAccountIDs(ids ...int64) {
+	if m.removedstandby_accounts == nil {
+		m.removedstandby_accounts = make(map[int64]struct{})
+	}
+	for i := range ids {
+		delete(m.standby_accounts, ids[i])
+		m.removedstandby_accounts[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedStandbyAccounts returns the removed IDs of the "standby_accounts" edge to the Account entity.
+func (m *AccountMutation) RemovedStandbyAccountsIDs() (ids []int64) {
+	for id := range m.removedstandby_accounts {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// StandbyAccountsIDs returns the "standby_accounts" edge IDs in the mutation.
+func (m *AccountMutation) StandbyAccountsIDs() (ids []int64) {
+	for id := range m.standby_accounts {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetStandbyAccounts resets all changes to the "standby_accounts" edge.
+func (m *AccountMutation) ResetStandbyAccounts() {
+	m.standby_accounts = nil
+	m.clearedstandby_accounts = false
+	m.removedstandby_accounts = nil
+}
+
 // AddUsageLogIDs adds the "usage_logs" edge to the UsageLog entity by ids.
 func (m *AccountMutation) AddUsageLogIDs(ids ...int64) {
 	if m.usage_logs == nil {
@@ -4138,7 +4339,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 31)
+	fields := make([]string, 0, 33)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -4217,6 +4418,12 @@ func (m *AccountMutation) Fields() []string {
 	if m.temp_unschedulable_reason != nil {
 		fields = append(fields, account.FieldTempUnschedulableReason)
 	}
+	if m.standby_for != nil {
+		fields = append(fields, account.FieldStandbyForAccountID)
+	}
+	if m.standby_trigger_types != nil {
+		fields = append(fields, account.FieldStandbyTriggerTypes)
+	}
 	if m.session_window_start != nil {
 		fields = append(fields, account.FieldSessionWindowStart)
 	}
@@ -4292,6 +4499,10 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.TempUnschedulableUntil()
 	case account.FieldTempUnschedulableReason:
 		return m.TempUnschedulableReason()
+	case account.FieldStandbyForAccountID:
+		return m.StandbyForAccountID()
+	case account.FieldStandbyTriggerTypes:
+		return m.StandbyTriggerTypes()
 	case account.FieldSessionWindowStart:
 		return m.SessionWindowStart()
 	case account.FieldSessionWindowEnd:
@@ -4363,6 +4574,10 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldTempUnschedulableUntil(ctx)
 	case account.FieldTempUnschedulableReason:
 		return m.OldTempUnschedulableReason(ctx)
+	case account.FieldStandbyForAccountID:
+		return m.OldStandbyForAccountID(ctx)
+	case account.FieldStandbyTriggerTypes:
+		return m.OldStandbyTriggerTypes(ctx)
 	case account.FieldSessionWindowStart:
 		return m.OldSessionWindowStart(ctx)
 	case account.FieldSessionWindowEnd:
@@ -4564,6 +4779,20 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTempUnschedulableReason(v)
 		return nil
+	case account.FieldStandbyForAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStandbyForAccountID(v)
+		return nil
+	case account.FieldStandbyTriggerTypes:
+		v, ok := value.([]string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStandbyTriggerTypes(v)
+		return nil
 	case account.FieldSessionWindowStart:
 		v, ok := value.(time.Time)
 		if !ok {
@@ -4731,6 +4960,9 @@ func (m *AccountMutation) ClearedFields() []string {
 	if m.FieldCleared(account.FieldTempUnschedulableReason) {
 		fields = append(fields, account.FieldTempUnschedulableReason)
 	}
+	if m.FieldCleared(account.FieldStandbyForAccountID) {
+		fields = append(fields, account.FieldStandbyForAccountID)
+	}
 	if m.FieldCleared(account.FieldSessionWindowStart) {
 		fields = append(fields, account.FieldSessionWindowStart)
 	}
@@ -4795,6 +5027,9 @@ func (m *AccountMutation) ClearField(name string) error {
 		return nil
 	case account.FieldTempUnschedulableReason:
 		m.ClearTempUnschedulableReason()
+		return nil
+	case account.FieldStandbyForAccountID:
+		m.ClearStandbyForAccountID()
 		return nil
 	case account.FieldSessionWindowStart:
 		m.ClearSessionWindowStart()
@@ -4894,6 +5129,12 @@ func (m *AccountMutation) ResetField(name string) error {
 	case account.FieldTempUnschedulableReason:
 		m.ResetTempUnschedulableReason()
 		return nil
+	case account.FieldStandbyForAccountID:
+		m.ResetStandbyForAccountID()
+		return nil
+	case account.FieldStandbyTriggerTypes:
+		m.ResetStandbyTriggerTypes()
+		return nil
 	case account.FieldSessionWindowStart:
 		m.ResetSessionWindowStart()
 		return nil
@@ -4915,7 +5156,7 @@ func (m *AccountMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *AccountMutation) AddedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 7)
 	if m.groups != nil {
 		edges = append(edges, account.EdgeGroups)
 	}
@@ -4927,6 +5168,12 @@ func (m *AccountMutation) AddedEdges() []string {
 	}
 	if m.children != nil {
 		edges = append(edges, account.EdgeChildren)
+	}
+	if m.standby_for != nil {
+		edges = append(edges, account.EdgeStandbyFor)
+	}
+	if m.standby_accounts != nil {
+		edges = append(edges, account.EdgeStandbyAccounts)
 	}
 	if m.usage_logs != nil {
 		edges = append(edges, account.EdgeUsageLogs)
@@ -4958,6 +5205,16 @@ func (m *AccountMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case account.EdgeStandbyFor:
+		if id := m.standby_for; id != nil {
+			return []ent.Value{*id}
+		}
+	case account.EdgeStandbyAccounts:
+		ids := make([]ent.Value, 0, len(m.standby_accounts))
+		for id := range m.standby_accounts {
+			ids = append(ids, id)
+		}
+		return ids
 	case account.EdgeUsageLogs:
 		ids := make([]ent.Value, 0, len(m.usage_logs))
 		for id := range m.usage_logs {
@@ -4970,12 +5227,15 @@ func (m *AccountMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *AccountMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 7)
 	if m.removedgroups != nil {
 		edges = append(edges, account.EdgeGroups)
 	}
 	if m.removedchildren != nil {
 		edges = append(edges, account.EdgeChildren)
+	}
+	if m.removedstandby_accounts != nil {
+		edges = append(edges, account.EdgeStandbyAccounts)
 	}
 	if m.removedusage_logs != nil {
 		edges = append(edges, account.EdgeUsageLogs)
@@ -4999,6 +5259,12 @@ func (m *AccountMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case account.EdgeStandbyAccounts:
+		ids := make([]ent.Value, 0, len(m.removedstandby_accounts))
+		for id := range m.removedstandby_accounts {
+			ids = append(ids, id)
+		}
+		return ids
 	case account.EdgeUsageLogs:
 		ids := make([]ent.Value, 0, len(m.removedusage_logs))
 		for id := range m.removedusage_logs {
@@ -5011,7 +5277,7 @@ func (m *AccountMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *AccountMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 5)
+	edges := make([]string, 0, 7)
 	if m.clearedgroups {
 		edges = append(edges, account.EdgeGroups)
 	}
@@ -5023,6 +5289,12 @@ func (m *AccountMutation) ClearedEdges() []string {
 	}
 	if m.clearedchildren {
 		edges = append(edges, account.EdgeChildren)
+	}
+	if m.clearedstandby_for {
+		edges = append(edges, account.EdgeStandbyFor)
+	}
+	if m.clearedstandby_accounts {
+		edges = append(edges, account.EdgeStandbyAccounts)
 	}
 	if m.clearedusage_logs {
 		edges = append(edges, account.EdgeUsageLogs)
@@ -5042,6 +5314,10 @@ func (m *AccountMutation) EdgeCleared(name string) bool {
 		return m.clearedparent
 	case account.EdgeChildren:
 		return m.clearedchildren
+	case account.EdgeStandbyFor:
+		return m.clearedstandby_for
+	case account.EdgeStandbyAccounts:
+		return m.clearedstandby_accounts
 	case account.EdgeUsageLogs:
 		return m.clearedusage_logs
 	}
@@ -5057,6 +5333,9 @@ func (m *AccountMutation) ClearEdge(name string) error {
 		return nil
 	case account.EdgeParent:
 		m.ClearParent()
+		return nil
+	case account.EdgeStandbyFor:
+		m.ClearStandbyFor()
 		return nil
 	}
 	return fmt.Errorf("unknown Account unique edge %s", name)
@@ -5077,6 +5356,12 @@ func (m *AccountMutation) ResetEdge(name string) error {
 		return nil
 	case account.EdgeChildren:
 		m.ResetChildren()
+		return nil
+	case account.EdgeStandbyFor:
+		m.ResetStandbyFor()
+		return nil
+	case account.EdgeStandbyAccounts:
+		m.ResetStandbyAccounts()
 		return nil
 	case account.EdgeUsageLogs:
 		m.ResetUsageLogs()

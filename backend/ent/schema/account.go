@@ -182,6 +182,17 @@ func (Account) Fields() []ent.Field {
 			Nillable().
 			SchemaType(map[string]string{dialect.Postgres: "text"}),
 
+		// standby_for_account_id / standby_trigger_types: 主备自动接管配置。
+		// schedulable 仍是人工硬开关；配置为备用账号后，仅在关联主账号命中任一触发条件时参与调度。
+		field.Int64("standby_for_account_id").
+			Optional().
+			Nillable().
+			Comment("Primary account id monitored by this standby account (NULL = normal account)."),
+		field.JSON("standby_trigger_types", []string{}).
+			Default([]string{}).
+			SchemaType(map[string]string{dialect.Postgres: "jsonb"}).
+			Comment("OR-combined trigger types that activate this standby account."),
+
 		// session_window_*: 会话窗口相关字段
 		// 用于管理某些需要会话时间窗口的 API（如 Claude Pro）
 		field.Time("session_window_start").
@@ -225,6 +236,12 @@ func (Account) Edges() []ent.Edge {
 			From("parent").
 			Field("parent_account_id").
 			Unique(),
+		// standby_accounts/standby_for: 一个主账号可以有多个备用账号，一个备用账号只关联一个主账号。
+		edge.To("standby_accounts", Account.Type).
+			Annotations(entsql.OnDelete(entsql.SetNull)).
+			From("standby_for").
+			Field("standby_for_account_id").
+			Unique(),
 		// usage_logs: 该账户的使用日志
 		edge.To("usage_logs", UsageLog.Type),
 	}
@@ -244,6 +261,7 @@ func (Account) Indexes() []ent.Index {
 		index.Fields("rate_limited_at"),     // 筛选速率限制账户
 		index.Fields("rate_limit_reset_at"), // 筛选速率限制解除时间
 		index.Fields("overload_until"),      // 筛选过载账户
+		index.Fields("standby_for_account_id"),
 		// 调度热路径复合索引（线上由 SQL 迁移创建部分索引，schema 仅用于模型可读性对齐）
 		index.Fields("platform", "priority"),
 		index.Fields("priority", "status"),

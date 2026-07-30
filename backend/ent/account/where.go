@@ -175,6 +175,11 @@ func TempUnschedulableReason(v string) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldTempUnschedulableReason, v))
 }
 
+// StandbyForAccountID applies equality check predicate on the "standby_for_account_id" field. It's identical to StandbyForAccountIDEQ.
+func StandbyForAccountID(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldStandbyForAccountID, v))
+}
+
 // SessionWindowStart applies equality check predicate on the "session_window_start" field. It's identical to SessionWindowStartEQ.
 func SessionWindowStart(v time.Time) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldSessionWindowStart, v))
@@ -1380,6 +1385,36 @@ func TempUnschedulableReasonContainsFold(v string) predicate.Account {
 	return predicate.Account(sql.FieldContainsFold(FieldTempUnschedulableReason, v))
 }
 
+// StandbyForAccountIDEQ applies the EQ predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldStandbyForAccountID, v))
+}
+
+// StandbyForAccountIDNEQ applies the NEQ predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDNEQ(v int64) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldStandbyForAccountID, v))
+}
+
+// StandbyForAccountIDIn applies the In predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldStandbyForAccountID, vs...))
+}
+
+// StandbyForAccountIDNotIn applies the NotIn predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDNotIn(vs ...int64) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldStandbyForAccountID, vs...))
+}
+
+// StandbyForAccountIDIsNil applies the IsNil predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDIsNil() predicate.Account {
+	return predicate.Account(sql.FieldIsNull(FieldStandbyForAccountID))
+}
+
+// StandbyForAccountIDNotNil applies the NotNil predicate on the "standby_for_account_id" field.
+func StandbyForAccountIDNotNil() predicate.Account {
+	return predicate.Account(sql.FieldNotNull(FieldStandbyForAccountID))
+}
+
 // SessionWindowStartEQ applies the EQ predicate on the "session_window_start" field.
 func SessionWindowStartEQ(v time.Time) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldSessionWindowStart, v))
@@ -1689,6 +1724,52 @@ func HasChildren() predicate.Account {
 func HasChildrenWith(preds ...predicate.Account) predicate.Account {
 	return predicate.Account(func(s *sql.Selector) {
 		step := newChildrenStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasStandbyFor applies the HasEdge predicate on the "standby_for" edge.
+func HasStandbyFor() predicate.Account {
+	return predicate.Account(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, StandbyForTable, StandbyForColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasStandbyForWith applies the HasEdge predicate on the "standby_for" edge with a given conditions (other predicates).
+func HasStandbyForWith(preds ...predicate.Account) predicate.Account {
+	return predicate.Account(func(s *sql.Selector) {
+		step := newStandbyForStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasStandbyAccounts applies the HasEdge predicate on the "standby_accounts" edge.
+func HasStandbyAccounts() predicate.Account {
+	return predicate.Account(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, StandbyAccountsTable, StandbyAccountsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasStandbyAccountsWith applies the HasEdge predicate on the "standby_accounts" edge with a given conditions (other predicates).
+func HasStandbyAccountsWith(preds ...predicate.Account) predicate.Account {
+	return predicate.Account(func(s *sql.Selector) {
+		step := newStandbyAccountsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

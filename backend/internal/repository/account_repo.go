@@ -114,6 +114,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 		SetStatus(account.Status).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(account.Schedulable).
+		SetStandbyTriggerTypes(normalizeStringSlice(account.StandbyTriggerTypes)).
 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
 
 	if account.RateMultiplier != nil {
@@ -140,6 +141,9 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	}
 	if account.OverloadUntil != nil {
 		builder.SetOverloadUntil(*account.OverloadUntil)
+	}
+	if account.StandbyForAccountID != nil {
+		builder.SetStandbyForAccountID(*account.StandbyForAccountID)
 	}
 	if account.SessionWindowStart != nil {
 		builder.SetSessionWindowStart(*account.SessionWindowStart)
@@ -476,6 +480,7 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 		SetStatus(account.Status).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(schedulable).
+		SetStandbyTriggerTypes(normalizeStringSlice(account.StandbyTriggerTypes)).
 		SetAutoPauseOnExpired(account.AutoPauseOnExpired)
 
 	if account.RateMultiplier != nil {
@@ -516,6 +521,10 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 		builder.SetOverloadUntil(*account.OverloadUntil)
 	} else {
 		builder.ClearOverloadUntil()
+	}
+	builder.SetNillableStandbyForAccountID(account.StandbyForAccountID)
+	if account.StandbyForAccountID == nil {
+		builder.ClearStandbyForAccountID()
 	}
 	if account.SessionWindowStart != nil {
 		builder.SetSessionWindowStart(*account.SessionWindowStart)
@@ -3260,6 +3269,8 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		OverloadUntil:           m.OverloadUntil,
 		TempUnschedulableUntil:  m.TempUnschedulableUntil,
 		TempUnschedulableReason: derefString(m.TempUnschedulableReason),
+		StandbyForAccountID:     m.StandbyForAccountID,
+		StandbyTriggerTypes:     append([]string{}, m.StandbyTriggerTypes...),
 		SessionWindowStart:      m.SessionWindowStart,
 		SessionWindowEnd:        m.SessionWindowEnd,
 		SessionWindowStatus:     derefString(m.SessionWindowStatus),
@@ -3271,6 +3282,13 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 func normalizeJSONMap(in map[string]any) map[string]any {
 	if in == nil {
 		return map[string]any{}
+	}
+	return in
+}
+
+func normalizeStringSlice(in []string) []string {
+	if in == nil {
+		return []string{}
 	}
 	return in
 }

@@ -442,6 +442,25 @@ func TestBuildSchedulerMetadataAccount_KeepsQuotaAutoPauseFields(t *testing.T) {
 	require.Equal(t, false, got.Extra["auto_pause_7d_disabled"])
 }
 
+func TestBuildSchedulerMetadataAccountKeepsStandbyConfiguration(t *testing.T) {
+	primaryID := int64(87)
+	account := service.Account{
+		ID:                  88,
+		StandbyForAccountID: &primaryID,
+		StandbyTriggerTypes: []string{
+			string(service.StandbyTriggerQuota5hExhausted),
+			string(service.StandbyTriggerRateLimited),
+		},
+	}
+
+	metadata := buildSchedulerMetadataAccount(account)
+
+	require.Equal(t, &primaryID, metadata.StandbyForAccountID)
+	require.Equal(t, account.StandbyTriggerTypes, metadata.StandbyTriggerTypes)
+	metadata.StandbyTriggerTypes[0] = string(service.StandbyTriggerAccountError)
+	require.Equal(t, string(service.StandbyTriggerQuota5hExhausted), account.StandbyTriggerTypes[0])
+}
+
 func TestBuildSchedulerMetadataAccount_KeepsQuotaStateForCachedAccounts(t *testing.T) {
 	now := time.Now().UTC()
 	activeStart := now.Add(-time.Hour).Format(time.RFC3339)

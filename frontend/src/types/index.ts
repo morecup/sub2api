@@ -1029,6 +1029,16 @@ export interface OllamaCloudUsageSettings {
   debounce_minutes: number
 }
 
+export type StandbyTriggerType =
+  | 'quota_5h_exhausted'
+  | 'quota_7d_exhausted'
+  | 'rate_limited'
+  | 'quota_exhausted'
+  | 'account_expired'
+  | 'account_error'
+  | 'temp_unschedulable'
+  | 'manual_disabled'
+
 export interface Account {
   id: number
   name: string
@@ -1082,6 +1092,10 @@ export interface Account {
   overload_until: string | null
   temp_unschedulable_until: string | null
   temp_unschedulable_reason: string | null
+
+  // 主备自动接管配置；多个条件按 OR 生效。
+  standby_for_account_id?: number | null
+  standby_trigger_types?: StandbyTriggerType[]
 
   // Session window fields (5-hour window)
   session_window_start: string | null
@@ -1331,6 +1345,8 @@ export interface CreateAccountRequest {
   expires_at?: number | null
   auto_pause_on_expired?: boolean
   upstream_billing_probe_enabled?: boolean
+  standby_for_account_id?: number | null
+  standby_trigger_types?: StandbyTriggerType[]
   confirm_mixed_channel_risk?: boolean
 }
 
@@ -1350,6 +1366,9 @@ export interface UpdateAccountRequest {
   group_ids?: number[]
   expires_at?: number | null
   auto_pause_on_expired?: boolean
+  /** 发送 0 表示清除主账号关联。 */
+  standby_for_account_id?: number | null
+  standby_trigger_types?: StandbyTriggerType[]
   confirm_mixed_channel_risk?: boolean
 }
 
