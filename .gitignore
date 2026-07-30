@@ -155,3 +155,10 @@ output/
 account-monitor/config.json
 account-monitor/state.json
 account-monitor/account-monitor-*
+
+# 本地 Codex 管理报告与临时账户数据
+.codex-reports/
+skills/sub2api-admin/*.tmp.json
+
+# 根目录本地跨平台构建产物
+/sub2api-linux-*
