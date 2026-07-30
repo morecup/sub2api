@@ -116,6 +116,21 @@ export default {
         conditionRequired: 'Select at least one takeover condition',
         cannotSelectSelf: 'An account cannot be its own primary',
         accountIdFallback: 'Account #{id} (not visible in the current list)',
+        runtime: {
+          states: {
+            waiting: 'Standby · Waiting',
+            active: 'Standby · Taking over',
+            unavailable: 'Standby · Unavailable',
+            invalid: 'Standby · Invalid config',
+            pending: 'Standby · Refresh pending'
+          },
+          primaryLabel: 'Primary',
+          primaryUnavailable: 'Linked primary is unavailable',
+          unknownPrimary: 'Unknown account',
+          matchedLabel: 'Matched',
+          pendingRefreshHint: 'Configuration changed. Save to refresh the live status.',
+          conditionSeparator: ', '
+        },
         triggers: {
           quota_5h_exhausted: {
             label: '5h usage exhausted',

@@ -27,6 +27,113 @@ func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(apiKeyAccount))
 }
 
+func TestOpenAI429FastPath_RateLimitExceededWithoutResetSkipsRuntimeBlock(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{ID: 420, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	body := []byte(`{"detail":"Rate limit exceeded"}`)
+
+	shouldDisable := svc.handleOpenAIAccountUpstreamError(
+		context.Background(),
+		account,
+		http.StatusTooManyRequests,
+		http.Header{},
+		body,
+	)
+
+	require.False(t, shouldDisable)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Zero(t, svc.openaiOAuth429WindowCount.Load())
+
+	failoverErr := newOpenAIUpstreamFailoverError(
+		http.StatusTooManyRequests,
+		http.Header{},
+		body,
+		"Rate limit exceeded",
+		false,
+	)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, failoverErr.SuppressAccountScheduleFailure)
+	require.Equal(t, openAI429RetryWithoutCooldownReason, failoverErr.Reason)
+}
+
+func TestOpenAI429FastPath_RateLimitExceededBypassesTempRuleAndRetries(t *testing.T) {
+	repo := &errorPolicyRepoStub{}
+	rateLimitService := NewRateLimitService(repo, nil, &config.Config{}, nil, nil)
+	gateway := &OpenAIGatewayService{rateLimitService: rateLimitService}
+	account := &Account{
+		ID:          423,
+		Platform:    PlatformOpenAI,
+		Type:        AccountTypeOAuth,
+		Status:      StatusActive,
+		Schedulable: true,
+		Credentials: map[string]any{
+			"temp_unschedulable_enabled": true,
+			"temp_unschedulable_rules": []any{
+				map[string]any{
+					"error_code":       float64(http.StatusTooManyRequests),
+					"keywords":         []any{"rate limit exceeded"},
+					"duration_minutes": float64(30),
+				},
+			},
+		},
+	}
+	body := []byte(`{"detail":"Rate limit exceeded"}`)
+	resp := &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{}}
+
+	failoverErr := gateway.failoverOpenAIUpstreamHTTPError(
+		context.Background(),
+		nil,
+		account,
+		resp,
+		body,
+		"Rate limit exceeded",
+		"gpt-5.4",
+	)
+
+	require.NotNil(t, failoverErr)
+	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, failoverErr.SuppressAccountScheduleFailure)
+	require.Equal(t, openAI429RetryWithoutCooldownReason, failoverErr.Reason)
+	require.Zero(t, repo.tempCalls)
+	require.Empty(t, repo.modelRateLimitCalls)
+	require.False(t, gateway.isOpenAIAccountRuntimeBlocked(account))
+	require.Zero(t, gateway.openaiOAuth429WindowCount.Load())
+}
+
+func TestOpenAI429FastPath_RateLimitExceededWithResetStillBlocks(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{ID: 421, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{
+		"X-Codex-Primary-Used-Percent":        []string{"100"},
+		"X-Codex-Primary-Reset-After-Seconds": []string{"120"},
+		"X-Codex-Primary-Window-Minutes":      []string{"300"},
+	}
+
+	svc.markOpenAIOAuth429RateLimited(
+		context.Background(),
+		account,
+		headers,
+		[]byte(`{"detail":"Rate limit exceeded"}`),
+	)
+
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
+func TestOpenAI429FastPath_RateLimitExceededWithRetryAfterStillBlocks(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{ID: 422, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	headers := http.Header{"Retry-After": []string{"30"}}
+
+	svc.markOpenAIOAuth429RateLimited(
+		context.Background(),
+		account,
+		headers,
+		[]byte(`{"detail":"Rate limit exceeded"}`),
+	)
+
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+}
+
 // TestOpenAI429FastPath_SkipsSparkShadow 外审第8轮 P1:spark 影子被选中后若 /responses 返回 429,
 // 不得按 global x-codex-* 信号写内存运行时熔断(否则 spark 被冷却到 global reset、单影子场景无可用账号)。
 func TestOpenAI429FastPath_SkipsSparkShadow(t *testing.T) {

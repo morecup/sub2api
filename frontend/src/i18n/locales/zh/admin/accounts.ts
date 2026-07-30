@@ -114,6 +114,21 @@ export default {
         conditionRequired: '请至少选择一个接管条件',
         cannotSelectSelf: '不能把当前账号设为自己的主账号',
         accountIdFallback: '账号 #{id}（当前列表中不可见）',
+        runtime: {
+          states: {
+            waiting: '备用·待命中',
+            active: '备用·接管中',
+            unavailable: '备用·不可用',
+            invalid: '备用·配置异常',
+            pending: '备用·状态待刷新'
+          },
+          primaryLabel: '主账号',
+          primaryUnavailable: '关联主账号不可用',
+          unknownPrimary: '未知账号',
+          matchedLabel: '命中条件',
+          pendingRefreshHint: '配置已修改，保存后刷新实时状态。',
+          conditionSeparator: '、'
+        },
         triggers: {
           quota_5h_exhausted: {
             label: '5h 用量耗尽',

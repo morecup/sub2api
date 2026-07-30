@@ -26,6 +26,9 @@ func (s *adminServiceImpl) ListAccounts(ctx context.Context, page, pageSize int,
 	if err != nil {
 		return nil, 0, err
 	}
+	if err := s.enrichStandbyRuntimeStates(ctx, accountPointers(accounts)); err != nil {
+		return nil, 0, err
+	}
 	return accounts, result.Total, nil
 }
 
@@ -47,7 +50,14 @@ func (s *adminServiceImpl) ListOpenAISchedulableAccountsForSchedulerScore(ctx co
 }
 
 func (s *adminServiceImpl) GetAccount(ctx context.Context, id int64) (*Account, error) {
-	return s.accountRepo.GetByID(ctx, id)
+	account, err := s.accountRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enrichStandbyRuntimeStates(ctx, []*Account{account}); err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 func (s *adminServiceImpl) GetAccountsByIDs(ctx context.Context, ids []int64) ([]*Account, error) {
@@ -869,6 +879,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	if err := s.enrichStandbyRuntimeStates(ctx, []*Account{updated}); err != nil {
+		return nil, err
+	}
 	return updated, nil
 }
 
@@ -1308,6 +1321,9 @@ func (s *adminServiceImpl) RefreshAccountCredentials(ctx context.Context, id int
 		return nil, err
 	}
 	// TODO: Implement refresh logic
+	if err := s.enrichStandbyRuntimeStates(ctx, []*Account{account}); err != nil {
+		return nil, err
+	}
 	return account, nil
 }
 
@@ -1330,7 +1346,14 @@ func (s *adminServiceImpl) ClearAccountError(ctx context.Context, id int64) (*Ac
 	if s.runtimeBlocker != nil {
 		s.runtimeBlocker.ClearAccountSchedulingBlock(id)
 	}
-	return s.accountRepo.GetByID(ctx, id)
+	account, err := s.accountRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.enrichStandbyRuntimeStates(ctx, []*Account{account}); err != nil {
+		return nil, err
+	}
+	return account, nil
 }
 
 func (s *adminServiceImpl) SetAccountError(ctx context.Context, id int64, errorMsg string) error {
@@ -1343,6 +1366,9 @@ func (s *adminServiceImpl) SetAccountSchedulable(ctx context.Context, id int64, 
 	}
 	updated, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.enrichStandbyRuntimeStates(ctx, []*Account{updated}); err != nil {
 		return nil, err
 	}
 	return updated, nil

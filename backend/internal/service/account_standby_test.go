@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -11,8 +12,11 @@ import (
 
 type standbyAccountRepoStub struct {
 	AccountRepository
-	accounts map[int64]*Account
-	listed   []Account
+	accounts      map[int64]*Account
+	listed        []Account
+	getByIDsCalls int
+	getByIDsIDs   []int64
+	getByIDsErr   error
 }
 
 func (s *standbyAccountRepoStub) GetByID(_ context.Context, id int64) (*Account, error) {
@@ -21,6 +25,21 @@ func (s *standbyAccountRepoStub) GetByID(_ context.Context, id int64) (*Account,
 		return nil, errors.New("account not found")
 	}
 	return account, nil
+}
+
+func (s *standbyAccountRepoStub) GetByIDs(_ context.Context, ids []int64) ([]*Account, error) {
+	s.getByIDsCalls++
+	s.getByIDsIDs = append([]int64{}, ids...)
+	if s.getByIDsErr != nil {
+		return nil, s.getByIDsErr
+	}
+	accounts := make([]*Account, 0, len(ids))
+	for _, id := range ids {
+		if account := s.accounts[id]; account != nil {
+			accounts = append(accounts, account)
+		}
+	}
+	return accounts, nil
 }
 
 func (s *standbyAccountRepoStub) ListSchedulable(_ context.Context) ([]Account, error) {
@@ -305,4 +324,116 @@ func TestGatewayStandbyUsesGlobalQuotaAutoPauseThreshold(t *testing.T) {
 	gateway := &GatewayService{accountRepo: repo, settingService: settings}
 
 	require.True(t, gateway.isAccountSchedulableForSelection(context.Background(), standby))
+}
+
+func TestPopulateStandbyRuntimeState(t *testing.T) {
+	now := time.Now()
+
+	t.Run("waiting includes primary identity", func(t *testing.T) {
+		standby, primary := standbyTestAccounts(now)
+		primary.Name = "Main OpenAI"
+
+		populateStandbyRuntimeState(context.Background(), standby, primary, now)
+
+		require.Equal(t, StandbyRuntimeStateWaiting, standby.StandbyRuntimeState)
+		require.Equal(t, "Main OpenAI", standby.StandbyPrimaryName)
+		require.Empty(t, standby.StandbyMatchedTriggerTypes)
+	})
+
+	t.Run("active keeps every matched OR condition", func(t *testing.T) {
+		standby, primary := standbyTestAccounts(now)
+		standby.StandbyTriggerTypes = []string{
+			string(StandbyTriggerRateLimited),
+			string(StandbyTriggerAccountError),
+		}
+		resetAt := now.Add(time.Minute)
+		primary.RateLimitResetAt = &resetAt
+		primary.Status = StatusError
+
+		populateStandbyRuntimeState(context.Background(), standby, primary, now)
+
+		require.Equal(t, StandbyRuntimeStateActive, standby.StandbyRuntimeState)
+		require.Equal(t, []string{"rate_limited", "account_error"}, standby.StandbyMatchedTriggerTypes)
+	})
+
+	t.Run("unavailable wins while preserving matched conditions", func(t *testing.T) {
+		standby, primary := standbyTestAccounts(now)
+		resetAt := now.Add(time.Minute)
+		primary.RateLimitResetAt = &resetAt
+		standby.Schedulable = false
+
+		populateStandbyRuntimeState(context.Background(), standby, primary, now)
+
+		require.Equal(t, StandbyRuntimeStateUnavailable, standby.StandbyRuntimeState)
+		require.Equal(t, []string{"rate_limited"}, standby.StandbyMatchedTriggerTypes)
+	})
+
+	t.Run("invalid configuration is explicit", func(t *testing.T) {
+		standby, _ := standbyTestAccounts(now)
+		standby.StandbyTriggerTypes = []string{"unsupported"}
+
+		populateStandbyRuntimeState(context.Background(), standby, nil, now)
+
+		require.Equal(t, StandbyRuntimeStateInvalid, standby.StandbyRuntimeState)
+		require.Empty(t, standby.StandbyPrimaryName)
+	})
+
+	t.Run("missing primary is invalid", func(t *testing.T) {
+		standby, _ := standbyTestAccounts(now)
+
+		populateStandbyRuntimeState(context.Background(), standby, nil, now)
+
+		require.Equal(t, StandbyRuntimeStateInvalid, standby.StandbyRuntimeState)
+	})
+
+	t.Run("cross-platform primary is invalid but remains identifiable", func(t *testing.T) {
+		standby, primary := standbyTestAccounts(now)
+		primary.Name = "Wrong Platform"
+		primary.Platform = PlatformGemini
+
+		populateStandbyRuntimeState(context.Background(), standby, primary, now)
+
+		require.Equal(t, StandbyRuntimeStateInvalid, standby.StandbyRuntimeState)
+		require.Equal(t, "Wrong Platform", standby.StandbyPrimaryName)
+	})
+}
+
+func TestAdminStandbyRuntimeEnrichmentLoadsPrimariesInOneBatch(t *testing.T) {
+	now := time.Now()
+	standby1, primary := standbyTestAccounts(now)
+	primary.Name = "Primary"
+	primary.Extra["codex_5h_used_percent"] = 80.0
+	standby1.StandbyTriggerTypes = []string{string(StandbyTriggerQuota5hExhausted)}
+	standby2 := *standby1
+	standby2.ID = 3
+
+	repo := &standbyAccountRepoStub{accounts: map[int64]*Account{primary.ID: primary}}
+	settings := &SettingService{}
+	settings.SetOpenAIQuotaAutoPauseSettings(OpsOpenAIAccountQuotaAutoPauseSettings{DefaultThreshold5h: 0.75})
+	admin := &adminServiceImpl{accountRepo: repo, settingService: settings}
+
+	err := admin.enrichStandbyRuntimeStates(context.Background(), []*Account{standby1, &standby2})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, repo.getByIDsCalls)
+	require.Equal(t, []int64{primary.ID}, repo.getByIDsIDs)
+	require.Equal(t, StandbyRuntimeStateActive, standby1.StandbyRuntimeState)
+	require.Equal(t, StandbyRuntimeStateActive, standby2.StandbyRuntimeState)
+	require.Equal(t, "Primary", standby1.StandbyPrimaryName)
+	require.Equal(t, []string{"quota_5h_exhausted"}, standby1.StandbyMatchedTriggerTypes)
+}
+
+func TestStandbyRuntimeFieldsAreExcludedFromSchedulerCacheJSON(t *testing.T) {
+	account := &Account{
+		StandbyRuntimeState:        StandbyRuntimeStateActive,
+		StandbyPrimaryName:         "Primary",
+		StandbyMatchedTriggerTypes: []string{"rate_limited"},
+	}
+
+	raw, err := json.Marshal(account)
+
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "StandbyRuntimeState")
+	require.NotContains(t, string(raw), "StandbyPrimaryName")
+	require.NotContains(t, string(raw), "StandbyMatchedTriggerTypes")
 }

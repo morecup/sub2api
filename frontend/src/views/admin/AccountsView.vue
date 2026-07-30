@@ -1116,6 +1116,10 @@ const shouldReplaceAutoRefreshRow = (current: Account, next: Account) => {
     current.rate_limit_reset_at !== next.rate_limit_reset_at ||
     current.overload_until !== next.overload_until ||
     current.temp_unschedulable_until !== next.temp_unschedulable_until ||
+    current.standby_runtime_state !== next.standby_runtime_state ||
+    current.standby_primary_name !== next.standby_primary_name ||
+    JSON.stringify(current.standby_matched_trigger_types ?? []) !==
+      JSON.stringify(next.standby_matched_trigger_types ?? []) ||
     buildOpenAIUsageRefreshKey(current) !== buildOpenAIUsageRefreshKey(next)
   )
 }
@@ -1680,6 +1684,13 @@ const handleBulkToggleSchedulable = async (schedulable: boolean) => {
       if (hasIds) clearSelection()
       else setSelectedIds(accountIds)
     }
+    if (successCount > 0) {
+      try {
+        await reload()
+      } catch (error) {
+        console.error('Failed to refresh standby runtime states after bulk scheduling update:', error)
+      }
+    }
   } catch (error) {
     console.error('Failed to bulk toggle schedulable:', error)
     appStore.showError(t('common.error'))
@@ -1861,6 +1872,9 @@ const handleProbeUpstreamBilling = async (account: Account) => {
 const handleAccountUpdated = (updatedAccount: Account) => {
   patchAccountInList(updatedAccount)
   enterAutoRefreshSilentWindow()
+  reload().catch((error) => {
+    console.error('Failed to refresh standby runtime states after account update:', error)
+  })
 }
 const formatExportTimestamp = () => {
   const now = new Date()
@@ -2061,7 +2075,16 @@ const handleToggleSchedulable = async (a: Account) => {
   togglingSchedulable.value = a.id
   try {
     const updated = await adminAPI.accounts.setSchedulable(a.id, nextSchedulable)
-    updateSchedulableInList([a.id], updated?.schedulable ?? nextSchedulable)
+    if (updated) {
+      patchAccountInList(updated)
+    } else {
+      updateSchedulableInList([a.id], nextSchedulable)
+    }
+    try {
+      await reload()
+    } catch (error) {
+      console.error('Failed to refresh standby runtime states after scheduling update:', error)
+    }
     enterAutoRefreshSilentWindow()
   } catch (error) {
     console.error('Failed to toggle schedulable:', error)
@@ -2075,6 +2098,11 @@ const handleTempUnschedReset = async (updated: Account) => {
   showTempUnsched.value = false
   tempUnschedAcc.value = null
   patchAccountInList(updated)
+  try {
+    await reload()
+  } catch (error) {
+    console.error('Failed to refresh standby runtime states after temporary status reset:', error)
+  }
   enterAutoRefreshSilentWindow()
 }
 const formatExpiresAt = (value: number | null) => {

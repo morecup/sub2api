@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -209,6 +210,30 @@ func isOpenAIContextWindowError(upstreamMsg string, upstreamBody []byte) bool {
 	return match(string(upstreamBody))
 }
 
+const openAI429RetryWithoutCooldownReason = GatewayFailureReason("openai_429_retry_without_cooldown")
+
+// isOpenAI429RetryWithoutCooldown identifies the transient ChatGPT backend
+// response observed when the provider refuses a burst without exposing any
+// quota-window reset signal. Keeping an account-level cooldown for this shape
+// makes every request re-arm the same short pause. The request should instead
+// consume its bounded retry/failover budget without changing account state.
+func isOpenAI429RetryWithoutCooldown(statusCode int, headers http.Header, responseBody []byte) bool {
+	if statusCode != http.StatusTooManyRequests {
+		return false
+	}
+	if !strings.EqualFold(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)), "Rate limit exceeded") {
+		return false
+	}
+	if calculateOpenAI429ResetTime(headers) != nil {
+		return false
+	}
+	now := time.Now()
+	if resetAt := parseRetryAfterResetTime(headers, now); resetAt != nil && resetAt.After(now) {
+		return false
+	}
+	return parseOpenAIRateLimitResetTime(responseBody) == nil
+}
+
 func (s *OpenAIGatewayService) shouldFailoverUpstreamError(statusCode int) bool {
 	switch statusCode {
 	case 401, 402, 403, 429, 529:
@@ -253,6 +278,11 @@ func newOpenAIUpstreamFailoverError(
 		ResponseBody:           responseBody,
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount,
+	}
+	if isOpenAI429RetryWithoutCooldown(statusCode, responseHeaders, responseBody) {
+		failoverErr.RetryableOnSameAccount = true
+		failoverErr.SuppressAccountScheduleFailure = true
+		failoverErr.Reason = openAI429RetryWithoutCooldownReason
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
 		failoverErr.RetryableOnSameAccount = false

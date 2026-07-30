@@ -1,7 +1,9 @@
 <template>
   <div class="flex items-center gap-2">
+    <StandbyRuntimeStatus v-if="hasStandbyRuntimeState" :account="account" />
+
     <!-- Rate Limit Display (429) - Two-line layout -->
-    <div v-if="isRateLimited" class="flex flex-col items-center gap-1">
+    <div v-else-if="isRateLimited" class="flex flex-col items-center gap-1">
       <span class="badge text-xs badge-warning">{{ t('admin.accounts.status.rateLimited') }}</span>
       <span class="text-[11px] text-gray-400 dark:text-gray-500">{{ rateLimitResumeText }}</span>
     </div>
@@ -158,6 +160,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
+import StandbyRuntimeStatus from '@/components/account/StandbyRuntimeStatus.vue'
 import type { Account } from '@/types'
 import { formatCountdown, formatDateTime, formatDateTimeToMinute, formatCountdownWithSuffix, formatTime } from '@/utils/format'
 
@@ -170,6 +173,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'show-temp-unsched', account: Account): void
 }>()
+
+const hasStandbyRuntimeState = computed(() => props.account.standby_runtime_state !== undefined)
 
 // Computed: is rate limited (429)
 const isRateLimited = computed(() => {

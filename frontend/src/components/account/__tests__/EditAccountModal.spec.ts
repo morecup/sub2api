@@ -342,6 +342,37 @@ describe('EditAccountModal', () => {
     })
   })
 
+  it('shows the live standby state and marks it stale after unsaved configuration changes', async () => {
+    const account = {
+      ...buildAccount(),
+      standby_for_account_id: 2,
+      standby_trigger_types: ['rate_limited'],
+      standby_runtime_state: 'active',
+      standby_primary_name: 'Primary OpenAI Key',
+      standby_matched_trigger_types: ['rate_limited']
+    } as any
+    const primary = { ...buildAccount(), id: 2, name: 'Primary OpenAI Key' }
+    listAccountsMock.mockResolvedValue({ items: [account, primary], total: 2, page: 1, page_size: 1000, pages: 1 })
+
+    const wrapper = mountModal(account)
+    await Promise.resolve()
+
+    expect(wrapper.get('[data-testid="standby-runtime-badge"]').text()).toBe(
+      'admin.accounts.standby.runtime.states.active'
+    )
+    expect(wrapper.get('[data-testid="standby-runtime-primary"]').text()).toContain('Primary OpenAI Key (#2)')
+    expect(wrapper.get('[data-testid="standby-runtime-matched"]').text()).toContain(
+      'admin.accounts.standby.triggers.rate_limited.label'
+    )
+
+    await wrapper.get('[data-testid="standby-trigger-account_error"]').setValue(true)
+
+    expect(wrapper.get('[data-testid="standby-runtime-badge"]').text()).toBe(
+      'admin.accounts.standby.runtime.states.pending'
+    )
+    expect(wrapper.text()).toContain('admin.accounts.standby.runtime.pendingRefreshHint')
+  })
+
   it('reopening the same account rehydrates the OpenAI whitelist from props', async () => {
     const account = buildAccount()
     updateAccountMock.mockReset()

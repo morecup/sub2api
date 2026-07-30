@@ -1039,6 +1039,8 @@ export type StandbyTriggerType =
   | 'temp_unschedulable'
   | 'manual_disabled'
 
+export type StandbyRuntimeState = 'waiting' | 'active' | 'unavailable' | 'invalid'
+
 export interface Account {
   id: number
   name: string
@@ -1096,6 +1098,9 @@ export interface Account {
   // 主备自动接管配置；多个条件按 OR 生效。
   standby_for_account_id?: number | null
   standby_trigger_types?: StandbyTriggerType[]
+  standby_runtime_state?: StandbyRuntimeState
+  standby_primary_name?: string
+  standby_matched_trigger_types?: StandbyTriggerType[]
 
   // Session window fields (5-hour window)
   session_window_start: string | null

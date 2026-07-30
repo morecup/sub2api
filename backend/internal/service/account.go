@@ -57,6 +57,11 @@ type Account struct {
 	StandbyForAccountID *int64
 	StandbyTriggerTypes []string
 
+	// 备用账号运行态（仅用于管理端展示，不持久化，也不进入调度缓存）。
+	StandbyRuntimeState        StandbyRuntimeState `json:"-"`
+	StandbyPrimaryName         string              `json:"-"`
+	StandbyMatchedTriggerTypes []string            `json:"-"`
+
 	SessionWindowStart  *time.Time
 	SessionWindowEnd    *time.Time
 	SessionWindowStatus string
@@ -169,10 +174,13 @@ func (a *Account) EffectiveLoadFactor() int {
 }
 
 func (a *Account) IsSchedulable() bool {
-	if !a.IsActive() || !a.Schedulable {
+	return a.isSchedulableAt(time.Now())
+}
+
+func (a *Account) isSchedulableAt(now time.Time) bool {
+	if a == nil || !a.IsActive() || !a.Schedulable {
 		return false
 	}
-	now := time.Now()
 	if a.AutoPauseOnExpired && a.ExpiresAt != nil && !now.Before(*a.ExpiresAt) {
 		return false
 	}

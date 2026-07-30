@@ -1525,6 +1525,13 @@
         </div>
 
         <div v-if="standbyEnabled" class="mt-4 space-y-4 rounded-lg bg-gray-50 p-4 dark:bg-dark-800/60">
+          <StandbyRuntimeStatus
+            v-if="account"
+            :account="account"
+            :stale="standbyRuntimeStateStale"
+            class="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-dark-600 dark:bg-dark-800"
+          />
+
           <div>
             <label class="input-label">{{ t('admin.accounts.standby.primaryAccount') }}</label>
             <Select
@@ -2865,6 +2872,7 @@ import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import StandbyRuntimeStatus from '@/components/account/StandbyRuntimeStatus.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import QuotaLimitCard from '@/components/account/QuotaLimitCard.vue'
 import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
@@ -3461,6 +3469,26 @@ const standbyPrimarySelectValue = computed<number | null>({
     const parsed = Number(value)
     standbyForAccountId.value = Number.isFinite(parsed) && parsed > 0 ? parsed : null
   }
+})
+
+const standbyRuntimeStateStale = computed(() => {
+  const account = props.account
+  if (!account) return false
+
+  const originalTriggers = [...(account.standby_trigger_types ?? [])].sort()
+  const currentTriggers = [...standbyTriggerTypes.value].sort()
+  const originalEnabled =
+    (account.standby_for_account_id ?? 0) > 0 || originalTriggers.length > 0
+
+  return (
+    standbyEnabled.value !== originalEnabled ||
+    standbyForAccountId.value !== (account.standby_for_account_id ?? null) ||
+    form.status !== account.status ||
+    form.expires_at !== (account.expires_at ?? null) ||
+    autoPauseOnExpired.value !== account.auto_pause_on_expired ||
+    originalTriggers.length !== currentTriggers.length ||
+    originalTriggers.some((trigger, index) => trigger !== currentTriggers[index])
+  )
 })
 
 const mixedChannelWarningMessageText = computed(() => {

@@ -129,3 +129,21 @@ func TestAccountFromServiceShallow_TLSFingerprintDefaultAndExplicitFalse(t *test
 	})
 	require.Nil(t, unsupported.EnableTLSFingerprint)
 }
+
+func TestAccountFromServiceShallow_MapsStandbyRuntimeState(t *testing.T) {
+	primaryID := int64(7)
+	src := &service.Account{
+		ID:                         8,
+		StandbyForAccountID:        &primaryID,
+		StandbyTriggerTypes:        []string{"rate_limited", "account_error"},
+		StandbyRuntimeState:        service.StandbyRuntimeStateActive,
+		StandbyPrimaryName:         "Primary",
+		StandbyMatchedTriggerTypes: []string{"rate_limited"},
+	}
+
+	got := AccountFromServiceShallow(src)
+
+	require.Equal(t, "active", got.StandbyRuntimeState)
+	require.Equal(t, "Primary", got.StandbyPrimaryName)
+	require.Equal(t, []string{"rate_limited"}, got.StandbyMatchedTriggerTypes)
+}

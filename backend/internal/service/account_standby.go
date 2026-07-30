@@ -11,6 +11,9 @@ import (
 // 同一备用账号配置的多个条件按 OR 关系计算。
 type StandbyTriggerType string
 
+// StandbyRuntimeState 表示备用账号在当前时刻的实际运行状态。
+type StandbyRuntimeState string
+
 const (
 	StandbyTriggerQuota5hExhausted  StandbyTriggerType = "quota_5h_exhausted"
 	StandbyTriggerQuota7dExhausted  StandbyTriggerType = "quota_7d_exhausted"
@@ -20,6 +23,11 @@ const (
 	StandbyTriggerAccountError      StandbyTriggerType = "account_error"
 	StandbyTriggerTempUnschedulable StandbyTriggerType = "temp_unschedulable"
 	StandbyTriggerManualDisabled    StandbyTriggerType = "manual_disabled"
+
+	StandbyRuntimeStateWaiting     StandbyRuntimeState = "waiting"
+	StandbyRuntimeStateActive      StandbyRuntimeState = "active"
+	StandbyRuntimeStateUnavailable StandbyRuntimeState = "unavailable"
+	StandbyRuntimeStateInvalid     StandbyRuntimeState = "invalid"
 )
 
 var validStandbyTriggerTypes = map[StandbyTriggerType]struct{}{
@@ -128,6 +136,53 @@ func EvaluateStandbyActivation(ctx context.Context, standby, primary *Account, n
 	}
 	result.Active = len(result.MatchedTriggers) > 0
 	return result
+}
+
+// populateStandbyRuntimeState 将一次主备判定结果写入仅供管理端展示的运行态字段。
+// 配置异常时保持 fail closed；配置有效时，即使备用账号自身不可调度，也会保留
+// 已命中的条件，便于管理端诊断为什么本应接管却没有进入候选池。
+func populateStandbyRuntimeState(ctx context.Context, standby, primary *Account, now time.Time) {
+	if standby == nil {
+		return
+	}
+
+	standby.StandbyRuntimeState = ""
+	standby.StandbyPrimaryName = ""
+	standby.StandbyMatchedTriggerTypes = nil
+	if !standby.HasStandbyConfiguration() {
+		return
+	}
+
+	standby.StandbyRuntimeState = StandbyRuntimeStateInvalid
+	normalizedTriggers, err := NormalizeStandbyTriggerTypes(standby.StandbyTriggerTypes)
+	if err != nil || standby.StandbyForAccountID == nil || *standby.StandbyForAccountID <= 0 || len(normalizedTriggers) == 0 {
+		return
+	}
+	if primary == nil {
+		return
+	}
+
+	standby.StandbyPrimaryName = primary.Name
+	if standby.ID <= 0 || primary.ID <= 0 || standby.ID == primary.ID ||
+		standby.Platform != primary.Platform || *standby.StandbyForAccountID != primary.ID {
+		return
+	}
+
+	// 使用规范化后的条件计算，兼容历史数据中的大小写或首尾空格，同时不修改持久化字段。
+	evaluationStandby := *standby
+	evaluationStandby.StandbyTriggerTypes = normalizedTriggers
+	result := EvaluateStandbyActivation(ctx, &evaluationStandby, primary, now)
+	standby.StandbyMatchedTriggerTypes = append([]string{}, result.MatchedTriggers...)
+
+	if !standby.isSchedulableAt(now) {
+		standby.StandbyRuntimeState = StandbyRuntimeStateUnavailable
+		return
+	}
+	if result.Active {
+		standby.StandbyRuntimeState = StandbyRuntimeStateActive
+		return
+	}
+	standby.StandbyRuntimeState = StandbyRuntimeStateWaiting
 }
 
 // accountSchedulableWithStandby 在账号自身可调度性之上增加备用接管门控。

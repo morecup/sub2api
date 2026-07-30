@@ -51,6 +51,70 @@ function makeAccount(overrides: Partial<Account>): Account {
 }
 
 describe('AccountStatusIndicator', () => {
+  it('备用账号待命时显示主账号，并替代容易误导的普通正常状态', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          standby_for_account_id: 9,
+          standby_trigger_types: ['rate_limited'],
+          standby_runtime_state: 'waiting',
+          standby_primary_name: 'Primary OpenAI',
+          standby_matched_trigger_types: []
+        })
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    expect(wrapper.get('[data-testid="standby-runtime-badge"]').text()).toBe(
+      'admin.accounts.standby.runtime.states.waiting'
+    )
+    expect(wrapper.get('[data-testid="standby-runtime-primary"]').text()).toContain('Primary OpenAI (#9)')
+    expect(wrapper.text()).not.toContain('admin.accounts.status.active')
+  })
+
+  it('备用账号接管时显示所有当前命中的条件', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          standby_for_account_id: 9,
+          standby_runtime_state: 'active',
+          standby_primary_name: 'Primary OpenAI',
+          standby_matched_trigger_types: ['rate_limited', 'account_error']
+        })
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    expect(wrapper.get('[data-testid="standby-runtime-badge"]').text()).toBe(
+      'admin.accounts.standby.runtime.states.active'
+    )
+    expect(wrapper.get('[data-testid="standby-runtime-matched"]').text()).toContain(
+      'admin.accounts.standby.triggers.rate_limited.label'
+    )
+    expect(wrapper.get('[data-testid="standby-runtime-matched"]').text()).toContain(
+      'admin.accounts.standby.triggers.account_error.label'
+    )
+  })
+
+  it('备用配置残缺时明确显示配置异常', () => {
+    const wrapper = mount(AccountStatusIndicator, {
+      props: {
+        account: makeAccount({
+          standby_trigger_types: ['rate_limited'],
+          standby_runtime_state: 'invalid'
+        })
+      },
+      global: { stubs: { Icon: true } }
+    })
+
+    expect(wrapper.get('[data-testid="standby-runtime-badge"]').text()).toBe(
+      'admin.accounts.standby.runtime.states.invalid'
+    )
+    expect(wrapper.get('[data-testid="standby-runtime-primary"]').text()).toBe(
+      'admin.accounts.standby.runtime.primaryUnavailable'
+    )
+  })
+
   it('Grok 账号额度限流时显示自动恢复时间而非临时不可调度', () => {
     const wrapper = mount(AccountStatusIndicator, {
       props: {
