@@ -346,7 +346,7 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 					return
 				}
 				if failoverErr.RetryableOnSameAccount && !oauth429FailoverState.GrokFollowupPending() {
-					retryLimit := account.GetPoolModeRetryCount()
+					retryLimit := failoverErr.EffectiveSameAccountRetryLimit(account.GetPoolModeRetryCount())
 					if sameAccountRetryCount[account.ID] < retryLimit {
 						sameAccountRetryCount[account.ID]++
 						reqLog.Warn("grok_media.pool_mode_same_account_retry",
@@ -355,10 +355,8 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 							zap.Int("retry_limit", retryLimit),
 							zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 						)
-						select {
-						case <-requestCtx.Done():
+						if !sleepWithContext(requestCtx, sameAccountRetryDelayFor(failoverErr)) {
 							return
-						case <-time.After(sameAccountRetryDelay):
 						}
 						continue
 					}

@@ -82,6 +82,7 @@ func (s *FailoverState) HandleFailoverError(
 	if failoverErr == nil || !failoverErr.ShouldRetryNextAccount() {
 		return FailoverExhausted
 	}
+	retryLimit = failoverErr.EffectiveSameAccountRetryLimit(retryLimit)
 
 	// 同账号重试不算切换账号，粘性会话仅在实际切换时强制缓存计费。
 	sameAccountRetry := failoverErr.RetryableOnSameAccount && s.SameAccountRetryCount[accountID] < retryLimit
@@ -99,14 +100,15 @@ func (s *FailoverState) HandleFailoverError(
 			zap.Int("same_account_retry_count", s.SameAccountRetryCount[accountID]),
 			zap.Int("same_account_retry_max", retryLimit),
 		)
-		if !sleepWithContext(ctx, sameAccountRetryDelay) {
+		if !sleepWithContext(ctx, sameAccountRetryDelayFor(failoverErr)) {
 			return FailoverCanceled
 		}
 		return FailoverContinue
 	}
 
-	// 同账号重试用尽，执行临时封禁
-	if failoverErr.RetryableOnSameAccount {
+	// 同账号重试用尽，默认执行临时封禁。特定瞬时错误可以只在当前
+	// 请求中排除账号并换号，避免误用其他错误类型的账号级冷却策略。
+	if failoverErr.RetryableOnSameAccount && !failoverErr.SkipRetryExhaustedTempUnschedule {
 		gatewayService.TempUnscheduleRetryableError(ctx, accountID, failoverErr)
 	}
 
@@ -205,7 +207,12 @@ func failoverClientGone(c *gin.Context) bool {
 // sleepWithContext 等待指定时长，返回 false 表示 context 已取消。
 func sleepWithContext(ctx context.Context, d time.Duration) bool {
 	if d <= 0 {
-		return true
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			return true
+		}
 	}
 	select {
 	case <-ctx.Done():
@@ -213,4 +220,11 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 	case <-time.After(d):
 		return true
 	}
+}
+
+func sameAccountRetryDelayFor(failoverErr *service.UpstreamFailoverError) time.Duration {
+	if failoverErr != nil && failoverErr.ImmediateSameAccountRetry {
+		return 0
+	}
+	return sameAccountRetryDelay
 }

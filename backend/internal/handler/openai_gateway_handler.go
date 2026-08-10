@@ -544,7 +544,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					}
 					// 池模式：同账号重试
 					if failoverErr.RetryableOnSameAccount && !oauth429FailoverState.GrokFollowupPending() {
-						retryLimit := account.GetPoolModeRetryCount()
+						retryLimit := failoverErr.EffectiveSameAccountRetryLimit(account.GetPoolModeRetryCount())
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							reqLog.Warn("openai.same_account_retry",
@@ -553,10 +553,8 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 							)
-							select {
-							case <-c.Request.Context().Done():
+							if !sleepWithContext(c.Request.Context(), sameAccountRetryDelayFor(failoverErr)) {
 								return
-							case <-time.After(sameAccountRetryDelay):
 							}
 							continue
 						}
@@ -1078,7 +1076,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					}
 					// 池模式：同账号重试
 					if failoverErr.RetryableOnSameAccount && !oauth429FailoverState.GrokFollowupPending() {
-						retryLimit := account.GetPoolModeRetryCount()
+						retryLimit := failoverErr.EffectiveSameAccountRetryLimit(account.GetPoolModeRetryCount())
 						if sameAccountRetryCount[account.ID] < retryLimit {
 							sameAccountRetryCount[account.ID]++
 							reqLog.Warn("openai_messages.same_account_retry",
@@ -1087,10 +1085,8 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 								zap.Int("retry_limit", retryLimit),
 								zap.Int("retry_count", sameAccountRetryCount[account.ID]),
 							)
-							select {
-							case <-c.Request.Context().Done():
+							if !sleepWithContext(c.Request.Context(), sameAccountRetryDelayFor(failoverErr)) {
 								return
-							case <-time.After(sameAccountRetryDelay):
 							}
 							continue
 						}

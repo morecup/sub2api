@@ -19,6 +19,15 @@ import (
 // unscheduled after a durable transport failure (matches tokenRefreshTempUnschedDuration).
 const openAITransportErrorTempUnschedDuration = 10 * time.Minute
 
+const (
+	openAIResponseHeaderTimeoutMarker = "http2: timeout awaiting response headers"
+	openAIResponseHeaderTimeoutReason = GatewayFailureReason("openai_response_header_timeout")
+)
+
+func isOpenAIResponseHeaderTimeout(err error) bool {
+	return err != nil && strings.Contains(strings.ToLower(err.Error()), openAIResponseHeaderTimeoutMarker)
+}
+
 // openAITransportFailoverBodyForMessage is the OpenAI-format error body attached
 // to transport-level failures where no upstream HTTP response exists. The body
 // preserves the real transport error instead of collapsing it to a generic
@@ -150,10 +159,22 @@ func (s *OpenAIGatewayService) handleOpenAIUpstreamTransportError(ctx context.Co
 		s.tempUnscheduleOpenAITransportError(ctx, account, safeErr)
 	}
 
-	return &UpstreamFailoverError{
+	failoverErr := &UpstreamFailoverError{
 		StatusCode:   http.StatusBadGateway,
 		ResponseBody: openAITransportFailoverBodyForMessage(safeErr),
 	}
+	if isOpenAIResponseHeaderTimeout(err) {
+		// An immediate single retry covers a transient HTTP/2 connection stall
+		// without inheriting either the common 500ms retry delay or the
+		// account-level default (normally three retries). If the retry sees the
+		// same failure, the handler switches accounts through the normal path.
+		failoverErr.RetryableOnSameAccount = true
+		failoverErr.SameAccountRetryLimitOverride = 1
+		failoverErr.ImmediateSameAccountRetry = true
+		failoverErr.SkipRetryExhaustedTempUnschedule = true
+		failoverErr.Reason = openAIResponseHeaderTimeoutReason
+	}
+	return failoverErr
 }
 
 // tempUnscheduleOpenAITransportError marks an account temporarily unschedulable

@@ -471,6 +471,31 @@ func TestHandleFailoverError_SameAccountRetry(t *testing.T) {
 		require.Len(t, mock.calls, 1, "重试耗尽应触发 TempUnschedule")
 	})
 
+	t.Run("错误级retryLimit覆盖账号默认值", func(t *testing.T) {
+		mock := &mockTempUnscheduler{}
+		fs := NewFailoverState(5, false)
+		err := newTestFailoverErr(http.StatusBadGateway, true, false)
+		err.SameAccountRetryLimitOverride = 1
+		err.ImmediateSameAccountRetry = true
+		err.SkipRetryExhaustedTempUnschedule = true
+		require.Zero(t, sameAccountRetryDelayFor(err), "该错误应跳过通用 500ms 退避")
+
+		// 即使账号默认允许重试 3 次，该错误第一次只原地重试一次。
+		action := fs.HandleFailoverError(context.Background(), mock, 1932, "openai", maxSameAccountRetries, err)
+		require.Equal(t, FailoverContinue, action)
+		require.Equal(t, 1, fs.SameAccountRetryCount[int64(1932)])
+		require.Zero(t, fs.SwitchCount)
+		require.NotContains(t, fs.FailedAccountIDs, int64(1932))
+
+		// 第二次仍失败时覆盖预算已耗尽，进入正常换号流程。
+		action = fs.HandleFailoverError(context.Background(), mock, 1932, "openai", maxSameAccountRetries, err)
+		require.Equal(t, FailoverContinue, action)
+		require.Equal(t, 1, fs.SameAccountRetryCount[int64(1932)])
+		require.Equal(t, 1, fs.SwitchCount)
+		require.Contains(t, fs.FailedAccountIDs, int64(1932))
+		require.Empty(t, mock.calls, "该错误换号时不应触发账号级临时摘除")
+	})
+
 	t.Run("retryLimit为0时立即切换不重试", func(t *testing.T) {
 		// pool_mode_retry_count=0 表示关闭同账号重试（如 GPT Image 账号）。
 		mock := &mockTempUnscheduler{}

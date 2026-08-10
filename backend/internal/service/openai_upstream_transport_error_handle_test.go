@@ -100,9 +100,34 @@ func TestHandleOpenAIUpstreamTransportError_TransientFailsOverWithoutEviction(t 
 	var fo *UpstreamFailoverError
 	require.True(t, errors.As(err, &fo), "transient error must return *UpstreamFailoverError")
 	require.Equal(t, http.StatusBadGateway, fo.StatusCode)
+	require.False(t, fo.RetryableOnSameAccount, "other timeout shapes must keep immediate failover semantics")
+	require.Zero(t, fo.SameAccountRetryLimitOverride)
 
 	// Transient → do NOT evict.
 	require.Empty(t, repo.tempUnschedCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Equal(t, 0, rec.Body.Len())
+}
+
+func TestHandleOpenAIUpstreamTransportError_ResponseHeaderTimeoutRetriesSameAccountOnce(t *testing.T) {
+	repo := &openaiTransportAccountRepoStub{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+	account := &Account{ID: 1932, Name: "slow-response-headers", Platform: PlatformOpenAI}
+	c, rec := newOpenAITransportErrTestContext()
+
+	err := svc.handleOpenAIUpstreamTransportError(context.Background(), c, account,
+		errors.New(`Post "https://chatgpt.com/backend-api/codex/responses": http2: timeout awaiting response headers`), false)
+
+	var fo *UpstreamFailoverError
+	require.True(t, errors.As(err, &fo))
+	require.True(t, fo.RetryableOnSameAccount)
+	require.Equal(t, 1, fo.SameAccountRetryLimitOverride)
+	require.True(t, fo.ImmediateSameAccountRetry)
+	require.True(t, fo.SkipRetryExhaustedTempUnschedule)
+	require.Equal(t, openAIResponseHeaderTimeoutReason, fo.Reason)
+	require.Equal(t, 1, fo.EffectiveSameAccountRetryLimit(defaultPoolModeRetryCount),
+		"response-header timeout must override the normal three-retry budget")
+	require.Empty(t, repo.tempUnschedCalls, "the first timeout only requests a retry; the handler owns failover")
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 	require.Equal(t, 0, rec.Body.Len())
 }

@@ -617,19 +617,22 @@ type GatewayFailureReason string
 // trigger account failover. Additive metadata keeps existing composite literals
 // source-compatible and preserves their legacy retry-next-account behavior.
 type UpstreamFailoverError struct {
-	StatusCode                     int
-	ResponseBody                   []byte      // 上游响应体，用于错误透传规则匹配
-	ResponseHeaders                http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
-	ForceCacheBilling              bool        // Antigravity 粘性会话切换时设为 true
-	RetryableOnSameAccount         bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
-	SafeToFailoverAfterWrite       bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
-	SuppressAccountScheduleFailure bool        // 提供商容量或链路故障，不应降低所选账号的调度健康度
-	Stage                          GatewayFailureStage
-	Scope                          GatewayFailureScope
-	Reason                         GatewayFailureReason
-	NextAccountAction              NextAccountAction
-	ClientStatusCode               int
-	ClientMessage                  string
+	StatusCode                       int
+	ResponseBody                     []byte      // 上游响应体，用于错误透传规则匹配
+	ResponseHeaders                  http.Header // 上游响应头，用于透传 cf-ray/cf-mitigated/content-type 等诊断信息
+	ForceCacheBilling                bool        // Antigravity 粘性会话切换时设为 true
+	RetryableOnSameAccount           bool        // 临时性错误（如 Google 间歇性 400、空响应），应在同一账号上重试 N 次再切换
+	SameAccountRetryLimitOverride    int         // 大于 0 时覆盖账号级同账号重试次数；用于需要固定重试预算的特定错误
+	ImmediateSameAccountRetry        bool        // 同账号重试时跳过通用退避延迟，立即发起下一次尝试
+	SkipRetryExhaustedTempUnschedule bool        // 同账号重试耗尽后仅换号，不写入账号级临时摘除状态
+	SafeToFailoverAfterWrite         bool        // 仅写出 SSE 注释等非语义字节时，仍可在同一客户端流中切换账号
+	SuppressAccountScheduleFailure   bool        // 提供商容量或链路故障，不应降低所选账号的调度健康度
+	Stage                            GatewayFailureStage
+	Scope                            GatewayFailureScope
+	Reason                           GatewayFailureReason
+	NextAccountAction                NextAccountAction
+	ClientStatusCode                 int
+	ClientMessage                    string
 }
 
 func (e *UpstreamFailoverError) Error() string {
@@ -667,6 +670,16 @@ func missingAnthropicAccountUUIDError(account *Account) error {
 
 func (e *UpstreamFailoverError) ShouldRetryNextAccount() bool {
 	return e != nil && e.NextAccountAction != NextAccountStop
+}
+
+// EffectiveSameAccountRetryLimit 返回当前错误实际使用的同账号重试上限。
+// 特定错误可以用 SameAccountRetryLimitOverride 固定重试预算；未设置时
+// 继续沿用账号的 pool_mode_retry_count 配置。
+func (e *UpstreamFailoverError) EffectiveSameAccountRetryLimit(configuredLimit int) int {
+	if e != nil && e.SameAccountRetryLimitOverride > 0 {
+		return e.SameAccountRetryLimitOverride
+	}
+	return configuredLimit
 }
 
 func (e *UpstreamFailoverError) IsCredentialFailure() bool {
