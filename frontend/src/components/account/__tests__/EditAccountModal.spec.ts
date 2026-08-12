@@ -292,6 +292,17 @@ function buildOpenAISetupTokenAccount() {
   } as any
 }
 
+function buildOpenAIOAuthAccount() {
+  return {
+    ...buildAccount(),
+    name: 'OpenAI OAuth',
+    type: 'oauth',
+    credentials: {
+      access_token: 'oauth-token'
+    }
+  } as any
+}
+
 function mountModal(account = buildAccount()) {
   return mount(EditAccountModal, {
     props: {
@@ -488,6 +499,34 @@ describe('EditAccountModal', () => {
 
     expect(updateAccountMock).toHaveBeenCalledTimes(1)
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_long_context_billing_enabled).toBe(false)
+  })
+
+  it('loads and submits the OpenAI OAuth fixed Session ID toggle', async () => {
+    const account = buildOpenAIOAuthAccount()
+    account.extra = {
+      openai_fixed_session_id_enabled: true,
+      openai_session_id: '019ff4d1-0567-7630-ba3d-e564a4a519ac'
+    }
+    updateAccountMock.mockReset()
+    checkMixedChannelRiskMock.mockReset()
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: false })
+    updateAccountMock.mockResolvedValue(account)
+
+    const wrapper = mountModal(account)
+    const toggle = wrapper.get('[data-testid="openai-fixed-session-id-toggle"]')
+    expect(toggle.attributes('aria-checked')).toBe('true')
+
+    await toggle.trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.openai_fixed_session_id_enabled).toBe(false)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('openai_session_id')
+  })
+
+  it('does not render the fixed Session ID toggle for OpenAI API Key accounts', () => {
+    const wrapper = mountModal(buildAccount())
+    expect(wrapper.find('[data-testid="openai-fixed-session-id-toggle"]').exists()).toBe(false)
   })
 
   it('does not render or submit the long-context billing toggle for Spark shadow accounts', async () => {

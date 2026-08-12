@@ -16,6 +16,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/domain"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai_compat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
+	"github.com/google/uuid"
 )
 
 type Account struct {
@@ -93,7 +94,11 @@ type Account struct {
 
 type OpenAIEndpointCapability string
 
-const openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
+const (
+	openAILongContextBillingEnabledKey = "openai_long_context_billing_enabled"
+	openAIFixedSessionIDEnabledKey     = "openai_fixed_session_id_enabled"
+	openAISessionIDKey                 = "openai_session_id"
+)
 
 const (
 	OpenAIEndpointCapabilityChatCompletions OpenAIEndpointCapability = "chat_completions"
@@ -1429,7 +1434,30 @@ func (a *Account) GetOpenAISessionID() string {
 	if !a.IsOpenAIOAuth() {
 		return ""
 	}
-	return strings.TrimSpace(a.GetExtraString("openai_session_id"))
+	return strings.TrimSpace(a.GetExtraString(openAISessionIDKey))
+}
+
+// IsOpenAIFixedSessionIDEnabled 检查 OpenAI OAuth 账号是否锁定上游 Session ID。
+// 仅显式开启时生效，避免历史遗留的 openai_session_id 意外改变原有请求逻辑。
+func (a *Account) IsOpenAIFixedSessionIDEnabled() bool {
+	if !a.IsOpenAIOAuth() || a.Extra == nil {
+		return false
+	}
+	enabled, ok := a.Extra[openAIFixedSessionIDEnabledKey].(bool)
+	return ok && enabled
+}
+
+// GetOpenAIFixedSessionID 返回已启用的账号级固定上游 Session ID。
+func (a *Account) GetOpenAIFixedSessionID() string {
+	if !a.IsOpenAIFixedSessionIDEnabled() {
+		return ""
+	}
+	fixedSessionID := a.GetOpenAISessionID()
+	parsed, err := uuid.Parse(fixedSessionID)
+	if err != nil {
+		return ""
+	}
+	return parsed.String()
 }
 
 func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapability) bool {

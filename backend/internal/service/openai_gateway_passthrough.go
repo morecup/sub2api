@@ -435,7 +435,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		// 透传路径：responses-lite 头按入站原样保留（入站有就透，没有就不加）；
 		// 入站头经白名单复制进 req.Header，伪装层重建头部前取出判定。
 		responsesLite := isOpenAIResponsesLiteHeader(req.Header.Get(responsesLiteHeader))
-		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact, responsesLite)
+		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite)
 		body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 		if err != nil {
 			return nil, fmt.Errorf("apply codex client metadata: %w", err)

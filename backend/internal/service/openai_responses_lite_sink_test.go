@@ -283,16 +283,16 @@ func TestApplyCodexOAuthMimicHeadersResponsesLiteConditional(t *testing.T) {
 	}
 
 	liteReq := newReq()
-	applyCodexOAuthMimicHeaders(liteReq, 1, 0, "seed", codexDesktopOriginator, false, true)
+	applyCodexOAuthMimicHeaders(liteReq, 1, 0, "seed", "", codexDesktopOriginator, false, true)
 	require.Equal(t, "true", liteReq.Header.Get("x-openai-internal-codex-responses-lite"))
 
 	nonLiteReq := newReq()
-	applyCodexOAuthMimicHeaders(nonLiteReq, 1, 0, "seed", codexDesktopOriginator, false, false)
+	applyCodexOAuthMimicHeaders(nonLiteReq, 1, 0, "seed", "", codexDesktopOriginator, false, false)
 	require.Empty(t, nonLiteReq.Header.Get("x-openai-internal-codex-responses-lite"))
 
 	// compact 同样按条件发送。
 	compactReq := newReq()
-	applyCodexOAuthMimicHeaders(compactReq, 1, 0, "seed", codexDesktopOriginator, true, true)
+	applyCodexOAuthMimicHeaders(compactReq, 1, 0, "seed", "", codexDesktopOriginator, true, true)
 	require.Equal(t, "true", compactReq.Header.Get("x-openai-internal-codex-responses-lite"))
 }
 

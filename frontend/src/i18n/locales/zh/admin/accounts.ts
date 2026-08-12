@@ -642,6 +642,9 @@ export default {
         oauthPassthrough: '自动透传（仅替换认证）',
         oauthPassthroughDesc:
           '开启后，该 OpenAI 账号将自动透传请求与响应，仅替换认证并保留计费/并发/审计及必要安全过滤；如遇兼容性问题可随时关闭回滚。',
+        fixedSessionId: '极高缓存命中',
+        fixedSessionIdDesc:
+          '仅对 OpenAI OAuth 生效。开启后，该账号的所有上游请求使用同一个固定 Session ID；关闭后立即恢复原有的按请求会话生成与隔离逻辑。',
         longContextBilling: 'API 长上下文计费',
         longContextBillingDesc: '默认关闭。仅当该账号的上游会按模型阈值收取 OpenAI API 长上下文费率时开启。',
         responsesWebsocketsV2: 'Responses WebSocket v2',

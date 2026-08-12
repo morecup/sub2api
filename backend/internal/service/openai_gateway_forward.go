@@ -1099,6 +1099,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	if account.Type == AccountTypeOAuth {
 		compatMessagesBridge := isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)
 		apiKeyID := getAPIKeyIDFromContext(c)
+		fixedSessionID := account.GetOpenAIFixedSessionID()
 		if compatMessagesBridge {
 			// Claude Code → GPT 桥接保持中立（不伪装成 Codex 客户端）：仅设隔离后的 session，
 			// 清除 originator/OpenAI-Beta。会话标识由 ForwardAsAnthropic 后置覆盖为 UUID。
@@ -1112,16 +1113,26 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				if req.Header.Get("version") == "" {
 					req.Header.Set("version", codexDesktopVersion)
 				}
-				req.Header.Set("session_id", isolateOpenAISessionIDForAccount(account.ID, apiKeyID, resolveOpenAICompactSessionID(c)))
+				sessionID := fixedSessionID
+				if sessionID == "" {
+					sessionID = isolateOpenAISessionIDForAccount(account.ID, apiKeyID, resolveOpenAICompactSessionID(c))
+				}
+				req.Header.Set("session_id", sessionID)
 			} else {
 				req.Header.Set("accept", "text/event-stream")
 			}
 			if promptCacheKey != "" {
-				isolated := isolateOpenAISessionIDForAccount(account.ID, apiKeyID, promptCacheKey)
+				isolated := fixedSessionID
+				if isolated == "" {
+					isolated = isolateOpenAISessionIDForAccount(account.ID, apiKeyID, promptCacheKey)
+				}
 				req.Header.Set("session_id", isolated)
 				if clientConversationID != "" {
 					req.Header.Set("conversation_id", isolated)
 				}
+			}
+			if fixedSessionID != "" && req.Header.Get("session_id") == "" {
+				req.Header.Set("session_id", fixedSessionID)
 			}
 		} else {
 			// 保持 Codex Desktop HTTP 画像与 zstd 压缩行为。
@@ -1132,7 +1143,7 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 			// 合成路径：responses-lite 头仅对出站 lite 模型发送（对齐上游按模型条件发送）。
 			responsesLite := isCodexResponsesLiteModel(gjson.GetBytes(body, "model").String())
-			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, codexDesktopOriginator, isCompact, responsesLite)
+			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)

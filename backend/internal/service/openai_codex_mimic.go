@@ -413,6 +413,7 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 	}
 	return string(b)
 }
+
 // （字段集合 + 取值 + 实抓基准），完全无视入站客户端传入的对应头。不处理 HTTP/2 头发送顺序（按既定范围）。
 //
 // applyCodexOAuthMimicHeaders 将 OAuth 上游请求头无条件重建为与真实 Codex Desktop App HTTP POST 一致
@@ -424,7 +425,7 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 // responsesLite 控制是否发送 x-openai-internal-codex-responses-lite 头：上游
 // （codex-rs client.rs add_responses_lite_header）仅在 responses lite 模型时发送，
 // 合成路径按出站最终模型判定，透传路径按入站头原样保留（调用方计算后传入）。
-func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, originator string, isCompact bool, responsesLite bool) {
+func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator string, isCompact bool, responsesLite bool) {
 	if req == nil {
 		return
 	}
@@ -469,7 +470,10 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 		req.Header.Set("accept", "text/event-stream")
 	}
 
-	sessUUID := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
+	sessUUID := strings.TrimSpace(fixedSessionID)
+	if sessUUID == "" {
+		sessUUID = generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
+	}
 	if sessUUID == "" {
 		if v, err := uuid.NewV7(); err == nil {
 			sessUUID = v.String()
@@ -520,7 +524,7 @@ func syncCodexOAuthMimicRequestBody(req *http.Request, body []byte, isCompact bo
 // applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
 // WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
 // Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。
-func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int64, sessionSeed, originator, turnMetadata string) {
+func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator, turnMetadata string) {
 	if headers == nil {
 		return
 	}
@@ -546,7 +550,10 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int6
 	// x-oai-attestation 为 Desktop App 特有的证明头（app_session_id 按账号派生）。
 	headers.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
 
-	sessUUID := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
+	sessUUID := strings.TrimSpace(fixedSessionID)
+	if sessUUID == "" {
+		sessUUID = generateCodexSessionUUID(accountID, apiKeyID, sessionSeed)
+	}
 	if sessUUID == "" {
 		if v, err := uuid.NewV7(); err == nil {
 			sessUUID = v.String()

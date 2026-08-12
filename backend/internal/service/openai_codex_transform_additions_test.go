@@ -88,7 +88,7 @@ func TestBuildCodexOAIAttestationMatchesDesktopWindowsEnvelope(t *testing.T) {
 func TestSyncCodexOAuthMimicRequestBodyPreservesCompactBody(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.4","input":"compact me"}`)
 	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses/compact", strings.NewReader(string(body)))
-	applyCodexOAuthMimicHeaders(req, 0, 1, "compact-session", codexDesktopOriginator, true, false)
+	applyCodexOAuthMimicHeaders(req, 0, 1, "compact-session", "", codexDesktopOriginator, true, false)
 
 	updated, err := syncCodexOAuthMimicRequestBody(req, body, true)
 	require.NoError(t, err)

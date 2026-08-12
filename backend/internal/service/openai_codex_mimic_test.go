@@ -52,7 +52,7 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	body := []byte(`{"model":"gpt-5.6","input":"compact me","prompt_cache_key":"client-original"}`)
 	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(string(body)))
 	req.Header.Set("x-codex-turn-metadata", inboundMeta)
-	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", codexDesktopOriginator, false, false)
+	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", "", codexDesktopOriginator, false, false)
 
 	meta := req.Header.Get("x-codex-turn-metadata")
 	sessionID := req.Header.Get("session-id")
@@ -80,6 +80,20 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, meta, gjson.GetBytes(updated, "client_metadata.x-codex-turn-metadata").String())
 	require.Equal(t, sessionID, gjson.GetBytes(updated, "prompt_cache_key").String())
+}
+
+func TestApplyCodexOAuthMimicHeadersFixedSessionID(t *testing.T) {
+	fixedSessionID := "019ff4d1-0567-7630-ba3d-e564a4a519ac"
+	for _, seed := range []string{"client-session-a", "client-session-b"} {
+		req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(`{"model":"gpt-5.6-sol"}`))
+		applyCodexOAuthMimicHeaders(req, 7, 42, seed, fixedSessionID, codexDesktopOriginator, false, true)
+
+		require.Equal(t, fixedSessionID, req.Header.Get("session-id"))
+		require.Equal(t, fixedSessionID, req.Header.Get("thread-id"))
+		require.Equal(t, fixedSessionID, req.Header.Get("x-client-request-id"))
+		require.Equal(t, fixedSessionID+":0", req.Header.Get("x-codex-window-id"))
+		require.Equal(t, fixedSessionID, gjson.Get(req.Header.Get("x-codex-turn-metadata"), "session_id").String())
+	}
 }
 
 // 入站 compaction metadata 缺省 compaction 对象时回退实抓默认画像。

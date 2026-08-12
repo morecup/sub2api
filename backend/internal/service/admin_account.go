@@ -17,6 +17,7 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
+	"github.com/google/uuid"
 )
 
 // Account management implementations
@@ -319,6 +320,12 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 	if err != nil {
 		return nil, fmt.Errorf("normalize duplicate account extra: %w", err)
 	}
+	// 复制账号必须获得自己的固定 Session ID，避免两个账号在上游共享同一会话标识。
+	delete(accountExtra, openAISessionIDKey)
+	accountExtra, err = normalizeOpenAIFixedSessionExtra(input.Platform, input.Type, accountExtra)
+	if err != nil {
+		return nil, fmt.Errorf("normalize duplicate account fixed session: %w", err)
+	}
 	if err := NormalizeHeaderOverrideCredentials(input.Credentials); err != nil {
 		return nil, err
 	}
@@ -402,6 +409,79 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 		}
 	}
 	return normalized, nil
+}
+
+func normalizeOpenAIFixedSessionExtra(platform, accountType string, extra map[string]any) (map[string]any, error) {
+	normalized := maps.Clone(extra)
+	if normalized == nil {
+		normalized = make(map[string]any)
+	}
+	if platform != PlatformOpenAI || accountType != AccountTypeOAuth {
+		delete(normalized, openAIFixedSessionIDEnabledKey)
+		delete(normalized, openAISessionIDKey)
+		return normalized, nil
+	}
+
+	rawEnabled, hasEnabled := normalized[openAIFixedSessionIDEnabledKey]
+	if !hasEnabled {
+		delete(normalized, openAISessionIDKey)
+		return normalized, nil
+	}
+	enabled, ok := rawEnabled.(bool)
+	if !ok {
+		return nil, infraerrors.BadRequest(
+			"OPENAI_FIXED_SESSION_ID_ENABLED_INVALID",
+			"openai_fixed_session_id_enabled must be a boolean",
+		)
+	}
+	if !enabled {
+		delete(normalized, openAIFixedSessionIDEnabledKey)
+		delete(normalized, openAISessionIDKey)
+		return normalized, nil
+	}
+
+	fixedSessionID := strings.TrimSpace(fmt.Sprintf("%v", normalized[openAISessionIDKey]))
+	if fixedSessionID == "" || fixedSessionID == "<nil>" {
+		fixedSessionID = uuid.NewString()
+	} else {
+		parsed, err := uuid.Parse(fixedSessionID)
+		if err != nil {
+			return nil, infraerrors.BadRequest(
+				"OPENAI_FIXED_SESSION_ID_INVALID",
+				"openai_session_id must be a valid UUID when fixed Session ID is enabled",
+			)
+		}
+		fixedSessionID = parsed.String()
+	}
+	normalized[openAIFixedSessionIDEnabledKey] = true
+	normalized[openAISessionIDKey] = fixedSessionID
+	return normalized, nil
+}
+
+func normalizeOpenAIFixedSessionUpdateExtra(account *Account, input *UpdateAccountInput, normalized map[string]any) (map[string]any, error) {
+	if account == nil {
+		return normalized, nil
+	}
+	effectiveType := account.Type
+	if input.Type != "" {
+		effectiveType = input.Type
+	}
+
+	requested := maps.Clone(normalized)
+	if requested == nil {
+		requested = make(map[string]any)
+	}
+	_, enabledProvided := input.Extra[openAIFixedSessionIDEnabledKey]
+	if !enabledProvided && account.Platform == PlatformOpenAI && effectiveType == AccountTypeOAuth {
+		if account.IsOpenAIFixedSessionIDEnabled() {
+			requested[openAIFixedSessionIDEnabledKey] = true
+			requested[openAISessionIDKey] = account.GetOpenAISessionID()
+		} else {
+			delete(requested, openAIFixedSessionIDEnabledKey)
+			delete(requested, openAISessionIDKey)
+		}
+	}
+	return normalizeOpenAIFixedSessionExtra(account.Platform, effectiveType, requested)
 }
 
 // ValidateGrokMediaEligibilityExtra validates the optional media-routing
@@ -537,6 +617,10 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
+	accountExtra, err = normalizeOpenAIFixedSessionExtra(input.Platform, input.Type, accountExtra)
+	if err != nil {
+		return nil, err
+	}
 	accountExtra, err = normalizeGrokMediaEligibilityExtra(input.Platform, accountExtra)
 	if err != nil {
 		return nil, err
@@ -635,6 +719,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		if err != nil {
 			return nil, err
 		}
+		normalizedExtra, err = normalizeOpenAIFixedSessionUpdateExtra(account, input, normalizedExtra)
+		if err != nil {
+			return nil, err
+		}
 	}
 	previousProbeIdentity := upstreamBillingProbeIdentity(account)
 	previousOllamaUsageIdentity := ollamaCloudUsageIdentity(account)
@@ -672,6 +760,10 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 	if input.Type != "" {
 		account.Type = input.Type
+		if !account.IsOpenAIOAuth() && account.Extra != nil {
+			delete(account.Extra, openAIFixedSessionIDEnabledKey)
+			delete(account.Extra, openAISessionIDKey)
+		}
 	}
 	if input.Notes != nil {
 		account.Notes = normalizeAccountNotes(input.Notes)

@@ -295,7 +295,7 @@ func (s *OpenAIGatewayService) createUpstreamLiveCall(
 	upstreamReq.Header.Set("Content-Type", "application/json")
 	upstreamReq.Header.Set("Accept", "application/sdp")
 	upstreamReq.Header.Set(liveAttestationHeader, attestation)
-	applyLiveUpstreamIdentityHeaders(upstreamReq.Header)
+	applyLiveUpstreamIdentityHeaders(upstreamReq.Header, account.GetOpenAIFixedSessionID())
 
 	resp, err := s.doUpstreamRequest(upstreamReq, resolveAccountProxyURL(account), account)
 	if err != nil {
@@ -392,11 +392,14 @@ func liveCallIDFromLocation(location string) (string, error) {
 	return callID, nil
 }
 
-func applyLiveUpstreamIdentityHeaders(headers http.Header) {
+func applyLiveUpstreamIdentityHeaders(headers http.Header, fixedSessionID string) {
 	headers.Set("OpenAI-Alpha", "quicksilver=v2")
 	ensureCodexIdentityHeaders(headers)
 	enforceCodexIdentityHeaders(headers)
-	if strings.TrimSpace(headers.Get("session-id")) == "" {
+	if fixedSessionID = strings.TrimSpace(fixedSessionID); fixedSessionID != "" {
+		headers.Set("session-id", fixedSessionID)
+		headers.Set("thread-id", fixedSessionID)
+	} else if strings.TrimSpace(headers.Get("session-id")) == "" {
 		headers.Set("session-id", uuid.NewString())
 	}
 	if strings.TrimSpace(headers.Get("thread-id")) == "" {
@@ -427,7 +430,7 @@ func (s *OpenAIGatewayService) liveSidebandHeaders(
 		return nil, err
 	}
 	headers.Set(liveAttestationHeader, attestation)
-	applyLiveUpstreamIdentityHeaders(headers)
+	applyLiveUpstreamIdentityHeaders(headers, account.GetOpenAIFixedSessionID())
 	return headers, nil
 }
 

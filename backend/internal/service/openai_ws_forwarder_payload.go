@@ -146,7 +146,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
-		applyCodexOAuthWSMimicHeaders(headers, account.ID, apiKeyID, strings.TrimSpace(promptCacheKey), codexDesktopOriginator, turnMetadata)
+		applyCodexOAuthWSMimicHeaders(headers, account.ID, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata)
 		// 终态收口：保证 Desktop originator 与最终 UA 配套。
 		enforceCodexIdentityHeaders(headers)
 	}
