@@ -768,6 +768,10 @@ func TestForwardAsChatCompletions_BufferedTopLevelTerminalUsage(t *testing.T) {
 	require.Contains(t, responseBody, `"prompt_tokens":18`)
 	require.Contains(t, responseBody, `"completion_tokens":6`)
 	require.Contains(t, responseBody, `"cached_tokens":3`)
+	require.True(t, gjson.GetBytes(upstream.lastBody, "stream").Bool(), "OAuth upstream must always receive stream=true")
+	require.False(t, result.Stream, "result must preserve the client's non-streaming contract")
+	require.Contains(t, rec.Header().Get("Content-Type"), "application/json")
+	require.NotContains(t, responseBody, "data:")
 }
 
 func TestForwardAsChatCompletions_TerminalUsageWithoutUpstreamCloseReturns(t *testing.T) {

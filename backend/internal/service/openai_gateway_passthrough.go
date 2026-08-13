@@ -33,9 +33,16 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	reqModel string,
 	attemptImageIntentInvalidated bool,
 	reasoningEffort *string,
-	reqStream bool,
+	clientStream bool,
 	startTime time.Time,
 ) (*OpenAIForwardResult, error) {
+	// OAuth 的 ChatGPT internal Responses 上游只接受流式生成请求。客户端是否
+	// 请求流式响应是另一层契约：stream=false 时仍向上游发送 stream=true，随后
+	// 在网关内聚合 SSE 并返回单个 JSON 响应。
+	// compact 是独立的 unary JSON 子资源，不参与该转换。
+	if isOpenAIResponsesCompactPath(c) {
+		clientStream = false
+	}
 	upstreamPassthroughModel := ""
 	if isOpenAIResponsesCompactPath(c) {
 		compactMappedModel := resolveOpenAICompactForwardModel(account, reqModel)
@@ -74,7 +81,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		if normalized {
 			body = normalizedBody
 		}
-		reqStream = gjson.GetBytes(body, "stream").Bool()
 	}
 
 	sanitizedBody, sanitized, err := sanitizeEmptyBase64InputImagesInOpenAIBody(body)
@@ -150,7 +156,6 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
 		if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
 			body = nextBody
-			reqStream = gjson.GetBytes(body, "stream").Bool()
 			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot for passthrough (account: %s)", account.Name)
 		}
 	}
@@ -161,9 +166,9 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 		account.Name,
 		account.Type,
 		reqModel,
-		reqStream,
+		clientStream,
 	)
-	if reqStream && c != nil && c.Request != nil {
+	if clientStream && c != nil && c.Request != nil {
 		if timeoutHeaders := collectOpenAIPassthroughTimeoutHeaders(c.Request.Header); len(timeoutHeaders) > 0 {
 			streamWarnLogger := logger.FromContext(ctx).With(
 				zap.String("component", "service.openai_gateway"),
@@ -236,7 +241,6 @@ retryPassthroughWithToolFrame:
 			shouldRetryCodexToolFrameFrom429(account, resp.Header) {
 			if nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, true, resp.Header.Get("x-request-id"), extractUpstreamErrorMessage(probeBody)); changed {
 				body = nextBody
-				reqStream = gjson.GetBytes(body, "stream").Bool()
 				httpCodexToolFrameRetryTried = true
 				logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying passthrough request once with Codex tool-frame after 5h quota 429 (account: %s)", account.Name)
 				continue
@@ -261,14 +265,13 @@ retryPassthroughWithToolFrame:
 	imageCount := 0
 	var imageOutputSizes []string
 	shouldRetryPassthroughAttempt := false
-	if reqStream {
+	if clientStream {
 		result, err := s.handleStreamingResponsePassthrough(ctx, resp, c, account, startTime, reqModel, upstreamPassthroughModel)
 		if err != nil {
 			if s.shouldRetryCodexToolFrameAfter429(account, resp.Header, body, httpCodexToolFrameRetryTried, err) {
 				nextBody, changed := s.applyCodexToolFrameForRetry(ctx, c, account, body, resp.Header, true, resp.Header.Get("x-request-id"), err.Error())
 				if changed {
 					body = nextBody
-					reqStream = gjson.GetBytes(body, "stream").Bool()
 					httpCodexToolFrameRetryTried = true
 					logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Retrying passthrough stream request once with Codex tool-frame after 5h quota response.failed 429 (account: %s)", account.Name)
 					shouldRetryPassthroughAttempt = true
@@ -316,7 +319,7 @@ retryPassthroughWithToolFrame:
 		UpstreamModel:   upstreamPassthroughModel,
 		ServiceTier:     serviceTier,
 		ReasoningEffort: reasoningEffort,
-		Stream:          reqStream,
+		Stream:          clientStream,
 		OpenAIWSMode:    false,
 		Duration:        time.Since(startTime),
 		FirstTokenMs:    firstTokenMs,
@@ -1440,6 +1443,7 @@ func (s *OpenAIGatewayService) handlePassthroughSSEToJSON(resp *http.Response, c
 			contentType = "text/event-stream"
 		}
 	}
+	c.Writer.Header().Set("Content-Type", contentType)
 	if !writeOpenAICompactSSEBridge(c, resp.StatusCode, body) {
 		c.Data(resp.StatusCode, contentType, body)
 	}
