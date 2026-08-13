@@ -1073,7 +1073,7 @@ func (s *AccountTestService) reconcileOpenAI429State(ctx context.Context, accoun
 	if s == nil || s.accountRepo == nil || account == nil {
 		return
 	}
-	if isCodexToolFrameForceAfter5hEnabled(account) {
+	if shouldSuppressOpenAI429AccountCooldown(account) {
 		return
 	}
 

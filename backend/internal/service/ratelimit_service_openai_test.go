@@ -245,6 +245,37 @@ func TestRateLimitService_HandleUpstreamError_ForceToolFrameSkips7dOnly429Cooldo
 	require.Equal(t, normalAccount.ID, normalRepo.rateLimitedID, "a normal OpenAI OAuth account must retain the existing 7d cooldown behavior")
 }
 
+func TestRateLimitService_HandleUpstreamError_OpenAI429NoCooldownSwitchSkipsAny429(t *testing.T) {
+	repo := &openAI429SnapshotRepo{}
+	svc := NewRateLimitService(repo, nil, nil, nil, nil)
+	account := &Account{
+		ID:       127,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAI429NoCooldownKey: true,
+		},
+	}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	shouldDisable := svc.HandleUpstreamError(
+		context.Background(),
+		account,
+		http.StatusTooManyRequests,
+		headers,
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"7d exhausted"}}`),
+	)
+
+	require.False(t, shouldDisable)
+	require.Zero(t, repo.rateLimitedID)
+	require.Empty(t, repo.updatedExtra)
+}
+
 func TestHandle429_OpenAISyncsObservedPlanType(t *testing.T) {
 	repo := &openAI429SnapshotRepo{}
 	svc := NewRateLimitService(repo, nil, nil, nil, nil)

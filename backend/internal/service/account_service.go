@@ -152,6 +152,7 @@ type AccountBulkUpdate struct {
 	Credentials    map[string]any
 	Extra          map[string]any
 	ProbeEnabled   *bool
+	ClearRateLimit bool
 }
 
 // CreateAccountRequest 创建账号请求

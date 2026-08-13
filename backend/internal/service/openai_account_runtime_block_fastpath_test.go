@@ -27,6 +27,30 @@ func TestOpenAI429FastPath_MarksOAuthAccountCoolingDown(t *testing.T) {
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(apiKeyAccount))
 }
 
+func TestOpenAI429FastPath_NoCooldownSwitchSkipsRuntimeBlock(t *testing.T) {
+	svc := &OpenAIGatewayService{}
+	account := &Account{
+		ID:       44,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAI429NoCooldownKey: true,
+		},
+	}
+
+	shouldDisable := svc.handleOpenAIAccountUpstreamError(
+		context.Background(),
+		account,
+		http.StatusTooManyRequests,
+		http.Header{},
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"rate limited"}}`),
+	)
+
+	require.False(t, shouldDisable)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Zero(t, svc.openaiOAuth429WindowCount.Load())
+}
+
 func TestOpenAI429FastPath_RateLimitExceededWithoutResetSkipsRuntimeBlock(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 420, Platform: PlatformOpenAI, Type: AccountTypeOAuth}

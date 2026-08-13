@@ -109,6 +109,33 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "force mode requires the main Tool Frame switch")
 }
 
+func TestOpenAI429NoCooldownSwitchSuppressesAnyOAuth429(t *testing.T) {
+	account := &Account{
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAI429NoCooldownKey: true,
+		},
+	}
+	body := []byte(`{"model":"gpt-5.6","input":[{"type":"message","role":"user","content":"hi"}]}`)
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	require.True(t, isOpenAI429NoCooldownEnabled(account))
+	require.True(t, shouldSuppressOpenAI429AccountCooldown(account))
+	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+	require.False(t, openAIRequestBodyHasCodexToolFrame(body))
+	require.False(t, isCodexToolFrameForceAfter5hEnabled(account))
+
+	account.Type = AccountTypeAPIKey
+	require.False(t, isOpenAI429NoCooldownEnabled(account))
+	require.False(t, shouldSuppressOpenAI429AccountCooldown(account))
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
+}
+
 func TestRewriteCodexToolFrame429FailoverForClientWhenEnabled(t *testing.T) {
 	account := &Account{
 		Platform: PlatformOpenAI,

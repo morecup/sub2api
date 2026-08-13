@@ -542,6 +542,26 @@ func normalizeGrokMediaEligibilityUpdateExtra(account *Account, input *UpdateAcc
 	return normalized, nil
 }
 
+func validateOpenAI429NoCooldownExtra(platform, accountType string, extra map[string]any) error {
+	raw, provided := extra[openAI429NoCooldownKey]
+	if !provided {
+		return nil
+	}
+	if _, ok := raw.(bool); !ok {
+		return infraerrors.BadRequest(
+			"INVALID_OPENAI_429_NO_COOLDOWN",
+			"openai_429_no_cooldown must be a boolean",
+		)
+	}
+	if platform != PlatformOpenAI || accountType != AccountTypeOAuth {
+		return infraerrors.BadRequest(
+			"OPENAI_429_NO_COOLDOWN_ACCOUNT_INVALID",
+			"openai_429_no_cooldown only applies to OpenAI OAuth accounts",
+		)
+	}
+	return nil
+}
+
 func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]any) (*Account, error) {
 	// Probe/session state is system-managed. New accounts always start with automatic refresh disabled.
 	delete(accountExtra, UpstreamBillingProbeEnabledExtraKey)
@@ -623,6 +643,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 	accountExtra, err = normalizeGrokMediaEligibilityExtra(input.Platform, accountExtra)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateOpenAI429NoCooldownExtra(input.Platform, input.Type, accountExtra); err != nil {
 		return nil, err
 	}
 
@@ -710,6 +733,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	var normalizedExtra map[string]any
+	clearOpenAI429Cooldown := false
 	if input.Extra != nil {
 		normalizedExtra, err = normalizeOpenAILongContextBillingUpdateExtra(account, input)
 		if err != nil {
@@ -721,6 +745,13 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		normalizedExtra, err = normalizeOpenAIFixedSessionUpdateExtra(account, input, normalizedExtra)
 		if err != nil {
+			return nil, err
+		}
+		effectiveType := account.Type
+		if input.Type != "" {
+			effectiveType = input.Type
+		}
+		if err := validateOpenAI429NoCooldownExtra(account.Platform, effectiveType, normalizedExtra); err != nil {
 			return nil, err
 		}
 	}
@@ -822,6 +853,11 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			}
 		}
 		account.Extra = normalizedExtra
+		if isOpenAI429NoCooldownEnabled(account) {
+			account.RateLimitedAt = nil
+			account.RateLimitResetAt = nil
+			clearOpenAI429Cooldown = true
+		}
 		if account.Platform == PlatformAntigravity && wasOveragesEnabled && !account.IsOveragesEnabled() {
 			delete(account.Extra, "antigravity_credits_overages") // 清理旧版 overages 运行态
 			// 清除 AICredits 限流 key
@@ -949,6 +985,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 				return nil, err
 			}
 		}
+	}
+	if clearOpenAI429Cooldown && s.runtimeBlocker != nil {
+		s.runtimeBlocker.ClearAccountSchedulingBlock(account.ID)
 	}
 
 	// 将 proxy 变更传播到 spark 影子账号（同步；Update 内部已触发调度快照）。
@@ -1127,15 +1166,31 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	needMixedChannelCheck := input.GroupIDs != nil && !input.SkipMixedChannelCheck
 	_, hasLongContextBillingUpdate := input.Extra[openAILongContextBillingEnabledKey]
+	openAI429NoCooldownEnabled, hasOpenAI429NoCooldownUpdate := false, false
+	if raw, ok := input.Extra[openAI429NoCooldownKey]; ok {
+		enabled, valid := raw.(bool)
+		if !valid {
+			return nil, infraerrors.BadRequest("INVALID_OPENAI_429_NO_COOLDOWN", "openai_429_no_cooldown must be a boolean")
+		}
+		openAI429NoCooldownEnabled = enabled
+		hasOpenAI429NoCooldownUpdate = true
+	}
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.ProbeEnabled != nil {
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || hasLongContextBillingUpdate || input.ProbeEnabled != nil || hasOpenAI429NoCooldownUpdate {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
 		}
 		cachedTargets = loaded
+	}
+	if hasOpenAI429NoCooldownUpdate {
+		for _, account := range cachedTargets {
+			if account == nil || !account.IsOpenAIOAuth() {
+				return nil, infraerrors.BadRequest("OPENAI_429_NO_COOLDOWN_ACCOUNT_INVALID", "openai_429_no_cooldown only applies to OpenAI OAuth accounts")
+			}
+		}
 	}
 	if input.ProbeEnabled != nil {
 		targetsByID := make(map[int64]*Account, len(cachedTargets))
@@ -1225,9 +1280,10 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// Prepare bulk updates for columns and JSONB fields.
 	repoUpdates := AccountBulkUpdate{
-		Credentials:  input.Credentials,
-		Extra:        input.Extra,
-		ProbeEnabled: input.ProbeEnabled,
+		Credentials:    input.Credentials,
+		Extra:          input.Extra,
+		ProbeEnabled:   input.ProbeEnabled,
+		ClearRateLimit: openAI429NoCooldownEnabled,
 	}
 	if input.ProbeEnabled != nil {
 		if repoUpdates.Extra == nil {
@@ -1277,6 +1333,11 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	// Run bulk update for column/jsonb fields first.
 	if _, err := s.accountRepo.BulkUpdate(ctx, input.AccountIDs, repoUpdates); err != nil {
 		return nil, err
+	}
+	if openAI429NoCooldownEnabled && s.runtimeBlocker != nil {
+		for _, accountID := range input.AccountIDs {
+			s.runtimeBlocker.ClearAccountSchedulingBlock(accountID)
+		}
 	}
 
 	// 将 proxy 变更传播到每个目标账号的 spark 影子账号

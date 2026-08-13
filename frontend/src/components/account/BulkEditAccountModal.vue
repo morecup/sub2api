@@ -896,6 +896,52 @@
         </div>
       </div>
 
+      <!-- OpenAI OAuth 任何 429 都不冷却账号 -->
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div class="mb-3 flex items-center justify-between">
+          <div class="flex-1 pr-4">
+            <label
+              id="bulk-edit-openai-429-no-cooldown-label"
+              class="input-label mb-0"
+              for="bulk-edit-openai-429-no-cooldown-enabled"
+            >
+              {{ t('admin.accounts.openai.openAI429NoCooldown') }}
+            </label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.openAI429NoCooldownDesc') }}
+            </p>
+          </div>
+          <input
+            v-model="enableOpenAI429NoCooldown"
+            id="bulk-edit-openai-429-no-cooldown-enabled"
+            type="checkbox"
+            aria-controls="bulk-edit-openai-429-no-cooldown"
+            class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+          />
+        </div>
+        <div
+          id="bulk-edit-openai-429-no-cooldown"
+          :class="!enableOpenAI429NoCooldown && 'pointer-events-none opacity-50'"
+        >
+          <button
+            id="bulk-edit-openai-429-no-cooldown-toggle"
+            type="button"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              openAI429NoCooldownEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+            @click="openAI429NoCooldownEnabled = !openAI429NoCooldownEnabled"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                openAI429NoCooldownEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+      </div>
+
       <!-- OpenAI OAuth Codex Tool Frame -->
       <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1580,6 +1626,7 @@ const enableUpstreamBillingAutoProbe = ref(false)
 const enableCodexCLIOnly = ref(false)
 const enableCodexCLIOnlyAppServer = ref(false)
 const enableCodexToolFrameOn5hExhausted = ref(false)
+const enableOpenAI429NoCooldown = ref(false)
 const enableOpenAICompactMode = ref(false)
 const enableOpenAICompactModelMapping = ref(false)
 const enableRpmLimit = ref(false)
@@ -1616,6 +1663,7 @@ const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
 const codexToolFrameNever429Enabled = ref(false)
+const openAI429NoCooldownEnabled = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAICompactModelMappings = ref<ModelMapping[]>([])
 const rpmLimitEnabled = ref(false)
@@ -1911,6 +1959,11 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     }
   }
 
+  if (enableOpenAI429NoCooldown.value) {
+    const extra = ensureExtra()
+    extra.openai_429_no_cooldown = openAI429NoCooldownEnabled.value
+  }
+
   if (enableOpenAICompactMode.value) {
     const extra = ensureExtra()
     extra.openai_compact_mode = openAICompactMode.value
@@ -2022,6 +2075,7 @@ const handleSubmit = async () => {
     enableCodexCLIOnly.value ||
     enableCodexCLIOnlyAppServer.value ||
     enableCodexToolFrameOn5hExhausted.value ||
+    enableOpenAI429NoCooldown.value ||
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
     enableRpmLimit.value ||
@@ -2153,6 +2207,7 @@ watch(
       enableCodexCLIOnly.value = false
       enableCodexCLIOnlyAppServer.value = false
       enableCodexToolFrameOn5hExhausted.value = false
+      enableOpenAI429NoCooldown.value = false
       enableOpenAICompactMode.value = false
       enableOpenAICompactModelMapping.value = false
       enableRpmLimit.value = false
@@ -2185,6 +2240,8 @@ watch(
       codexToolFrame429NoCooldownEnabled.value = true
       codexToolFrameForceAfter5hEnabled.value = false
       codexToolFrameNever429Enabled.value = false
+      enableOpenAI429NoCooldown.value = false
+      openAI429NoCooldownEnabled.value = false
       openAICompactMode.value = 'auto'
       openAICompactModelMappings.value = []
       rpmLimitEnabled.value = false

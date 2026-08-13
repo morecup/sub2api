@@ -16,6 +16,7 @@ const (
 	openAICodexToolFrame429NoCooldownKey = "codex_tool_frame_429_no_cooldown"
 	openAICodexToolFrameForceAfter5hKey  = "codex_tool_frame_force_after_5h"
 	openAICodexToolFrameNever429Key      = "codex_tool_frame_never_429"
+	openAI429NoCooldownKey               = "openai_429_no_cooldown"
 	codexToolFrameStubToolName           = "noop"
 )
 
@@ -56,6 +57,23 @@ func isCodexToolFrameForceAfter5hEnabled(account *Account) bool {
 		return false
 	}
 	return true
+}
+
+func isOpenAI429NoCooldownEnabled(account *Account) bool {
+	return account != nil &&
+		account.IsOpenAIOAuth() &&
+		resolveAccountExtraBool(account.Extra, openAI429NoCooldownKey)
+}
+
+func shouldSuppressOpenAI429AccountCooldown(account *Account) bool {
+	return isOpenAI429NoCooldownEnabled(account) || isCodexToolFrameForceAfter5hEnabled(account)
+}
+
+func openAI429AccountCooldownSuppressionReason(account *Account) string {
+	if isOpenAI429NoCooldownEnabled(account) {
+		return openAI429NoCooldownKey
+	}
+	return openAICodexToolFrameForceAfter5hKey
 }
 
 func shouldRetryCodexToolFrameFrom429(account *Account, headers http.Header) bool {

@@ -2766,6 +2766,9 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		args = append(args, *updates.Schedulable)
 		idx++
 	}
+	if updates.ClearRateLimit {
+		setClauses = append(setClauses, "rate_limited_at = NULL", "rate_limit_reset_at = NULL")
+	}
 	if updates.ProbeEnabled != nil {
 		if updates.Extra == nil {
 			updates.Extra = make(map[string]any)

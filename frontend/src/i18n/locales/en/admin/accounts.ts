@@ -645,6 +645,9 @@ export default {
         codexToolFrameNever429: 'Never return 429 with Tool Frame',
         codexToolFrameNever429Desc:
           'Disabled by default. When enabled, any upstream 429 for this OpenAI OAuth account still triggers account failover; if every attempt fails, the client receives 503 instead of 429, even when the request has no Tool Frame.',
+        openAI429NoCooldown: 'Never cooldown account on 429',
+        openAI429NoCooldownDesc:
+          'Disabled by default. Enabling it immediately clears any existing 429 cooldown, and future upstream 429s will never mark this OpenAI OAuth account as rate-limited or create a runtime block, regardless of Tool Frame or 5h/7d state. Other switches still decide whether the client ultimately receives 429 or 503.',
         codexCLIOnlyAppServer: 'Allow Codex app-server clients',
         codexCLIOnlyAppServerDesc:
           "Effective only when the switch above is on. When enabled, this account also allows third-party clients that embed the Codex engine over the app-server protocol (e.g. Claude Code's codex plugin); they still pass the global engine-fingerprint gate. OR-combined with the global app-server toggle.",

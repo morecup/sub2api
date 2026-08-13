@@ -69,7 +69,7 @@ func shouldSuppressCodexToolFrame429AccountMark(account *Account, headers http.H
 	// example, a 7d-only exhaustion response or a function_call_output turn).
 	// Whether a Tool Frame should be injected remains governed by the 5h quota
 	// checks in shouldUseCodexToolFrameByQuota.
-	if isCodexToolFrameForceAfter5hEnabled(account) {
+	if shouldSuppressOpenAI429AccountCooldown(account) {
 		return true
 	}
 	if !openAIRequestBodyHasCodexToolFrame(requestBody) {

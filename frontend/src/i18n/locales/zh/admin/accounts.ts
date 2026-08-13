@@ -706,6 +706,9 @@ export default {
         codexToolFrameNever429: 'Tool Frame 永不返回 429',
         codexToolFrameNever429Desc:
           '默认关闭。开启后该 OpenAI OAuth 账号的任何上游 429 都会继续触发账号切换；最终仍失败时返回 503，而不是向客户端返回 429，不要求请求已带 Tool Frame。',
+        openAI429NoCooldown: '任何 429 都不冷却账号',
+        openAI429NoCooldownDesc:
+          '默认关闭。开启后会立即清除该账号已有的 429 冷却，之后任何上游 429 都不会把账号标记为限流或写入运行时阻断，不依赖 Tool Frame 或 5h/7d 状态；客户端最终返回 429 还是 503 仍由其他开关决定。',
         codexCLIOnlyAppServer: '允许 Codex app-server 客户端',
         codexCLIOnlyAppServerDesc: '仅在上方开关开启时生效。开启后本账号额外放行内嵌 Codex 引擎、经 app-server 协议接入的第三方客户端（如 Claude Code 的 codex 插件），仍需通过全局引擎指纹门；与全局 app-server 开关取 OR（任一开即放行）。',
         codexImageTool: 'Codex 图片桥接策略',

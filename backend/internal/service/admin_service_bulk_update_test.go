@@ -7,6 +7,7 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
@@ -16,6 +17,7 @@ type accountRepoStubForBulkUpdate struct {
 	accountRepoStub
 	bulkUpdateErr       error
 	bulkUpdateIDs       []int64
+	bulkUpdatePayload   AccountBulkUpdate
 	bindGroupErrByID    map[int64]error
 	bindGroupsCalls     []int64
 	bindGroupsByAccount map[int64][]int64
@@ -48,12 +50,102 @@ type accountRepoStubForBulkUpdate struct {
 	}
 }
 
-func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, _ AccountBulkUpdate) (int64, error) {
+func (s *accountRepoStubForBulkUpdate) BulkUpdate(_ context.Context, ids []int64, updates AccountBulkUpdate) (int64, error) {
 	s.bulkUpdateIDs = append([]int64{}, ids...)
+	s.bulkUpdatePayload = updates
 	if s.bulkUpdateErr != nil {
 		return 0, s.bulkUpdateErr
 	}
 	return int64(len(ids)), nil
+}
+
+func TestAdminService_UpdateAccount_OpenAI429NoCooldownClearsExistingCooldown(t *testing.T) {
+	now := time.Now()
+	resetAt := now.Add(time.Hour)
+	account := &Account{
+		ID:               81,
+		Platform:         PlatformOpenAI,
+		Type:             AccountTypeOAuth,
+		Status:           StatusActive,
+		Schedulable:      true,
+		RateLimitedAt:    &now,
+		RateLimitResetAt: &resetAt,
+		Extra:            map[string]any{},
+	}
+	repo := &accountRepoStubForBulkUpdate{
+		getByIDAccounts: map[int64]*Account{account.ID: account},
+	}
+	blocker := &runtimeBlockRecorder{}
+	svc := &adminServiceImpl{accountRepo: repo, runtimeBlocker: blocker}
+
+	updated, err := svc.UpdateAccount(context.Background(), account.ID, &UpdateAccountInput{
+		Extra: map[string]any{openAI429NoCooldownKey: true},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.Nil(t, account.RateLimitedAt)
+	require.Nil(t, account.RateLimitResetAt)
+	require.Equal(t, true, account.Extra[openAI429NoCooldownKey])
+	require.Equal(t, []int64{account.ID}, blocker.clearedIDs)
+}
+
+func TestAdminService_UpdateAccount_OpenAI429NoCooldownRejectsInvalidAccountOrValue(t *testing.T) {
+	tests := []struct {
+		name    string
+		account *Account
+		value   any
+	}{
+		{
+			name:    "non boolean value",
+			account: &Account{ID: 82, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: map[string]any{}},
+			value:   "true",
+		},
+		{
+			name:    "OpenAI API key account",
+			account: &Account{ID: 83, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Extra: map[string]any{}},
+			value:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &accountRepoStubForBulkUpdate{
+				getByIDAccounts: map[int64]*Account{tt.account.ID: tt.account},
+			}
+			svc := &adminServiceImpl{accountRepo: repo}
+
+			_, err := svc.UpdateAccount(context.Background(), tt.account.ID, &UpdateAccountInput{
+				Extra: map[string]any{openAI429NoCooldownKey: tt.value},
+			})
+
+			require.Error(t, err)
+			require.Empty(t, repo.updatedAccounts)
+		})
+	}
+}
+
+func TestAdminService_BulkUpdateAccounts_OpenAI429NoCooldownClearsExistingCooldown(t *testing.T) {
+	accounts := []*Account{
+		{ID: 91, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+		{ID: 92, Platform: PlatformOpenAI, Type: AccountTypeOAuth},
+	}
+	repo := &accountRepoStubForBulkUpdate{getByIDsAccounts: accounts}
+	blocker := &runtimeBlockRecorder{}
+	svc := &adminServiceImpl{accountRepo: repo, runtimeBlocker: blocker}
+
+	result, err := svc.BulkUpdateAccounts(context.Background(), &BulkUpdateAccountsInput{
+		AccountIDs: []int64{91, 92},
+		Extra: map[string]any{
+			openAI429NoCooldownKey: true,
+		},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, result.Success)
+	require.True(t, repo.bulkUpdatePayload.ClearRateLimit)
+	require.Equal(t, true, repo.bulkUpdatePayload.Extra[openAI429NoCooldownKey])
+	require.ElementsMatch(t, []int64{91, 92}, blocker.clearedIDs)
 }
 
 func (s *accountRepoStubForBulkUpdate) Create(_ context.Context, account *Account) error {

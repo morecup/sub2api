@@ -87,10 +87,10 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		)
 		return false
 	}
-	if statusCode == http.StatusTooManyRequests && isCodexToolFrameForceAfter5hEnabled(account) {
-		slog.Warn("openai_429_force_tool_frame_cooldown_skipped",
+	if statusCode == http.StatusTooManyRequests && shouldSuppressOpenAI429AccountCooldown(account) {
+		slog.Warn("openai_429_account_cooldown_skipped",
 			"account_id", account.ID,
-			"reason", "codex_tool_frame_force_after_5h",
+			"reason", openAI429AccountCooldownSuppressionReason(account),
 		)
 		return false
 	}

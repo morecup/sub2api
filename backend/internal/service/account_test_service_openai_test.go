@@ -398,6 +398,30 @@ func TestAccountTestService_OpenAI429ForceModeSkips7dOnlyCooldown(t *testing.T) 
 	require.Nil(t, account.RateLimitResetAt)
 }
 
+func TestAccountTestService_OpenAI429NoCooldownSwitchSkipsAny429(t *testing.T) {
+	repo := &openAIAccountTestRepo{}
+	svc := &AccountTestService{accountRepo: repo}
+	account := &Account{
+		ID:       86,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAI429NoCooldownKey: true,
+		},
+	}
+
+	svc.reconcileOpenAI429State(
+		context.Background(),
+		account,
+		http.Header{},
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"rate limited","resets_at":1777283883}}`),
+	)
+
+	require.Zero(t, repo.rateLimitedID)
+	require.Nil(t, repo.rateLimitedAt)
+	require.Nil(t, account.RateLimitResetAt)
+}
+
 func TestAccountTestService_OpenAI429BodyOnlyPersistsRateLimitAndClearsStaleError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := newTestContext()

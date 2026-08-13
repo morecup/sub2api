@@ -2958,6 +2958,37 @@
         </div>
       </div>
 
+      <!-- OpenAI OAuth 任何 429 都不冷却账号 -->
+      <div
+        v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.openai.openAI429NoCooldown') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.openai.openAI429NoCooldownDesc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="openai-429-no-cooldown-toggle"
+            @click="openAI429NoCooldownEnabled = !openAI429NoCooldownEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              openAI429NoCooldownEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out',
+                openAI429NoCooldownEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+      </div>
+
       <!-- OpenAI OAuth 5h 耗尽后 Tool Frame 开关 -->
       <div
         v-if="form.platform === 'openai' && accountCategory === 'oauth-based'"
@@ -3902,6 +3933,7 @@ const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
 const codexToolFrameNever429Enabled = ref(false)
+const openAI429NoCooldownEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
@@ -4355,6 +4387,7 @@ watch(
       codexToolFrame429NoCooldownEnabled.value = true
       codexToolFrameForceAfter5hEnabled.value = false
       codexToolFrameNever429Enabled.value = false
+      openAI429NoCooldownEnabled.value = false
       codexCLIOnlyAppServerEnabled.value = false
     }
     if (newPlatform !== 'anthropic') {
@@ -4388,6 +4421,7 @@ watch(
       codexToolFrame429NoCooldownEnabled.value = true
       codexToolFrameForceAfter5hEnabled.value = false
       codexToolFrameNever429Enabled.value = false
+      openAI429NoCooldownEnabled.value = false
       codexCLIOnlyAppServerEnabled.value = false
     }
     if (platform !== 'anthropic' || category !== 'apikey') {
@@ -4792,6 +4826,7 @@ const resetForm = () => {
   codexToolFrame429NoCooldownEnabled.value = true
   codexToolFrameForceAfter5hEnabled.value = false
   codexToolFrameNever429Enabled.value = false
+  openAI429NoCooldownEnabled.value = false
   codexCLIOnlyAppServerEnabled.value = false
   anthropicPassthroughEnabled.value = false
   anthropicAPIKeyAuthScheme.value = 'x_api_key'
@@ -4907,6 +4942,11 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
     delete extra.codex_tool_frame_429_no_cooldown
     delete extra.codex_tool_frame_force_after_5h
     delete extra.codex_tool_frame_never_429
+  }
+  if (accountCategory.value === 'oauth-based' && openAI429NoCooldownEnabled.value) {
+    extra.openai_429_no_cooldown = true
+  } else {
+    delete extra.openai_429_no_cooldown
   }
   if (openAICompactMode.value !== 'auto') {
     extra.openai_compact_mode = openAICompactMode.value
