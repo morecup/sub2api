@@ -641,7 +641,7 @@ export default {
           'Enabled by default. If a 5h-only 429 still occurs after Tool Frame is applied, record the request snapshot without marking the account as 429; 7d exhaustion still rate-limits normally.',
         codexToolFrameForceAfter5h: 'Force Tool Frame after 5h',
         codexToolFrameForceAfter5hDesc:
-          'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame; any 429 after Tool Frame is already present will never cooldown the account.',
+          'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame. Any upstream 429 for this OpenAI OAuth account will not cooldown the account, including 7d-only exhaustion or requests without Tool Frame.',
         codexToolFrameNever429: 'Never return 429 with Tool Frame',
         codexToolFrameNever429Desc:
           'Disabled by default. When enabled, any upstream 429 for this OpenAI OAuth account still triggers account failover; if every attempt fails, the client receives 503 instead of 429, even when the request has no Tool Frame.',

@@ -702,7 +702,7 @@ export default {
           '默认开启。启用 Tool Frame 后若仍遇到 5h-only 429，只记录请求快照而不把账号标记为 429；7d 耗尽仍正常限流。',
         codexToolFrameForceAfter5h: '5h 后强制 Tool Frame',
         codexToolFrameForceAfter5hDesc:
-          '默认关闭。开启后只要 5h 额度已耗尽，就不再判断 7d 额度，仍然添加 Tool Frame；已带 Tool Frame 后遇到任何 429 都不会冷却账号。',
+          '默认关闭。开启后只要 5h 额度已耗尽，就不再判断 7d 额度，仍然添加 Tool Frame；该 OpenAI OAuth 账号遇到任何上游 429 都不会冷却，包括仅 7d 耗尽或当前请求未带 Tool Frame。',
         codexToolFrameNever429: 'Tool Frame 永不返回 429',
         codexToolFrameNever429Desc:
           '默认关闭。开启后该 OpenAI OAuth 账号的任何上游 429 都会继续触发账号切换；最终仍失败时返回 503，而不是向客户端返回 429，不要求请求已带 Tool Frame。',

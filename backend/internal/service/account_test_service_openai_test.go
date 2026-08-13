@@ -367,6 +367,37 @@ func TestAccountTestService_OpenAI429PersistsSnapshotAndRateLimitState(t *testin
 	require.NotNil(t, account.RateLimitResetAt)
 }
 
+func TestAccountTestService_OpenAI429ForceModeSkips7dOnlyCooldown(t *testing.T) {
+	repo := &openAIAccountTestRepo{}
+	svc := &AccountTestService{accountRepo: repo}
+	account := &Account{
+		ID:       87,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+			openAICodexToolFrameForceAfter5hKey:  true,
+		},
+	}
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	svc.reconcileOpenAI429State(
+		context.Background(),
+		account,
+		headers,
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"7d exhausted"}}`),
+	)
+
+	require.Zero(t, repo.rateLimitedID)
+	require.Nil(t, repo.rateLimitedAt)
+	require.Nil(t, account.RateLimitResetAt)
+}
+
 func TestAccountTestService_OpenAI429BodyOnlyPersistsRateLimitAndClearsStaleError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := newTestContext()

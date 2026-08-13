@@ -87,6 +87,13 @@ func (s *OpenAIGatewayService) handleOpenAIAccountUpstreamError(ctx context.Cont
 		)
 		return false
 	}
+	if statusCode == http.StatusTooManyRequests && isCodexToolFrameForceAfter5hEnabled(account) {
+		slog.Warn("openai_429_force_tool_frame_cooldown_skipped",
+			"account_id", account.ID,
+			"reason", "codex_tool_frame_force_after_5h",
+		)
+		return false
+	}
 
 	if isOpenAIImageRateLimitError(statusCode, responseBody) {
 		if s != nil && s.rateLimitService != nil {

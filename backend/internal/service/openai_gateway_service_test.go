@@ -1822,7 +1822,7 @@ func TestOpenAIHTTP429WithCodexToolFrameNever429ReturnsServiceUnavailable(t *tes
 	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
-func TestOpenAIHTTP429WithoutCodexToolFrameNever429ReturnsServiceUnavailable(t *testing.T) {
+func TestOpenAIHTTP429WithoutCodexToolFrameForceModeDoesNotCooldown(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	rec := httptest.NewRecorder()
@@ -1880,8 +1880,8 @@ func TestOpenAIHTTP429WithoutCodexToolFrameNever429ReturnsServiceUnavailable(t *
 	require.Equal(t, "upstream_error", gjson.GetBytes(failoverErr.ResponseBody, "error.type").String())
 	require.Len(t, upstream.bodies, 1)
 	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
-	require.Equal(t, 1, repo.rateLimitCalls)
-	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Zero(t, repo.rateLimitCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }
 
 func TestOpenAIStreamingResponseFailedBeforeOutputServerOverloadedCodeReturnsFailover(t *testing.T) {

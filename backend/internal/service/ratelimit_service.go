@@ -177,6 +177,14 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 // 返回是否应该停止该账号的调度
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
 	ctx = withTempUnschedulableModel(ctx, requestedModel)
+	if statusCode == http.StatusTooManyRequests && isCodexToolFrameForceAfter5hEnabled(account) {
+		slog.Warn("rate_limit_429_force_tool_frame_cooldown_skipped",
+			"account_id", account.ID,
+			"platform", account.Platform,
+			"reason", "codex_tool_frame_force_after_5h",
+		)
+		return false
+	}
 	if account != nil && account.Platform == PlatformOpenAI &&
 		isOpenAI429RetryWithoutCooldown(statusCode, headers, responseBody) {
 		slog.Warn("rate_limit_429_retry_without_cooldown",

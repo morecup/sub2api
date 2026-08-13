@@ -200,6 +200,51 @@ func TestHandle429_OpenAIPersistsCodexSnapshotImmediately(t *testing.T) {
 	}
 }
 
+func TestRateLimitService_HandleUpstreamError_ForceToolFrameSkips7dOnly429Cooldown(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-primary-reset-after-seconds", "604800")
+	headers.Set("x-codex-primary-window-minutes", "10080")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	headers.Set("x-codex-secondary-reset-after-seconds", "18000")
+	headers.Set("x-codex-secondary-window-minutes", "300")
+
+	forceRepo := &openAI429SnapshotRepo{}
+	forceSvc := NewRateLimitService(forceRepo, nil, nil, nil, nil)
+	forceAccount := &Account{
+		ID:       125,
+		Platform: PlatformOpenAI,
+		Type:     AccountTypeOAuth,
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: true,
+			openAICodexToolFrameForceAfter5hKey:  true,
+		},
+	}
+
+	shouldDisable := forceSvc.HandleUpstreamError(
+		context.Background(),
+		forceAccount,
+		http.StatusTooManyRequests,
+		headers,
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"7d exhausted"}}`),
+	)
+
+	require.False(t, shouldDisable)
+	require.Zero(t, forceRepo.rateLimitedID)
+
+	normalRepo := &openAI429SnapshotRepo{}
+	normalSvc := NewRateLimitService(normalRepo, nil, nil, nil, nil)
+	normalAccount := &Account{ID: 126, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	normalSvc.HandleUpstreamError(
+		context.Background(),
+		normalAccount,
+		http.StatusTooManyRequests,
+		headers,
+		[]byte(`{"error":{"type":"usage_limit_reached","message":"7d exhausted"}}`),
+	)
+	require.Equal(t, normalAccount.ID, normalRepo.rateLimitedID, "a normal OpenAI OAuth account must retain the existing 7d cooldown behavior")
+}
+
 func TestHandle429_OpenAISyncsObservedPlanType(t *testing.T) {
 	repo := &openAI429SnapshotRepo{}
 	svc := NewRateLimitService(repo, nil, nil, nil, nil)

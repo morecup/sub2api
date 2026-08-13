@@ -72,6 +72,7 @@ func TestShouldRetryCodexToolFrameFrom429(t *testing.T) {
 func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *testing.T) {
 	body, changed := appendCodexToolFrameIfNeeded([]byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`))
 	require.True(t, changed)
+	plainBody := []byte(`{"model":"gpt-5.1-codex","input":[{"type":"message","role":"user","content":"hi"}]}`)
 
 	headers := http.Header{}
 	headers.Set("x-codex-primary-used-percent", "70")
@@ -96,7 +97,16 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
 
 	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
-	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, nil, body))
+	headers.Set("x-codex-primary-used-percent", "100")
+	headers.Set("x-codex-secondary-used-percent", "0")
+	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "force mode must suppress a 7d-only 429 even without Tool Frame")
+
+	account.Type = AccountTypeAPIKey
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "force mode only applies to OpenAI OAuth accounts")
+
+	account.Type = AccountTypeOAuth
+	account.Extra[openAICodexToolFrameOn5hExhaustedKey] = false
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "force mode requires the main Tool Frame switch")
 }
 
 func TestRewriteCodexToolFrame429FailoverForClientWhenEnabled(t *testing.T) {
