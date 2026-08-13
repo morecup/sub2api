@@ -846,8 +846,8 @@ func TestComputeTokenBreakdown_GptImage2ImageEditIssue4386(t *testing.T) {
 
 	cost := svc.computeTokenBreakdown(pricing, tokens, 1.0, "", false)
 
-	wantTextInput := float64(19) * 5e-6    // 0.000095
-	wantImageInput := float64(352) * 8e-6  // 0.002816
+	wantTextInput := float64(19) * 5e-6     // 0.000095
+	wantImageInput := float64(352) * 8e-6   // 0.002816
 	wantImageOutput := float64(439) * 30e-6 // 0.013170
 	require.InDelta(t, wantTextInput, cost.InputCost, 1e-15, "InputCost 仅含文本输入")
 	require.InDelta(t, wantImageInput, cost.ImageInputCost, 1e-15, "图片输入按 $8/1M 独立计费")
@@ -1125,43 +1125,70 @@ func TestCalculateCostWithLongContext_PropagatesError(t *testing.T) {
 	require.Contains(t, err.Error(), "pricing not found")
 }
 
-func TestGetModelPricing_Grok45OfficialFallback(t *testing.T) {
+func TestGetModelPricing_Grok45And46OfficialFallbacks(t *testing.T) {
 	svc := newTestBillingService()
 
-	for _, model := range []string{"grok", "grok-latest", "grok-4.5", "grok-4.5-latest", "grok-build-latest"} {
-		model := model
-		t.Run(model, func(t *testing.T) {
-			pricing, err := svc.GetModelPricing(model)
+	tests := []struct {
+		model     string
+		cacheRead float64
+	}{
+		{model: "grok", cacheRead: 0.3e-6},
+		{model: "grok-4.5", cacheRead: 0.3e-6},
+		{model: "grok-4.5-latest", cacheRead: 0.3e-6},
+		{model: "grok-build-latest", cacheRead: 0.3e-6},
+		{model: "grok-4.6", cacheRead: 0.5e-6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			pricing, err := svc.GetModelPricing(tt.model)
 			require.NoError(t, err)
 			require.InDelta(t, 2e-6, pricing.InputPricePerToken, 1e-12)
 			require.InDelta(t, 6e-6, pricing.OutputPricePerToken, 1e-12)
 			require.InDelta(t, 2e-6, pricing.CacheCreationPricePerToken, 1e-12)
-			require.InDelta(t, 0.5e-6, pricing.CacheReadPricePerToken, 1e-12)
+			require.InDelta(t, tt.cacheRead, pricing.CacheReadPricePerToken, 1e-12)
 			require.False(t, pricing.SupportsCacheBreakdown)
 			require.Equal(t, 200000, pricing.LongContextInputThreshold)
 			require.InDelta(t, 2.0, pricing.LongContextInputMultiplier, 1e-12)
 			require.InDelta(t, 2.0, pricing.LongContextOutputMultiplier, 1e-12)
+			require.True(t, pricing.LongContextThresholdInclusive)
 		})
 	}
 }
 
-func TestCalculateCost_Grok45LongContextAppliesWholeSessionMultipliers(t *testing.T) {
+func TestGetModelPricing_GrokOfficialRateCardOverridesStaleRemotePricing(t *testing.T) {
+	pricingSvc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+		"grok-4.5": {
+			InputCostPerToken:       9e-6,
+			CacheReadInputTokenCost: 9e-6,
+			OutputCostPerToken:      9e-6,
+		},
+	}}
+	svc := NewBillingService(&config.Config{}, pricingSvc)
+
+	pricing, err := svc.GetModelPricing("grok-4.5")
+	require.NoError(t, err)
+	require.InDelta(t, 2e-6, pricing.InputPricePerToken, 1e-12)
+	require.InDelta(t, 0.3e-6, pricing.CacheReadPricePerToken, 1e-12)
+	require.InDelta(t, 6e-6, pricing.OutputPricePerToken, 1e-12)
+}
+
+func TestCalculateCost_GrokLongContextAppliesAtThresholdToWholeSession(t *testing.T) {
 	svc := newTestBillingService()
 
-	atThreshold, err := svc.CalculateCost("grok-4.5", UsageTokens{
+	atThreshold, err := svc.CalculateCost("grok-4.6", UsageTokens{
 		InputTokens:         50000,
 		CacheCreationTokens: 10000,
 		CacheReadTokens:     140000,
 		OutputTokens:        1000,
 	}, 1.0)
 	require.NoError(t, err)
-	require.False(t, atThreshold.LongContextBillingApplied)
-	require.InDelta(t, 50000*2e-6, atThreshold.InputCost, 1e-12)
-	require.InDelta(t, 10000*2e-6, atThreshold.CacheCreationCost, 1e-12)
-	require.InDelta(t, 140000*0.5e-6, atThreshold.CacheReadCost, 1e-12)
-	require.InDelta(t, 1000*6e-6, atThreshold.OutputCost, 1e-12)
+	require.True(t, atThreshold.LongContextBillingApplied)
+	require.InDelta(t, 50000*4e-6, atThreshold.InputCost, 1e-12)
+	require.InDelta(t, 10000*4e-6, atThreshold.CacheCreationCost, 1e-12)
+	require.InDelta(t, 140000*1e-6, atThreshold.CacheReadCost, 1e-12)
+	require.InDelta(t, 1000*12e-6, atThreshold.OutputCost, 1e-12)
 
-	overThreshold, err := svc.CalculateCost("grok-build-latest", UsageTokens{
+	overThreshold, err := svc.CalculateCost("grok-build-0.1", UsageTokens{
 		InputTokens:         50001,
 		CacheCreationTokens: 10000,
 		CacheReadTokens:     140000,
@@ -1169,10 +1196,10 @@ func TestCalculateCost_Grok45LongContextAppliesWholeSessionMultipliers(t *testin
 	}, 1.0)
 	require.NoError(t, err)
 	require.True(t, overThreshold.LongContextBillingApplied)
-	require.InDelta(t, 50001*4e-6, overThreshold.InputCost, 1e-12)
-	require.InDelta(t, 10000*4e-6, overThreshold.CacheCreationCost, 1e-12)
-	require.InDelta(t, 140000*1e-6, overThreshold.CacheReadCost, 1e-12)
-	require.InDelta(t, 1000*12e-6, overThreshold.OutputCost, 1e-12)
+	require.InDelta(t, 50001*2e-6, overThreshold.InputCost, 1e-12)
+	require.InDelta(t, 10000*2e-6, overThreshold.CacheCreationCost, 1e-12)
+	require.InDelta(t, 140000*0.4e-6, overThreshold.CacheReadCost, 1e-12)
+	require.InDelta(t, 1000*4e-6, overThreshold.OutputCost, 1e-12)
 }
 
 func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
@@ -1188,12 +1215,18 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 		{
 			name: "Grok 4.3 family",
 			models: []string{
+				"grok-latest",
 				"grok-4.3",
+				"grok-4.3-latest",
 				"grok-4.20-0309-reasoning",
 				"grok-4.20-0309-non-reasoning",
 				"grok-4.20-multi-agent-0309",
 				"grok-4.20-reasoning",
+				"grok-4.20-reasoning-latest",
 				"grok-4.20-non-reasoning",
+				"grok-4.20-non-reasoning-latest",
+				"grok-4.20-multi-agent",
+				"grok-4.20-multi-agent-latest",
 			},
 			input:     1.25e-6,
 			cacheRead: 0.2e-6,
@@ -1204,6 +1237,9 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 			models: []string{
 				"grok-build",
 				"grok-build-0.1",
+				"grok-code-fast-1",
+				"grok-code-fast",
+				"grok-code-fast-1-0825",
 				"grok-composer",
 				"grok-composer-2.5-fast",
 				"composer-2.5",
@@ -1222,6 +1258,8 @@ func TestGetModelPricing_GrokCatalogFallbacks(t *testing.T) {
 				require.InDelta(t, tt.input, pricing.InputPricePerToken, 1e-12, "model %s input", model)
 				require.InDelta(t, tt.cacheRead, pricing.CacheReadPricePerToken, 1e-12, "model %s cached input", model)
 				require.InDelta(t, tt.output, pricing.OutputPricePerToken, 1e-12, "model %s output", model)
+				require.Equal(t, grokLongContextInputThreshold, pricing.LongContextInputThreshold, "model %s threshold", model)
+				require.True(t, pricing.LongContextThresholdInclusive, "model %s inclusive threshold", model)
 			}
 		})
 	}

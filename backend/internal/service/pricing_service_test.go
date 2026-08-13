@@ -369,6 +369,84 @@ func TestParsePricingData_KeepsImageOnlyPricing(t *testing.T) {
 	require.True(t, pricing.TokenPricingAbsent)
 }
 
+func TestParsePricingData_DerivesGrokLongContextMultipliersFromAbove200KPrices(t *testing.T) {
+	svc := &PricingService{}
+	body := []byte(`{
+		"grok-4.6": {
+			"litellm_provider": "xai",
+			"input_cost_per_token": 0.000002,
+			"input_cost_per_token_above_200k_tokens": 0.000004,
+			"cache_read_input_token_cost": 0.0000005,
+			"cache_read_input_token_cost_above_200k_tokens": 0.000001,
+			"output_cost_per_token": 0.000006,
+			"output_cost_per_token_above_200k_tokens": 0.000012
+		}
+	}`)
+
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	pricing := data["grok-4.6"]
+	require.NotNil(t, pricing)
+	require.Equal(t, grokLongContextInputThreshold, pricing.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 2.0, pricing.LongContextOutputCostMultiplier, 1e-12)
+	require.InDelta(t, 1e-6, pricing.CacheReadInputTokenCostAbove200K, 1e-12)
+}
+
+func TestParsePricingData_DoesNotTreatNonXAIAbove200KFieldsAsGrokPolicy(t *testing.T) {
+	svc := &PricingService{}
+	body := []byte(`{
+		"other-model": {
+			"litellm_provider": "other",
+			"input_cost_per_token": 0.000002,
+			"input_cost_per_token_above_200k_tokens": 0.000004,
+			"output_cost_per_token": 0.000006,
+			"output_cost_per_token_above_200k_tokens": 0.000012
+		}
+	}`)
+
+	data, err := svc.parsePricingData(body)
+	require.NoError(t, err)
+	pricing := data["other-model"]
+	require.NotNil(t, pricing)
+	require.Zero(t, pricing.LongContextInputTokenThreshold)
+	require.Zero(t, pricing.LongContextInputCostMultiplier)
+	require.Zero(t, pricing.LongContextOutputCostMultiplier)
+}
+
+func TestBundledPricingContainsCurrentGrokRateCard(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "resources", "model-pricing", "model_prices_and_context_window.json"))
+	require.NoError(t, err)
+
+	svc := &PricingService{}
+	parsed, err := svc.parsePricingData(data)
+	require.NoError(t, err)
+
+	tests := []struct {
+		model     string
+		input     float64
+		cacheRead float64
+		output    float64
+	}{
+		{model: "grok-4.6", input: 2e-6, cacheRead: 0.5e-6, output: 6e-6},
+		{model: "grok-4.5", input: 2e-6, cacheRead: 0.3e-6, output: 6e-6},
+		{model: "grok-4.3", input: 1.25e-6, cacheRead: 0.2e-6, output: 2.5e-6},
+		{model: "grok-build-0.1", input: 1e-6, cacheRead: 0.2e-6, output: 2e-6},
+	}
+	for _, tt := range tests {
+		t.Run(tt.model, func(t *testing.T) {
+			pricing := parsed[tt.model]
+			require.NotNil(t, pricing)
+			require.InDelta(t, tt.input, pricing.InputCostPerToken, 1e-12)
+			require.InDelta(t, tt.cacheRead, pricing.CacheReadInputTokenCost, 1e-12)
+			require.InDelta(t, tt.output, pricing.OutputCostPerToken, 1e-12)
+			require.Equal(t, grokLongContextInputThreshold, pricing.LongContextInputTokenThreshold)
+			require.InDelta(t, 2.0, pricing.LongContextInputCostMultiplier, 1e-12)
+			require.InDelta(t, 2.0, pricing.LongContextOutputCostMultiplier, 1e-12)
+		})
+	}
+}
+
 func TestBillingService_GetModelPricing_FailsClosedForImageOnlyEntries(t *testing.T) {
 	pricingSvc := &PricingService{}
 	data, err := pricingSvc.parsePricingData([]byte(`{

@@ -104,6 +104,9 @@ type LiteLLMModelPricing struct {
 	CacheCreationInputTokenCostAbove1hr float64 `json:"cache_creation_input_token_cost_above_1hr"`
 	CacheReadInputTokenCost             float64 `json:"cache_read_input_token_cost"`
 	CacheReadInputTokenCostPriority     float64 `json:"cache_read_input_token_cost_priority"`
+	InputCostPerTokenAbove200KTokens    float64 `json:"input_cost_per_token_above_200k_tokens"`
+	OutputCostPerTokenAbove200KTokens   float64 `json:"output_cost_per_token_above_200k_tokens"`
+	CacheReadInputTokenCostAbove200K    float64 `json:"cache_read_input_token_cost_above_200k_tokens"`
 	LongContextInputTokenThreshold      int     `json:"long_context_input_token_threshold,omitempty"`
 	LongContextInputCostMultiplier      float64 `json:"long_context_input_cost_multiplier,omitempty"`
 	LongContextOutputCostMultiplier     float64 `json:"long_context_output_cost_multiplier,omitempty"`
@@ -140,6 +143,9 @@ type LiteLLMRawEntry struct {
 	CacheCreationInputTokenCostAbove1hr *float64 `json:"cache_creation_input_token_cost_above_1hr"`
 	CacheReadInputTokenCost             *float64 `json:"cache_read_input_token_cost"`
 	CacheReadInputTokenCostPriority     *float64 `json:"cache_read_input_token_cost_priority"`
+	InputCostPerTokenAbove200KTokens    *float64 `json:"input_cost_per_token_above_200k_tokens"`
+	OutputCostPerTokenAbove200KTokens   *float64 `json:"output_cost_per_token_above_200k_tokens"`
+	CacheReadInputTokenCostAbove200K    *float64 `json:"cache_read_input_token_cost_above_200k_tokens"`
 	LongContextInputTokenThreshold      *int     `json:"long_context_input_token_threshold"`
 	LongContextInputCostMultiplier      *float64 `json:"long_context_input_cost_multiplier"`
 	LongContextOutputCostMultiplier     *float64 `json:"long_context_output_cost_multiplier"`
@@ -471,6 +477,15 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		if entry.CacheReadInputTokenCostPriority != nil {
 			pricing.CacheReadInputTokenCostPriority = *entry.CacheReadInputTokenCostPriority
 		}
+		if entry.InputCostPerTokenAbove200KTokens != nil {
+			pricing.InputCostPerTokenAbove200KTokens = *entry.InputCostPerTokenAbove200KTokens
+		}
+		if entry.OutputCostPerTokenAbove200KTokens != nil {
+			pricing.OutputCostPerTokenAbove200KTokens = *entry.OutputCostPerTokenAbove200KTokens
+		}
+		if entry.CacheReadInputTokenCostAbove200K != nil {
+			pricing.CacheReadInputTokenCostAbove200K = *entry.CacheReadInputTokenCostAbove200K
+		}
 		if entry.LongContextInputTokenThreshold != nil {
 			pricing.LongContextInputTokenThreshold = *entry.LongContextInputTokenThreshold
 		}
@@ -511,6 +526,22 @@ func (s *PricingService) parsePricingData(body []byte) (map[string]*LiteLLMModel
 		}
 		if pricing.LongContextOutputCostMultiplier <= 0 && hasLongContextOutputPrice && pricing.OutputCostPerToken > 0 {
 			pricing.LongContextOutputCostMultiplier = *entry.OutputCostPerTokenAbove272KTokens / pricing.OutputCostPerToken
+		}
+
+		// xAI Grok 使用 *_above_200k_tokens 表达整次请求的长上下文价格。
+		// 达到阈值即生效；是否包含等号由 BillingService 的 Grok 模型策略设置。
+		isXAILongContextModel := strings.EqualFold(strings.TrimSpace(entry.LiteLLMProvider), "xai") &&
+			isGrokLongContextPricingModel(modelName)
+		hasAbove200KInputPrice := isXAILongContextModel && entry.InputCostPerTokenAbove200KTokens != nil && *entry.InputCostPerTokenAbove200KTokens > 0
+		hasAbove200KOutputPrice := isXAILongContextModel && entry.OutputCostPerTokenAbove200KTokens != nil && *entry.OutputCostPerTokenAbove200KTokens > 0
+		if pricing.LongContextInputTokenThreshold <= 0 && (hasAbove200KInputPrice || hasAbove200KOutputPrice) {
+			pricing.LongContextInputTokenThreshold = grokLongContextInputThreshold
+		}
+		if pricing.LongContextInputCostMultiplier <= 0 && hasAbove200KInputPrice && pricing.InputCostPerToken > 0 {
+			pricing.LongContextInputCostMultiplier = *entry.InputCostPerTokenAbove200KTokens / pricing.InputCostPerToken
+		}
+		if pricing.LongContextOutputCostMultiplier <= 0 && hasAbove200KOutputPrice && pricing.OutputCostPerToken > 0 {
+			pricing.LongContextOutputCostMultiplier = *entry.OutputCostPerTokenAbove200KTokens / pricing.OutputCostPerToken
 		}
 
 		result[modelName] = pricing

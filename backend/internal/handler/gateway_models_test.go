@@ -145,6 +145,10 @@ func TestGatewayModels_Grok45AdvertisesReasoningEffortForGrokBuild(t *testing.T)
 	}, model.ReasoningEfforts)
 }
 
+func TestGatewayModels_Grok46AdvertisesReasoningEffort(t *testing.T) {
+	require.True(t, grokModelSupportsConfigurableReasoning("grok-4.6"))
+}
+
 func TestGatewayModels_GeminiGroupFiltersMappedModelsByPlatform(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

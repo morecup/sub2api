@@ -1154,7 +1154,7 @@ func TestOpenAIGatewayServiceRecordUsage_Grok45LongContextBillingEnabledByPlatfo
 	require.NotNil(t, usageRepo.lastLog)
 
 	expectedInput := 60000 * 4e-6
-	expectedCacheRead := 150000 * 1e-6
+	expectedCacheRead := 150000 * 0.6e-6
 	expectedOutput := 5000 * 12e-6
 	expectedTotal := expectedInput + expectedCacheRead + expectedOutput
 	require.InDelta(t, expectedInput, usageRepo.lastLog.InputCost, 1e-10)

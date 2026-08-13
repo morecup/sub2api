@@ -43,12 +43,26 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
-  it('xAI 模型列表包含 Grok 4.5 官方模型和别名', () => {
+  it('xAI 模型列表包含 Grok 4.6 和官方别名', () => {
     const models = getModelsByPlatform('grok')
 
+    expect(models).toContain('grok-4.6')
     expect(models).toContain('grok-4.5')
     expect(models).toContain('grok-4.5-latest')
     expect(models).toContain('grok-build-latest')
+  })
+
+  it('Grok Latest 按 xAI 当前目录映射到 4.3', () => {
+    const mapping = buildModelMappingObject(
+      'combined',
+      ['grok-4.6'],
+      [{ from: 'grok-latest', to: 'grok-4.3' }]
+    )
+
+    expect(mapping).toEqual({
+      'grok-4.6': 'grok-4.6',
+      'grok-latest': 'grok-4.3'
+    })
   })
 
   it('combined 模式支持 Grok 4.5 官方别名映射', () => {

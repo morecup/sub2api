@@ -98,28 +98,32 @@ func TestExtractGrokResponsesReasoningEffortSupportsOpenAICompatibleField(t *tes
 	require.Equal(t, "high", *effort)
 }
 
-func TestPatchGrokResponsesBodyDropsGrok45ReasoningUnsupportedFields(t *testing.T) {
+func TestPatchGrokResponsesBodyDropsGrok45And46ReasoningUnsupportedFields(t *testing.T) {
 	t.Parallel()
 
-	body := []byte(`{
-		"model": "grok-latest",
-		"input": "hello",
-		"presence_penalty": 0.1,
-		"presencePenalty": 0.2,
-		"frequency_penalty": 0.3,
-		"frequencyPenalty": 0.4,
-		"stop": ["done"]
-	}`)
+	for _, model := range []string{"grok-4.5", "grok-4.6"} {
+		t.Run(model, func(t *testing.T) {
+			body := []byte(`{
+				"model": "grok-latest",
+				"input": "hello",
+				"presence_penalty": 0.1,
+				"presencePenalty": 0.2,
+				"frequency_penalty": 0.3,
+				"frequencyPenalty": 0.4,
+				"stop": ["done"]
+			}`)
 
-	patched, err := patchGrokResponsesBody(body, "grok-4.5")
-	require.NoError(t, err)
-	require.True(t, json.Valid(patched))
-	require.Equal(t, "grok-4.5", gjson.GetBytes(patched, "model").String())
-	require.False(t, gjson.GetBytes(patched, "presence_penalty").Exists())
-	require.False(t, gjson.GetBytes(patched, "presencePenalty").Exists())
-	require.False(t, gjson.GetBytes(patched, "frequency_penalty").Exists())
-	require.False(t, gjson.GetBytes(patched, "frequencyPenalty").Exists())
-	require.False(t, gjson.GetBytes(patched, "stop").Exists())
+			patched, err := patchGrokResponsesBody(body, model)
+			require.NoError(t, err)
+			require.True(t, json.Valid(patched))
+			require.Equal(t, model, gjson.GetBytes(patched, "model").String())
+			require.False(t, gjson.GetBytes(patched, "presence_penalty").Exists())
+			require.False(t, gjson.GetBytes(patched, "presencePenalty").Exists())
+			require.False(t, gjson.GetBytes(patched, "frequency_penalty").Exists())
+			require.False(t, gjson.GetBytes(patched, "frequencyPenalty").Exists())
+			require.False(t, gjson.GetBytes(patched, "stop").Exists())
+		})
+	}
 }
 
 func TestPatchGrokResponsesBodyKeepsPenaltyAndStopFieldsForNon45Models(t *testing.T) {

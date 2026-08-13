@@ -10,6 +10,7 @@ type Model struct {
 }
 
 var defaultModels = []Model{
+	{ID: "grok-4.6", Object: "model", OwnedBy: "xai", DisplayName: "Grok 4.6"},
 	{ID: "grok-4.5", Object: "model", OwnedBy: "xai", DisplayName: "Grok 4.5"},
 	{ID: "grok-4.3", Object: "model", OwnedBy: "xai", DisplayName: "Grok 4.3"},
 	{ID: "grok-build-0.1", Object: "model", OwnedBy: "xai", DisplayName: "Grok Build 0.1"},
@@ -41,18 +42,29 @@ func DefaultModelIDs() []string {
 }
 
 func DefaultModelMapping() map[string]string {
-	mapping := make(map[string]string, len(defaultModels)+5)
+	mapping := make(map[string]string, len(defaultModels)+12)
 	for _, model := range defaultModels {
 		mapping[model.ID] = model.ID
 	}
 	mapping["grok"] = "grok-4.5"
-	mapping["grok-latest"] = "grok-4.5"
+	// xAI currently keeps the generic latest alias on Grok 4.3. Grok 4.6 has
+	// no -latest alias in the official model catalog yet.
+	mapping["grok-latest"] = "grok-4.3"
+	mapping["grok-4.3-latest"] = "grok-4.3"
 	mapping["grok-4.5-latest"] = "grok-4.5"
 	mapping["grok-build"] = "grok-build-0.1"
+	mapping["grok-code-fast-1"] = "grok-build-0.1"
+	mapping["grok-code-fast"] = "grok-build-0.1"
+	mapping["grok-code-fast-1-0825"] = "grok-build-0.1"
 	mapping["grok-build-latest"] = "grok-4.5"
 	mapping["grok-composer"] = "grok-composer-2.5-fast"
 	mapping["composer-2.5"] = "grok-composer-2.5-fast"
 	mapping["grok-4.20-reasoning"] = "grok-4.20-0309-reasoning"
+	mapping["grok-4.20-reasoning-latest"] = "grok-4.20-0309-reasoning"
+	mapping["grok-4.20"] = "grok-4.20-0309-reasoning"
 	mapping["grok-4.20-non-reasoning"] = "grok-4.20-0309-non-reasoning"
+	mapping["grok-4.20-non-reasoning-latest"] = "grok-4.20-0309-non-reasoning"
+	mapping["grok-4.20-multi-agent"] = "grok-4.20-multi-agent-0309"
+	mapping["grok-4.20-multi-agent-latest"] = "grok-4.20-multi-agent-0309"
 	return mapping
 }
