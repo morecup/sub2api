@@ -123,6 +123,21 @@ func TestApplyOpenAICompatModelNormalization(t *testing.T) {
 		require.Equal(t, "claude-opus-4-6", req.Model)
 		require.Nil(t, req.OutputConfig)
 	})
+
+	t.Run("server gated Sol WM slug is preserved", func(t *testing.T) {
+		req := &apicompat.AnthropicRequest{Model: "gpt-5.6-sol-wm"}
+
+		normalizedModel, effort, hasReasoningSuffix := splitOpenAICompatReasoningModel(req.Model)
+
+		require.False(t, hasReasoningSuffix)
+		require.Empty(t, effort)
+		require.Equal(t, "gpt-5.6-sol-wm", normalizedModel)
+
+		applyOpenAICompatModelNormalization(req)
+
+		require.Equal(t, "gpt-5.6-sol-wm", req.Model)
+		require.Nil(t, req.OutputConfig)
+	})
 }
 
 func TestForwardAsAnthropic_UsesExactFableMessagesDispatchModel(t *testing.T) {

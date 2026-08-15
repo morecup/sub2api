@@ -11,6 +11,11 @@ import (
 )
 
 var codexModelMap = map[string]string{
+	// gpt-5.6-sol-wm is a server-gated ChatGPT/Codex route rather than a
+	// public API model. Preserve the exact slug for OAuth accounts so the
+	// upstream can make the entitlement decision instead of silently routing
+	// the request to the ordinary gpt-5.6-sol quota pool.
+	"gpt-5.6-sol-wm":       "gpt-5.6-sol-wm",
 	"gpt-5.6":              "gpt-5.6-sol",
 	"gpt-5.6-sol":          "gpt-5.6-sol",
 	"gpt-5.6-terra":        "gpt-5.6-terra",
