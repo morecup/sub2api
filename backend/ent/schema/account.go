@@ -107,6 +107,13 @@ func (Account) Fields() []ent.Field {
 		field.Int("priority").
 			Default(50),
 
+		// weight: 同优先级账号之间的调度权重，数值越大被选中的概率越高
+		// 权重不跨越 priority 层级生效，默认 1 保持现有账号行为不变
+		field.Int("weight").
+			Default(1).
+			Positive().
+			Max(10000),
+
 		// rate_multiplier: 账号计费倍率（>=0，允许 0 表示该账号计费为 0）
 		// 仅影响账号维度计费口径，不影响用户/API Key 扣费（分组倍率）
 		field.Float("rate_multiplier").

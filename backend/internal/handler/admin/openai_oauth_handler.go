@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -115,6 +116,7 @@ type OpenAICodexPATCreateRequest struct {
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
+	Weight                  *int           `json:"weight"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	ExpiresAt               *int64         `json:"expires_at"`
@@ -242,10 +244,15 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		Name        string  `json:"name"`
 		Concurrency int     `json:"concurrency"`
 		Priority    int     `json:"priority"`
+		Weight      int     `json:"weight"`
 		GroupIDs    []int64 `json:"group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := validateAccountWeightInput(optionalCreateAccountWeight(req.Weight)); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 
@@ -286,6 +293,7 @@ func (h *OpenAIOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		ProxyID:     req.ProxyID,
 		Concurrency: req.Concurrency,
 		Priority:    req.Priority,
+		Weight:      req.Weight,
 		GroupIDs:    req.GroupIDs,
 	})
 	if err != nil {
@@ -314,6 +322,10 @@ func (h *OpenAIOAuthHandler) CreateAccountFromCodexPAT(c *gin.Context) {
 	}
 	if req.Priority != nil && *req.Priority < 0 {
 		response.BadRequest(c, "priority must be >= 0")
+		return
+	}
+	if req.Weight != nil && (*req.Weight <= 0 || *req.Weight > service.MaxAccountSchedulingWeight) {
+		response.BadRequest(c, fmt.Sprintf("weight must be between 1 and %d", service.MaxAccountSchedulingWeight))
 		return
 	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
@@ -368,15 +380,21 @@ func (h *OpenAIOAuthHandler) CreateAccountFromCodexPAT(c *gin.Context) {
 	}
 
 	account, err := h.adminService.CreateAccount(c.Request.Context(), &service.CreateAccountInput{
-		Name:                  buildOpenAICodexPATAccountName(req.Name, tokenInfo),
-		Notes:                 req.Notes,
-		Platform:              service.PlatformOpenAI,
-		Type:                  service.AccountTypeOAuth,
-		Credentials:           credentials,
-		Extra:                 extra,
-		ProxyID:               req.ProxyID,
-		Concurrency:           concurrency,
-		Priority:              priority,
+		Name:        buildOpenAICodexPATAccountName(req.Name, tokenInfo),
+		Notes:       req.Notes,
+		Platform:    service.PlatformOpenAI,
+		Type:        service.AccountTypeOAuth,
+		Credentials: credentials,
+		Extra:       extra,
+		ProxyID:     req.ProxyID,
+		Concurrency: concurrency,
+		Priority:    priority,
+		Weight: func() int {
+			if req.Weight != nil {
+				return *req.Weight
+			}
+			return 1
+		}(),
 		RateMultiplier:        req.RateMultiplier,
 		LoadFactor:            req.LoadFactor,
 		GroupIDs:              req.GroupIDs,

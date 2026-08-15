@@ -714,6 +714,32 @@
         </div>
         <div>
           <div class="mb-3 flex items-center justify-between">
+            <label id="bulk-edit-weight-label" class="input-label mb-0" for="bulk-edit-weight-enabled">
+              {{ t('admin.accounts.weight') }}
+            </label>
+            <input
+              v-model="enableWeight"
+              id="bulk-edit-weight-enabled"
+              type="checkbox"
+              aria-controls="bulk-edit-weight"
+              class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+            />
+          </div>
+          <input
+            v-model.number="weight"
+            id="bulk-edit-weight"
+            type="number"
+            min="1"
+            max="10000"
+            :disabled="!enableWeight"
+            class="input"
+            :class="!enableWeight && 'cursor-not-allowed opacity-50'"
+            aria-labelledby="bulk-edit-weight-label"
+          />
+          <p class="input-hint">{{ t('admin.accounts.weightHint') }}</p>
+        </div>
+        <div>
+          <div class="mb-3 flex items-center justify-between">
             <label
               id="bulk-edit-rate-multiplier-label"
               class="input-label mb-0"
@@ -1616,6 +1642,7 @@ const enableProxy = ref(false)
 const enableConcurrency = ref(false)
 const enableLoadFactor = ref(false)
 const enablePriority = ref(false)
+const enableWeight = ref(false)
 const enableRateMultiplier = ref(false)
 const enableStatus = ref(false)
 const enableGroups = ref(false)
@@ -1650,6 +1677,7 @@ const proxyId = ref<number | null>(null)
 const concurrency = ref(1)
 const loadFactor = ref<number | null>(null)
 const priority = ref(1)
+const weight = ref(1)
 const rateMultiplier = ref(1)
 const status = ref<'active' | 'inactive'>('active')
 const groupIds = ref<number[]>([])
@@ -1838,6 +1866,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
 
   if (enablePriority.value) {
     updates.priority = priority.value
+  }
+
+  if (enableWeight.value) {
+    updates.weight = weight.value
   }
 
   if (enableRateMultiplier.value) {
@@ -2066,6 +2098,7 @@ const handleSubmit = async () => {
     enableConcurrency.value ||
     enableLoadFactor.value ||
     enablePriority.value ||
+    enableWeight.value ||
     enableRateMultiplier.value ||
     enableStatus.value ||
     enableGroups.value ||
@@ -2197,6 +2230,7 @@ watch(
       enableConcurrency.value = false
       enableLoadFactor.value = false
       enablePriority.value = false
+      enableWeight.value = false
       enableRateMultiplier.value = false
       enableStatus.value = false
       enableGroups.value = false
@@ -2228,6 +2262,7 @@ watch(
       concurrency.value = 1
       loadFactor.value = null
       priority.value = 1
+      weight.value = 1
       rateMultiplier.value = 1
       status.value = 'active'
       groupIds.value = []

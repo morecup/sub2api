@@ -145,6 +145,7 @@ type AccountBulkUpdate struct {
 	ProxyID        *int64
 	Concurrency    *int
 	Priority       *int
+	Weight         *int
 	RateMultiplier *float64
 	LoadFactor     *int
 	Status         *string
@@ -166,6 +167,7 @@ type CreateAccountRequest struct {
 	ProxyID            *int64         `json:"proxy_id"`
 	Concurrency        int            `json:"concurrency"`
 	Priority           int            `json:"priority"`
+	Weight             int            `json:"weight"`
 	GroupIDs           []int64        `json:"group_ids"`
 	ExpiresAt          *time.Time     `json:"expires_at"`
 	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired"`
@@ -180,6 +182,7 @@ type UpdateAccountRequest struct {
 	ProxyID            *int64          `json:"proxy_id"`
 	Concurrency        *int            `json:"concurrency"`
 	Priority           *int            `json:"priority"`
+	Weight             *int            `json:"weight"`
 	Status             *string         `json:"status"`
 	GroupIDs           *[]int64        `json:"group_ids"`
 	ExpiresAt          *time.Time      `json:"expires_at"`
@@ -206,6 +209,12 @@ func NewAccountService(accountRepo AccountRepository, groupRepo GroupRepository)
 
 // Create 创建账号
 func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (*Account, error) {
+	if req.Weight != 0 {
+		if err := validateAccountWeight(req.Weight); err != nil {
+			return nil, err
+		}
+	}
+
 	// 验证分组是否存在（如果指定了分组）
 	if len(req.GroupIDs) > 0 {
 		if err := s.validateGroupIDsExist(ctx, req.GroupIDs); err != nil {
@@ -224,6 +233,7 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 		ProxyID:     req.ProxyID,
 		Concurrency: req.Concurrency,
 		Priority:    req.Priority,
+		Weight:      normalizeAccountWeight(req.Weight),
 		Status:      StatusActive,
 		ExpiresAt:   req.ExpiresAt,
 	}
@@ -336,6 +346,12 @@ func (s *AccountService) Update(ctx context.Context, id int64, req UpdateAccount
 
 	if req.Priority != nil {
 		account.Priority = *req.Priority
+	}
+	if req.Weight != nil {
+		if err := validateAccountWeight(*req.Weight); err != nil {
+			return nil, err
+		}
+		account.Weight = *req.Weight
 	}
 
 	if req.Status != nil {

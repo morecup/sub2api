@@ -67,6 +67,7 @@ type DataAccount struct {
 	ProxyKey           *string        `json:"proxy_key,omitempty"`
 	Concurrency        int            `json:"concurrency"`
 	Priority           int            `json:"priority"`
+	Weight             int            `json:"weight,omitempty"`
 	RateMultiplier     *float64       `json:"rate_multiplier,omitempty"`
 	ExpiresAt          *int64         `json:"expires_at,omitempty"`
 	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired,omitempty"`
@@ -209,6 +210,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			ProxyKey:           proxyKey,
 			Concurrency:        acc.Concurrency,
 			Priority:           acc.Priority,
+			Weight:             acc.SchedulingWeight(),
 			RateMultiplier:     acc.RateMultiplier,
 			ExpiresAt:          expiresAt,
 			AutoPauseOnExpired: &acc.AutoPauseOnExpired,
@@ -439,6 +441,7 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			ProxyID:              proxyID,
 			Concurrency:          item.Concurrency,
 			Priority:             item.Priority,
+			Weight:               item.Weight,
 			RateMultiplier:       item.RateMultiplier,
 			GroupIDs:             nil,
 			ExpiresAt:            item.ExpiresAt,
@@ -701,6 +704,9 @@ func validateDataAccount(item DataAccount) error {
 	}
 	if item.Priority < 0 {
 		return errors.New("priority must be >= 0")
+	}
+	if item.Weight < 0 || item.Weight > service.MaxAccountSchedulingWeight {
+		return fmt.Errorf("weight must be between 1 and %d when provided", service.MaxAccountSchedulingWeight)
 	}
 	return nil
 }

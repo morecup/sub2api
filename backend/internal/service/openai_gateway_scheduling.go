@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	mathrand "math/rand"
 	"sort"
 	"strconv"
 	"strings"
@@ -832,7 +833,21 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 		}
 		return s.isBetterAccount(a, b)
 	})
-	return eligible[0], compactBlocked
+	selected := eligible[0]
+	weightedCandidates := make([]*Account, 0, len(eligible))
+	for _, account := range eligible {
+		if requireCompact && compactTiers[account.ID] != compactTiers[selected.ID] {
+			continue
+		}
+		if rateOrder.enabled && rateOrder.compare(account, selected) != 0 {
+			continue
+		}
+		weightedCandidates = append(weightedCandidates, account)
+	}
+	if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(weightedCandidates, mathrand.Intn); ok {
+		selected = weighted
+	}
+	return selected, compactBlocked
 }
 
 // isBetterAccount 判断 candidate 是否比 current 更优。

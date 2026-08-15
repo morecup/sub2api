@@ -308,6 +308,7 @@ func (s *adminServiceImpl) DuplicateAccount(ctx context.Context, id int64, actor
 		ProxyID:               cloneAccountValuePointer(proxyID),
 		Concurrency:           source.Concurrency,
 		Priority:              source.Priority,
+		Weight:                source.SchedulingWeight(),
 		RateMultiplier:        cloneAccountValuePointer(source.RateMultiplier),
 		LoadFactor:            cloneAccountValuePointer(source.LoadFactor),
 		GroupIDs:              groupIDs,
@@ -356,6 +357,20 @@ func normalizeAccountConcurrency(platform, accountType string, concurrency int) 
 		}
 	}
 	return concurrency
+}
+
+func normalizeAccountWeight(weight int) int {
+	if weight <= 0 {
+		return 1
+	}
+	return weight
+}
+
+func validateAccountWeight(weight int) error {
+	if weight <= 0 || weight > MaxAccountSchedulingWeight {
+		return fmt.Errorf("weight must be between 1 and %d", MaxAccountSchedulingWeight)
+	}
+	return nil
 }
 
 // ValidateOpenAILongContextBillingExtra validates the OpenAI account billing flag when present.
@@ -563,6 +578,11 @@ func validateOpenAI429NoCooldownExtra(platform, accountType string, extra map[st
 }
 
 func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]any) (*Account, error) {
+	if input.Weight != 0 {
+		if err := validateAccountWeight(input.Weight); err != nil {
+			return nil, err
+		}
+	}
 	// Probe/session state is system-managed. New accounts always start with automatic refresh disabled.
 	delete(accountExtra, UpstreamBillingProbeEnabledExtraKey)
 	delete(accountExtra, UpstreamBillingProbeExtraKey)
@@ -579,6 +599,7 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		ProxyID:     input.ProxyID,
 		Concurrency: normalizeAccountConcurrency(input.Platform, input.Type, input.Concurrency),
 		Priority:    input.Priority,
+		Weight:      normalizeAccountWeight(input.Weight),
 		Status:      StatusActive,
 		Schedulable: true,
 	}
@@ -911,6 +932,12 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	// 只在指针非 nil 时更新 Priority（支持设置为 0）
 	if input.Priority != nil {
 		account.Priority = *input.Priority
+	}
+	if input.Weight != nil {
+		if err := validateAccountWeight(*input.Weight); err != nil {
+			return nil, err
+		}
+		account.Weight = *input.Weight
 	}
 	if input.RateMultiplier != nil {
 		if *input.RateMultiplier < 0 {
@@ -1310,6 +1337,12 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	}
 	if input.Priority != nil {
 		repoUpdates.Priority = input.Priority
+	}
+	if input.Weight != nil {
+		if err := validateAccountWeight(*input.Weight); err != nil {
+			return nil, err
+		}
+		repoUpdates.Weight = input.Weight
 	}
 	if input.RateMultiplier != nil {
 		repoUpdates.RateMultiplier = input.RateMultiplier

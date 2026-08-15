@@ -30,6 +30,7 @@ type CodexSessionImportRequest struct {
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
+	Weight                  *int           `json:"weight"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	ExpiresAt               *int64         `json:"expires_at"`
@@ -131,6 +132,10 @@ func (h *AccountHandler) ImportCodexSession(c *gin.Context) {
 	}
 	if req.Priority != nil && *req.Priority < 0 {
 		response.BadRequest(c, "priority must be >= 0")
+		return
+	}
+	if req.Weight != nil && (*req.Weight <= 0 || *req.Weight > service.MaxAccountSchedulingWeight) {
+		response.BadRequest(c, fmt.Sprintf("weight must be between 1 and %d", service.MaxAccountSchedulingWeight))
 		return
 	}
 	if req.RateMultiplier != nil && *req.RateMultiplier < 0 {
@@ -281,6 +286,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 				Extra:              mergedExtra,
 				Concurrency:        req.Concurrency,
 				Priority:           req.Priority,
+				Weight:             req.Weight,
 				RateMultiplier:     req.RateMultiplier,
 				LoadFactor:         req.LoadFactor,
 				ExpiresAt:          effectiveExpiresAt,
@@ -329,15 +335,21 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 		}
 
 		account, createErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
-			Name:                  accountName,
-			Notes:                 req.Notes,
-			Platform:              service.PlatformOpenAI,
-			Type:                  service.AccountTypeOAuth,
-			Credentials:           credentials,
-			Extra:                 extra,
-			ProxyID:               req.ProxyID,
-			Concurrency:           concurrency,
-			Priority:              priority,
+			Name:        accountName,
+			Notes:       req.Notes,
+			Platform:    service.PlatformOpenAI,
+			Type:        service.AccountTypeOAuth,
+			Credentials: credentials,
+			Extra:       extra,
+			ProxyID:     req.ProxyID,
+			Concurrency: concurrency,
+			Priority:    priority,
+			Weight: func() int {
+				if req.Weight != nil {
+					return *req.Weight
+				}
+				return 1
+			}(),
 			RateMultiplier:        req.RateMultiplier,
 			LoadFactor:            req.LoadFactor,
 			GroupIDs:              req.GroupIDs,

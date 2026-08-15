@@ -332,6 +332,7 @@ func (s *GeminiMessagesCompatService) selectBestGeminiAccount(
 	useMixedScheduling bool,
 ) *Account {
 	var selected *Account
+	eligible := make([]*Account, 0, len(accounts))
 	precheckResult := s.buildPreCheckUsageResultMap(ctx, accounts, requestedModel)
 
 	for i := range accounts {
@@ -346,6 +347,7 @@ func (s *GeminiMessagesCompatService) selectBestGeminiAccount(
 		if !s.isAccountUsableForRequestWithPrecheck(ctx, acc, requestedModel, platform, useMixedScheduling, precheckResult) {
 			continue
 		}
+		eligible = append(eligible, acc)
 
 		// 选择最佳账号
 		if selected == nil {
@@ -356,6 +358,9 @@ func (s *GeminiMessagesCompatService) selectBestGeminiAccount(
 		if s.isBetterGeminiAccount(acc, selected) {
 			selected = acc
 		}
+	}
+	if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(eligible, mathrand.Intn); ok {
+		selected = weighted
 	}
 
 	return selected
@@ -562,11 +567,13 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 	}
 
 	var selected *Account
+	eligible := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if !accountSchedulableWithStandby(ctx, acc, s.lookupStandbyPrimaryAccount) {
 			continue
 		}
+		eligible = append(eligible, acc)
 		if selected == nil {
 			selected = acc
 			continue
@@ -598,6 +605,18 @@ func (s *GeminiMessagesCompatService) SelectAccountForAIStudioEndpoints(ctx cont
 					selected = acc
 				}
 			}
+		}
+	}
+	if selected != nil {
+		bestRank := rank(selected)
+		weightedCandidates := make([]*Account, 0, len(eligible))
+		for _, account := range eligible {
+			if rank(account) == bestRank {
+				weightedCandidates = append(weightedCandidates, account)
+			}
+		}
+		if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(weightedCandidates, mathrand.Intn); ok {
+			selected = weighted
 		}
 	}
 

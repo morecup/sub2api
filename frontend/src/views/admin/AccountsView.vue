@@ -378,6 +378,9 @@
           <template #cell-priority="{ value }">
             <span class="text-sm text-gray-700 dark:text-gray-300">{{ value }}</span>
           </template>
+          <template #cell-weight="{ value }">
+            <span class="text-sm text-gray-700 dark:text-gray-300">{{ value || 1 }}</span>
+          </template>
           <template #header-scheduler_score="{ column }">
             <div class="flex items-center">
               <span>{{ column.label }}</span>
@@ -638,7 +641,7 @@ const accountToolsDropdownStyle = computed(() => ({
   width: `${accountToolsDropdownPosition.width}px`
 }))
 const hiddenColumns = reactive<Set<string>>(new Set())
-const DEFAULT_HIDDEN_COLUMNS = ['today_stats', 'proxy', 'notes', 'priority', 'scheduler_score', 'rate_multiplier']
+const DEFAULT_HIDDEN_COLUMNS = ['today_stats', 'proxy', 'notes', 'priority', 'weight', 'scheduler_score', 'rate_multiplier']
 const HIDDEN_COLUMNS_KEY = 'account-hidden-columns'
 // One-time migration: hide scheduler score for existing admins too, because showing it opt-ins to heavy backend scoring.
 const HIDDEN_COLUMNS_VERSION_KEY = 'account-hidden-columns-version'
@@ -657,6 +660,7 @@ const ACCOUNT_SORTABLE_KEYS = new Set([
   'status',
   'schedulable',
   'priority',
+  'weight',
   'rate_multiplier',
   'upstream_billing_rate',
   'last_used_at',
@@ -1440,6 +1444,7 @@ const allColumns = computed(() => {
   c.push(
     { key: 'proxy', label: t('admin.accounts.columns.proxy'), sortable: false },
     { key: 'priority', label: t('admin.accounts.columns.priority'), sortable: true },
+    { key: 'weight', label: t('admin.accounts.columns.weight'), sortable: true },
     { key: 'scheduler_score', label: t('admin.accounts.columns.schedulerScore'), sortable: false },
     { key: 'rate_multiplier', label: t('admin.accounts.columns.billingRateMultiplier'), sortable: true },
     { key: 'upstream_billing_rate', label: t('admin.accounts.columns.upstreamBillingRate'), sortable: true },

@@ -111,6 +111,7 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 		SetExtra(normalizeJSONMap(account.Extra)).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
+		SetWeight(account.SchedulingWeight()).
 		SetStatus(account.Status).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(account.Schedulable).
@@ -477,6 +478,7 @@ func (r *accountRepository) updateLockedAccount(ctx context.Context, client *dbe
 		SetExtra(extra).
 		SetConcurrency(account.Concurrency).
 		SetPriority(account.Priority).
+		SetWeight(account.SchedulingWeight()).
 		SetStatus(account.Status).
 		SetErrorMessage(account.ErrorMessage).
 		SetSchedulable(schedulable).
@@ -1018,6 +1020,8 @@ func accountListOrder(params pagination.PaginationParams) []func(*entsql.Selecto
 		defaultOrder = false
 	case "priority":
 		field = dbaccount.FieldPriority
+	case "weight":
+		field = dbaccount.FieldWeight
 		defaultOrder = false
 	case "rate_multiplier":
 		field = dbaccount.FieldRateMultiplier
@@ -2742,6 +2746,11 @@ func (r *accountRepository) BulkUpdate(ctx context.Context, ids []int64, updates
 		args = append(args, *updates.Priority)
 		idx++
 	}
+	if updates.Weight != nil {
+		setClauses = append(setClauses, "weight = $"+itoa(idx))
+		args = append(args, *updates.Weight)
+		idx++
+	}
 	if updates.RateMultiplier != nil {
 		setClauses = append(setClauses, "rate_multiplier = $"+itoa(idx))
 		args = append(args, *updates.RateMultiplier)
@@ -3257,6 +3266,7 @@ func accountEntityToService(m *dbent.Account) *service.Account {
 		ProxyFallbackOriginID:   m.ProxyFallbackOriginID,
 		Concurrency:             m.Concurrency,
 		Priority:                m.Priority,
+		Weight:                  m.Weight,
 		RateMultiplier:          &rateMultiplier,
 		LoadFactor:              m.LoadFactor,
 		Status:                  m.Status,

@@ -742,21 +742,7 @@ func buildOpenAIWeightedSelectionOrder(
 	}
 
 	pool := append([]openAIAccountCandidateScore(nil), candidates...)
-	weights := make([]float64, len(pool))
-	minScore := pool[0].score
-	for i := 1; i < len(pool); i++ {
-		if pool[i].score < minScore {
-			minScore = pool[i].score
-		}
-	}
-	for i := range pool {
-		// 将 top-K 分值平移到正区间，避免“单一最高分账号”长期垄断。
-		weight := (pool[i].score - minScore) + 1.0
-		if math.IsNaN(weight) || math.IsInf(weight, 0) || weight <= 0 {
-			weight = 1.0
-		}
-		weights[i] = weight
-	}
+	weights := buildOpenAISelectionWeights(pool)
 
 	order := make([]openAIAccountCandidateScore, 0, len(pool))
 	rng := newOpenAISelectionRNG(deriveOpenAISelectionSeed(req))
@@ -786,6 +772,57 @@ func buildOpenAIWeightedSelectionOrder(
 		weights = append(weights[:selectedIdx], weights[selectedIdx+1:]...)
 	}
 	return order
+}
+
+func buildOpenAISelectionWeights(pool []openAIAccountCandidateScore) []float64 {
+	weights := make([]float64, len(pool))
+	if len(pool) == 0 {
+		return weights
+	}
+
+	minScore := pool[0].score
+	for i := 1; i < len(pool); i++ {
+		if pool[i].score < minScore {
+			minScore = pool[i].score
+		}
+	}
+
+	type priorityTotals struct {
+		base     float64
+		weighted float64
+	}
+	priorities := make([]int, len(pool))
+	accountWeights := make([]int, len(pool))
+	totalsByPriority := make(map[int]priorityTotals)
+	for i := range pool {
+		// 将 top-K 分值平移到正区间，避免“单一最高分账号”长期垄断。
+		baseWeight := (pool[i].score - minScore) + 1.0
+		if math.IsNaN(baseWeight) || math.IsInf(baseWeight, 0) || baseWeight <= 0 {
+			baseWeight = 1.0
+		}
+
+		accountWeight := 1
+		if pool[i].account != nil {
+			accountWeight = pool[i].account.SchedulingWeight()
+			priorities[i] = openAIAccountSchedulingPriority(pool[i].account)
+		}
+		accountWeights[i] = accountWeight
+		weights[i] = baseWeight
+		totals := totalsByPriority[priorities[i]]
+		totals.base += baseWeight
+		totals.weighted += baseWeight * float64(accountWeight)
+		totalsByPriority[priorities[i]] = totals
+	}
+
+	// 每个优先级层归一化到应用账号权重前的总权值，因此账号权重只改变层内份额，
+	// 不会让某个优先级层整体获得额外的选中概率。
+	for i := range weights {
+		totals := totalsByPriority[priorities[i]]
+		if totals.weighted > 0 {
+			weights[i] *= float64(accountWeights[i]) * totals.base / totals.weighted
+		}
+	}
+	return weights
 }
 
 func (s *defaultOpenAIAccountScheduler) buildOpenAIAccountLoadPlan(

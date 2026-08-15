@@ -2740,6 +2740,11 @@
           <p class="input-hint">{{ t('admin.accounts.priorityHint') }}</p>
         </div>
         <div>
+          <label class="input-label">{{ t('admin.accounts.weight') }}</label>
+          <input v-model.number="form.weight" type="number" min="1" max="10000" class="input" />
+          <p class="input-hint">{{ t('admin.accounts.weightHint') }}</p>
+        </div>
+        <div>
           <label class="input-label">{{ t('admin.accounts.billingRateMultiplier') }}</label>
           <input v-model.number="form.rate_multiplier" type="number" min="0" step="0.001" class="input" />
           <p class="input-hint">{{ t('admin.accounts.billingRateMultiplierHint') }}</p>
@@ -4214,6 +4219,7 @@ const form = reactive({
   concurrency: 10,
   load_factor: null as number | null,
   priority: 1,
+  weight: 1,
   rate_multiplier: 1,
   group_ids: [] as number[],
   expires_at: null as number | null
@@ -4774,6 +4780,7 @@ const resetForm = () => {
   form.concurrency = 10
   form.load_factor = null
   form.priority = 1
+  form.weight = 1
   form.rate_multiplier = 1
   form.group_ids = []
   form.expires_at = null
@@ -5441,6 +5448,7 @@ const createAccountAndFinish = async (
     concurrency: form.concurrency,
     load_factor: form.load_factor ?? undefined,
     priority: form.priority,
+    weight: form.weight,
     rate_multiplier: form.rate_multiplier,
     group_ids: form.group_ids,
     expires_at: form.expires_at,
@@ -5505,6 +5513,7 @@ const handleGrokValidateRT = async (refreshTokenInput: string) => {
           concurrency: form.concurrency,
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
+          weight: form.weight,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
           expires_at: form.expires_at,
@@ -5573,6 +5582,7 @@ const handleGrokImportSSO = async (ssoInput: string) => {
       concurrency: form.concurrency,
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
+      weight: form.weight,
       rate_multiplier: form.rate_multiplier,
       expires_at: form.expires_at,
       auto_pause_on_expired: autoPauseOnExpired.value
@@ -5671,6 +5681,7 @@ const handleOpenAIExchange = async (authCode: string) => {
         concurrency: form.concurrency,
         load_factor: form.load_factor ?? undefined,
         priority: form.priority,
+        weight: form.weight,
         rate_multiplier: form.rate_multiplier,
         group_ids: form.group_ids,
         expires_at: form.expires_at,
@@ -5776,6 +5787,7 @@ const handleOpenAIImportCodexSession = async (content: string) => {
       concurrency: form.concurrency,
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
+      weight: form.weight,
       rate_multiplier: form.rate_multiplier,
       group_ids: form.group_ids,
       expires_at: form.expires_at,
@@ -5854,6 +5866,7 @@ const handleOpenAIImportCodexPAT = async (accessToken: string) => {
       concurrency: form.concurrency,
       load_factor: form.load_factor ?? undefined,
       priority: form.priority,
+      weight: form.weight,
       rate_multiplier: form.rate_multiplier,
       group_ids: form.group_ids,
       expires_at: form.expires_at,
@@ -5952,6 +5965,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
             concurrency: form.concurrency,
             load_factor: form.load_factor ?? undefined,
             priority: form.priority,
+            weight: form.weight,
             rate_multiplier: form.rate_multiplier,
             group_ids: form.group_ids,
             expires_at: form.expires_at,
@@ -6051,6 +6065,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
           concurrency: form.concurrency,
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
+          weight: form.weight,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
           expires_at: form.expires_at,
@@ -6436,6 +6451,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           concurrency: form.concurrency,
           load_factor: form.load_factor ?? undefined,
           priority: form.priority,
+          weight: form.weight,
           rate_multiplier: form.rate_multiplier,
           group_ids: form.group_ids,
           expires_at: form.expires_at,

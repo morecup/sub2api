@@ -218,10 +218,15 @@ func (h *GrokOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		Name        string  `json:"name"`
 		Concurrency int     `json:"concurrency"`
 		Priority    int     `json:"priority"`
+		Weight      int     `json:"weight"`
 		GroupIDs    []int64 `json:"group_ids"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := validateAccountWeightInput(optionalCreateAccountWeight(req.Weight)); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 	tokenInfo, err := h.grokOAuthService.ExchangeCode(c.Request.Context(), &service.GrokExchangeCodeInput{
@@ -253,6 +258,7 @@ func (h *GrokOAuthHandler) CreateAccountFromOAuth(c *gin.Context) {
 		ProxyID:     req.ProxyID,
 		Concurrency: req.Concurrency,
 		Priority:    req.Priority,
+		Weight:      req.Weight,
 		GroupIDs:    req.GroupIDs,
 	})
 	if err != nil {
@@ -275,6 +281,7 @@ type GrokSSOToOAuthRequest struct {
 	Concurrency        int            `json:"concurrency"`
 	LoadFactor         *int           `json:"load_factor"`
 	Priority           int            `json:"priority"`
+	Weight             int            `json:"weight"`
 	RateMultiplier     *float64       `json:"rate_multiplier"`
 	ExpiresAt          *int64         `json:"expires_at"`
 	AutoPauseOnExpired *bool          `json:"auto_pause_on_expired"`
@@ -307,6 +314,10 @@ func (h *GrokOAuthHandler) CreateAccountsFromSSO(c *gin.Context) {
 	var req GrokSSOToOAuthRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := validateAccountWeightInput(optionalCreateAccountWeight(req.Weight)); err != nil {
+		response.BadRequest(c, err.Error())
 		return
 	}
 	tokens := normalizeSSOImportTokens(req.SSOTokens, req.SSOToken)
@@ -387,6 +398,7 @@ func (h *GrokOAuthHandler) createAccountFromSSOToken(ctx context.Context, req Gr
 		Concurrency:        req.Concurrency,
 		LoadFactor:         req.LoadFactor,
 		Priority:           req.Priority,
+		Weight:             req.Weight,
 		RateMultiplier:     req.RateMultiplier,
 		GroupIDs:           append([]int64(nil), req.GroupIDs...),
 		ExpiresAt:          expiresAt,

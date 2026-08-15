@@ -128,6 +128,7 @@ type CreateAccountRequest struct {
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             int            `json:"concurrency"`
 	Priority                int            `json:"priority"`
+	Weight                  int            `json:"weight"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	GroupIDs                []int64        `json:"group_ids"`
@@ -150,6 +151,7 @@ type UpdateAccountRequest struct {
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
+	Weight                  *int           `json:"weight"`
 	RateMultiplier          *float64       `json:"rate_multiplier"`
 	LoadFactor              *int           `json:"load_factor"`
 	Status                  string         `json:"status" binding:"omitempty,oneof=active inactive error"`
@@ -169,6 +171,7 @@ type BulkUpdateAccountsRequest struct {
 	ProxyID                 *int64                    `json:"proxy_id"`
 	Concurrency             *int                      `json:"concurrency"`
 	Priority                *int                      `json:"priority"`
+	Weight                  *int                      `json:"weight"`
 	RateMultiplier          *float64                  `json:"rate_multiplier"`
 	LoadFactor              *int                      `json:"load_factor"`
 	Status                  string                    `json:"status" binding:"omitempty,oneof=active inactive error"`
@@ -178,6 +181,20 @@ type BulkUpdateAccountsRequest struct {
 	Extra                   map[string]any            `json:"extra"`
 	ProbeEnabled            *bool                     `json:"upstream_billing_probe_enabled"`
 	ConfirmMixedChannelRisk *bool                     `json:"confirm_mixed_channel_risk"` // 用户确认混合渠道风险
+}
+
+func validateAccountWeightInput(weight *int) error {
+	if weight != nil && (*weight <= 0 || *weight > service.MaxAccountSchedulingWeight) {
+		return fmt.Errorf("weight must be between 1 and %d", service.MaxAccountSchedulingWeight)
+	}
+	return nil
+}
+
+func optionalCreateAccountWeight(weight int) *int {
+	if weight == 0 {
+		return nil
+	}
+	return &weight
 }
 
 type BulkUpdateAccountFilters struct {
@@ -844,6 +861,10 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if err := validateAccountWeightInput(optionalCreateAccountWeight(req.Weight)); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 
@@ -865,6 +886,7 @@ func (h *AccountHandler) Create(c *gin.Context) {
 			ProxyID:               req.ProxyID,
 			Concurrency:           req.Concurrency,
 			Priority:              req.Priority,
+			Weight:                req.Weight,
 			RateMultiplier:        req.RateMultiplier,
 			LoadFactor:            req.LoadFactor,
 			GroupIDs:              req.GroupIDs,
@@ -979,6 +1001,10 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if err := validateAccountWeightInput(req.Weight); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 
@@ -994,6 +1020,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		ProxyID:               req.ProxyID,
 		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
 		Priority:              req.Priority,    // 指针类型，nil 表示未提供
+		Weight:                req.Weight,
 		RateMultiplier:        req.RateMultiplier,
 		LoadFactor:            req.LoadFactor,
 		Status:                req.Status,
@@ -1743,6 +1770,11 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 				})
 				continue
 			}
+			if err := validateAccountWeightInput(optionalCreateAccountWeight(item.Weight)); err != nil {
+				failed++
+				results = append(results, gin.H{"name": item.Name, "success": false, "error": err.Error()})
+				continue
+			}
 
 			// base_rpm 输入校验：负值归零，超过 10000 截断
 			sanitizeExtraBaseRPM(item.Extra)
@@ -1759,6 +1791,7 @@ func (h *AccountHandler) BatchCreate(c *gin.Context) {
 				ProxyID:               item.ProxyID,
 				Concurrency:           item.Concurrency,
 				Priority:              item.Priority,
+				Weight:                item.Weight,
 				RateMultiplier:        item.RateMultiplier,
 				GroupIDs:              item.GroupIDs,
 				ExpiresAt:             item.ExpiresAt,
@@ -1936,6 +1969,10 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if err := validateAccountWeightInput(req.Weight); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
 	if len(req.AccountIDs) == 0 && req.Filters == nil {
 		response.BadRequest(c, "account_ids or filters is required")
 		return
@@ -1950,6 +1987,7 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		req.ProxyID != nil ||
 		req.Concurrency != nil ||
 		req.Priority != nil ||
+		req.Weight != nil ||
 		req.RateMultiplier != nil ||
 		req.LoadFactor != nil ||
 		req.Status != "" ||
@@ -1971,6 +2009,7 @@ func (h *AccountHandler) BulkUpdate(c *gin.Context) {
 		ProxyID:               req.ProxyID,
 		Concurrency:           req.Concurrency,
 		Priority:              req.Priority,
+		Weight:                req.Weight,
 		RateMultiplier:        req.RateMultiplier,
 		LoadFactor:            req.LoadFactor,
 		Status:                req.Status,

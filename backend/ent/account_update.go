@@ -248,6 +248,27 @@ func (_u *AccountUpdate) AddPriority(v int) *AccountUpdate {
 	return _u
 }
 
+// SetWeight sets the "weight" field.
+func (_u *AccountUpdate) SetWeight(v int) *AccountUpdate {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *AccountUpdate) SetNillableWeight(v *int) *AccountUpdate {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *AccountUpdate) AddWeight(v int) *AccountUpdate {
+	_u.mutation.AddWeight(v)
+	return _u
+}
+
 // SetRateMultiplier sets the "rate_multiplier" field.
 func (_u *AccountUpdate) SetRateMultiplier(v float64) *AccountUpdate {
 	_u.mutation.ResetRateMultiplier()
@@ -866,6 +887,11 @@ func (_u *AccountUpdate) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := account.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "Account.weight": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -955,6 +981,12 @@ func (_u *AccountUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedPriority(); ok {
 		_spec.AddField(account.FieldPriority, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(account.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(account.FieldWeight, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(account.FieldRateMultiplier, field.TypeFloat64, value)
@@ -1560,6 +1592,27 @@ func (_u *AccountUpdateOne) SetNillablePriority(v *int) *AccountUpdateOne {
 // AddPriority adds value to the "priority" field.
 func (_u *AccountUpdateOne) AddPriority(v int) *AccountUpdateOne {
 	_u.mutation.AddPriority(v)
+	return _u
+}
+
+// SetWeight sets the "weight" field.
+func (_u *AccountUpdateOne) SetWeight(v int) *AccountUpdateOne {
+	_u.mutation.ResetWeight()
+	_u.mutation.SetWeight(v)
+	return _u
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (_u *AccountUpdateOne) SetNillableWeight(v *int) *AccountUpdateOne {
+	if v != nil {
+		_u.SetWeight(*v)
+	}
+	return _u
+}
+
+// AddWeight adds value to the "weight" field.
+func (_u *AccountUpdateOne) AddWeight(v int) *AccountUpdateOne {
+	_u.mutation.AddWeight(v)
 	return _u
 }
 
@@ -2194,6 +2247,11 @@ func (_u *AccountUpdateOne) check() error {
 			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "Account.type": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Weight(); ok {
+		if err := account.WeightValidator(v); err != nil {
+			return &ValidationError{Name: "weight", err: fmt.Errorf(`ent: validator failed for field "Account.weight": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.Status(); ok {
 		if err := account.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Account.status": %w`, err)}
@@ -2300,6 +2358,12 @@ func (_u *AccountUpdateOne) sqlSave(ctx context.Context) (_node *Account, err er
 	}
 	if value, ok := _u.mutation.AddedPriority(); ok {
 		_spec.AddField(account.FieldPriority, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.Weight(); ok {
+		_spec.SetField(account.FieldWeight, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedWeight(); ok {
+		_spec.AddField(account.FieldWeight, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.RateMultiplier(); ok {
 		_spec.SetField(account.FieldRateMultiplier, field.TypeFloat64, value)

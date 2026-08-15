@@ -3251,6 +3251,30 @@ func TestBuildOpenAIWeightedSelectionOrder_DeterministicBySessionSeed(t *testing
 	}
 }
 
+func TestBuildOpenAISelectionWeights_AccountWeightOnlyChangesSamePriorityShare(t *testing.T) {
+	candidates := []openAIAccountCandidateScore{
+		{account: &Account{ID: 101, Priority: 1, Weight: 1}, score: 2},
+		{account: &Account{ID: 102, Priority: 1, Weight: 3}, score: 2},
+		{account: &Account{ID: 201, Priority: 2, Weight: MaxAccountSchedulingWeight}, score: 2},
+	}
+
+	weights := buildOpenAISelectionWeights(candidates)
+	require.Len(t, weights, len(candidates))
+	require.InDelta(t, 3, weights[1]/weights[0], 1e-9, "同优先级内应按账号权重分配份额")
+	require.InDelta(t, 2, weights[0]+weights[1], 1e-9, "应用账号权重前后应保持优先级层总权值")
+	require.InDelta(t, 1, weights[2], 1e-9, "单账号优先级层不应因账号权重放大")
+}
+
+func TestBuildOpenAISelectionWeights_LegacyWeightDefaultsToOne(t *testing.T) {
+	candidates := []openAIAccountCandidateScore{
+		{account: &Account{ID: 101, Priority: 1, Weight: 0}, score: 3},
+		{account: &Account{ID: 102, Priority: 1, Weight: 1}, score: 2},
+	}
+
+	weights := buildOpenAISelectionWeights(candidates)
+	require.Equal(t, []float64{2, 1}, weights)
+}
+
 func TestOpenAIGatewayService_SelectAccountWithScheduler_LoadBalanceDistributesAcrossSessions(t *testing.T) {
 	ctx := context.Background()
 	groupID := int64(15)

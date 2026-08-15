@@ -48,6 +48,105 @@ func TestFilterByMinPriority(t *testing.T) {
 	})
 }
 
+func TestWeightedAccountWithLoadIndex(t *testing.T) {
+	accounts := []accountWithLoad{
+		{account: &Account{ID: 1, Weight: 1}},
+		{account: &Account{ID: 2, Weight: 3}},
+	}
+	candidates := []int{0, 1}
+
+	require.Equal(t, 0, weightedAccountWithLoadIndex(accounts, candidates, func(int) int { return 0 }))
+	require.Equal(t, 1, weightedAccountWithLoadIndex(accounts, candidates, func(int) int { return 1 }))
+	require.Equal(t, 1, weightedAccountWithLoadIndex(accounts, candidates, func(int) int { return 3 }))
+}
+
+func TestWeightedAccountWithLoadIndexLegacyWeightDefaultsToOne(t *testing.T) {
+	accounts := []accountWithLoad{
+		{account: &Account{ID: 1, Weight: 0}},
+		{account: &Account{ID: 2, Weight: 1}},
+	}
+
+	got := weightedAccountWithLoadIndex(accounts, []int{0, 1}, func(total int) int {
+		require.Equal(t, 2, total)
+		return 0
+	})
+	require.Equal(t, 0, got)
+}
+
+func TestSelectWeightedMinPriorityAccountWhenConfigured(t *testing.T) {
+	accounts := []*Account{
+		{ID: 1, Priority: 1, Weight: 1},
+		{ID: 2, Priority: 1, Weight: 3},
+		{ID: 3, Priority: 2, Weight: MaxAccountSchedulingWeight},
+	}
+
+	selected, ok := selectWeightedMinPriorityAccountWhenConfigured(accounts, func(total int) int {
+		require.Equal(t, 4, total)
+		return 1
+	})
+	require.True(t, ok)
+	require.Equal(t, int64(2), selected.ID)
+}
+
+func TestSelectWeightedMinPriorityAccountWhenConfiguredEqualWeightsKeepsLegacyPath(t *testing.T) {
+	accounts := []*Account{
+		{ID: 1, Priority: 1, Weight: 0},
+		{ID: 2, Priority: 1, Weight: 1},
+	}
+
+	selected, ok := selectWeightedMinPriorityAccountWhenConfigured(accounts, func(int) int {
+		t.Fatal("equal weights must not invoke weighted selection")
+		return 0
+	})
+	require.False(t, ok)
+	require.Nil(t, selected)
+}
+
+func TestSortAccountsByPriorityAndLastUsedConfiguredWeightOverridesLRUWithinPriority(t *testing.T) {
+	now := time.Now()
+	earlier := now.Add(-time.Hour)
+	accounts := []*Account{
+		{ID: 1, Priority: 1, Weight: 1, LastUsedAt: &earlier},
+		{ID: 2, Priority: 1, Weight: 3, LastUsedAt: &now},
+		{ID: 3, Priority: 2, Weight: MaxAccountSchedulingWeight, LastUsedAt: nil},
+	}
+
+	seenWeightedFirst := false
+	for i := 0; i < 100; i++ {
+		copyOfAccounts := append([]*Account(nil), accounts...)
+		sortAccountsByPriorityAndLastUsed(copyOfAccounts, false)
+		require.Equal(t, 1, copyOfAccounts[0].Priority)
+		require.Equal(t, 1, copyOfAccounts[1].Priority)
+		require.Equal(t, int64(3), copyOfAccounts[2].ID)
+		if copyOfAccounts[0].ID == 2 {
+			seenWeightedFirst = true
+		}
+	}
+	require.True(t, seenWeightedFirst, "configured account weight should be able to override LRU within the priority layer")
+}
+
+func TestShuffleWithinSortGroupsConfiguredWeightOverridesLoadWithinPriority(t *testing.T) {
+	now := time.Now()
+	accounts := []accountWithLoad{
+		{account: &Account{ID: 1, Priority: 1, Weight: 1, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 0}},
+		{account: &Account{ID: 2, Priority: 1, Weight: 3, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 50}},
+		{account: &Account{ID: 3, Priority: 2, Weight: MaxAccountSchedulingWeight, LastUsedAt: &now}, loadInfo: &AccountLoadInfo{LoadRate: 0}},
+	}
+
+	seenWeightedFirst := false
+	for i := 0; i < 100; i++ {
+		copyOfAccounts := append([]accountWithLoad(nil), accounts...)
+		shuffleWithinSortGroups(copyOfAccounts)
+		require.Equal(t, 1, copyOfAccounts[0].account.Priority)
+		require.Equal(t, 1, copyOfAccounts[1].account.Priority)
+		require.Equal(t, int64(3), copyOfAccounts[2].account.ID)
+		if copyOfAccounts[0].account.ID == 2 {
+			seenWeightedFirst = true
+		}
+	}
+	require.True(t, seenWeightedFirst, "configured account weight should be able to override load within the priority layer")
+}
+
 func TestFilterByMinLoadRate(t *testing.T) {
 	t.Run("empty slice", func(t *testing.T) {
 		result := filterByMinLoadRate(nil)

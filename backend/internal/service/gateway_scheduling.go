@@ -697,7 +697,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			}
 		}
 
-		// 分层过滤选择：优先级 →（可选）最早重置 → 负载率 → LRU
+		// 分层过滤选择：优先级 →（可选）最早重置 → 负载率 → LRU → 权重
 		for len(available) > 0 {
 			// 1. 取优先级最小的集合
 			candidates := filterByMinPriority(available)
@@ -707,7 +707,7 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 			}
 			// 3. 取负载率最低的集合
 			candidates = filterByMinLoadRate(candidates)
-			// 4. LRU 选择最久未用的账号
+			// 4. 在最久未使用的候选中按账号权重选择
 			selected := selectByLRU(candidates, preferOAuth)
 			if selected == nil {
 				break
@@ -1539,8 +1539,8 @@ func filterBySoonestReset(accounts []accountWithLoad) []accountWithLoad {
 	return result
 }
 
-// selectByLRU 从集合中选择最久未用的账号
-// 如果有多个账号具有相同的最小 LastUsedAt，则随机选择一个
+// selectByLRU 从集合中选择最久未用的账号。
+// 如果有多个账号具有相同的最小 LastUsedAt，则按账号权重随机选择。
 func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad {
 	if len(accounts) == 0 {
 		return nil
@@ -1549,10 +1549,21 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 		return &accounts[0]
 	}
 
+	// 显式配置了不同权重时，权重决定同层账号的流量比例。
+	// 所有权重相同时继续使用原有 LRU，确保默认值 1 完全兼容旧行为。
+	eligibleIdxs := make([]int, 0, len(accounts))
+	for i := range accounts {
+		eligibleIdxs = append(eligibleIdxs, i)
+	}
+	if selectedIdx, ok := selectWeightedAccountWithLoadWhenConfigured(accounts, eligibleIdxs, mathrand.Intn); ok {
+		return &accounts[selectedIdx]
+	}
+
 	// 1. 找到最小的 LastUsedAt（nil 被视为最小）
 	var minTime *time.Time
 	hasNil := false
-	for _, acc := range accounts {
+	for _, idx := range eligibleIdxs {
+		acc := accounts[idx]
 		if acc.account.LastUsedAt == nil {
 			hasNil = true
 			break
@@ -1564,7 +1575,8 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 
 	// 2. 收集所有具有最小 LastUsedAt 的账号索引
 	var candidateIdxs []int
-	for i, acc := range accounts {
+	for _, i := range eligibleIdxs {
+		acc := accounts[i]
 		if hasNil {
 			if acc.account.LastUsedAt == nil {
 				candidateIdxs = append(candidateIdxs, i)
@@ -1594,9 +1606,90 @@ func selectByLRU(accounts []accountWithLoad, preferOAuth bool) *accountWithLoad 
 		}
 	}
 
-	// 5. 随机选择一个
+	// 5. 默认权重下保持原有随机打散行为
 	selectedIdx := candidateIdxs[mathrand.Intn(len(candidateIdxs))]
 	return &accounts[selectedIdx]
+}
+
+func selectWeightedAccountWithLoadWhenConfigured(accounts []accountWithLoad, candidateIdxs []int, intn func(int) int) (int, bool) {
+	if len(candidateIdxs) <= 1 {
+		return 0, false
+	}
+	firstWeight := accounts[candidateIdxs[0]].account.SchedulingWeight()
+	for _, idx := range candidateIdxs[1:] {
+		if accounts[idx].account.SchedulingWeight() != firstWeight {
+			return weightedAccountWithLoadIndex(accounts, candidateIdxs, intn), true
+		}
+	}
+	return 0, false
+}
+
+func weightedAccountWithLoadIndex(accounts []accountWithLoad, candidateIdxs []int, intn func(int) int) int {
+	if len(candidateIdxs) == 0 {
+		return 0
+	}
+	total := 0
+	for _, idx := range candidateIdxs {
+		total += accounts[idx].account.SchedulingWeight()
+	}
+	if total <= 0 {
+		return candidateIdxs[0]
+	}
+	draw := intn(total)
+	for _, idx := range candidateIdxs {
+		draw -= accounts[idx].account.SchedulingWeight()
+		if draw < 0 {
+			return idx
+		}
+	}
+	return candidateIdxs[len(candidateIdxs)-1]
+}
+
+func selectWeightedAccountWhenConfigured(accounts []*Account, intn func(int) int) (*Account, bool) {
+	if len(accounts) <= 1 {
+		return nil, false
+	}
+	firstWeight := accounts[0].SchedulingWeight()
+	configured := false
+	total := firstWeight
+	for _, account := range accounts[1:] {
+		weight := account.SchedulingWeight()
+		total += weight
+		if weight != firstWeight {
+			configured = true
+		}
+	}
+	if !configured || total <= 0 {
+		return nil, false
+	}
+
+	draw := intn(total)
+	for _, account := range accounts {
+		draw -= account.SchedulingWeight()
+		if draw < 0 {
+			return account, true
+		}
+	}
+	return accounts[len(accounts)-1], true
+}
+
+func selectWeightedMinPriorityAccountWhenConfigured(accounts []*Account, intn func(int) int) (*Account, bool) {
+	if len(accounts) <= 1 {
+		return nil, false
+	}
+	minPriority := accounts[0].Priority
+	for _, account := range accounts[1:] {
+		if account.Priority < minPriority {
+			minPriority = account.Priority
+		}
+	}
+	candidates := make([]*Account, 0, len(accounts))
+	for _, account := range accounts {
+		if account.Priority == minPriority {
+			candidates = append(candidates, account)
+		}
+	}
+	return selectWeightedAccountWhenConfigured(candidates, intn)
 }
 
 func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
@@ -1620,26 +1713,121 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 		}
 	})
 	shuffleWithinPriorityAndLastUsed(accounts, preferOAuth)
+	weightOrderAccountPriorityGroups(accounts)
 }
 
-// shuffleWithinSortGroups 对排序后的 accountWithLoad 切片，按 (Priority, LoadRate, LastUsedAt) 分组后组内随机打乱。
-// 防止并发请求读取同一快照时，确定性排序导致所有请求命中相同账号。
+// shuffleWithinSortGroups 对排序后的 accountWithLoad 切片应用同优先级账号权重。
+// 默认权重相同时仍按 (Priority, LoadRate, LastUsedAt) 分组随机打乱，保持原有调度行为。
 func shuffleWithinSortGroups(accounts []accountWithLoad) {
 	if len(accounts) <= 1 {
 		return
 	}
-	i := 0
-	for i < len(accounts) {
-		j := i + 1
-		for j < len(accounts) && sameAccountWithLoadGroup(accounts[i], accounts[j]) {
-			j++
+	weightOrderAccountWithLoadGroups(accounts)
+}
+
+func weightOrderAccountWithLoadGroups(accounts []accountWithLoad) {
+	for start := 0; start < len(accounts); {
+		end := start + 1
+		for end < len(accounts) && accounts[end].account.Priority == accounts[start].account.Priority {
+			end++
 		}
-		if j-i > 1 {
-			mathrand.Shuffle(j-i, func(a, b int) {
-				accounts[i+a], accounts[i+b] = accounts[i+b], accounts[i+a]
-			})
+
+		configured := false
+		firstWeight := accounts[start].account.SchedulingWeight()
+		for i := start + 1; i < end; i++ {
+			if accounts[i].account.SchedulingWeight() != firstWeight {
+				configured = true
+				break
+			}
 		}
-		i = j
+		if !configured {
+			for groupStart := start; groupStart < end; {
+				groupEnd := groupStart + 1
+				for groupEnd < end && sameAccountWithLoadGroup(accounts[groupStart], accounts[groupEnd]) {
+					groupEnd++
+				}
+				if groupEnd-groupStart > 1 {
+					mathrand.Shuffle(groupEnd-groupStart, func(i, j int) {
+						accounts[groupStart+i], accounts[groupStart+j] = accounts[groupStart+j], accounts[groupStart+i]
+					})
+				}
+				groupStart = groupEnd
+			}
+			start = end
+			continue
+		}
+
+		for i := start; i < end; i++ {
+			total := 0
+			for j := i; j < end; j++ {
+				total += accounts[j].account.SchedulingWeight()
+			}
+			draw := mathrand.Intn(total)
+			selected := i
+			for j := i; j < end; j++ {
+				draw -= accounts[j].account.SchedulingWeight()
+				if draw < 0 {
+					selected = j
+					break
+				}
+			}
+			accounts[i], accounts[selected] = accounts[selected], accounts[i]
+		}
+		start = end
+	}
+}
+
+func weightOrderAccountGroups(accounts []*Account, sameGroup func(a, b *Account) bool, shuffleEqualWeights bool) {
+	for start := 0; start < len(accounts); {
+		end := start + 1
+		for end < len(accounts) && sameGroup(accounts[start], accounts[end]) {
+			end++
+		}
+		configured := false
+		firstWeight := accounts[start].SchedulingWeight()
+		for i := start + 1; i < end; i++ {
+			if accounts[i].SchedulingWeight() != firstWeight {
+				configured = true
+				break
+			}
+		}
+		if !configured {
+			if shuffleEqualWeights && end-start > 1 {
+				mathrand.Shuffle(end-start, func(i, j int) {
+					accounts[start+i], accounts[start+j] = accounts[start+j], accounts[start+i]
+				})
+			}
+			start = end
+			continue
+		}
+		for i := start; i < end; i++ {
+			total := 0
+			for j := i; j < end; j++ {
+				total += accounts[j].SchedulingWeight()
+			}
+			draw := mathrand.Intn(total)
+			selected := i
+			for j := i; j < end; j++ {
+				draw -= accounts[j].SchedulingWeight()
+				if draw < 0 {
+					selected = j
+					break
+				}
+			}
+			accounts[i], accounts[selected] = accounts[selected], accounts[i]
+		}
+		start = end
+	}
+}
+
+func weightOrderAccountPriorityGroups(accounts []*Account) {
+	for start := 0; start < len(accounts); {
+		end := start + 1
+		for end < len(accounts) && accounts[end].Priority == accounts[start].Priority {
+			end++
+		}
+		weightOrderAccountGroups(accounts[start:end], func(_, _ *Account) bool { return true }, false)
+		start = end
 	}
 }
 
@@ -1751,22 +1939,9 @@ func shuffleWithinPriority(accounts []*Account) {
 	if len(accounts) <= 1 {
 		return
 	}
-	r := mathrand.New(mathrand.NewSource(time.Now().UnixNano()))
-	start := 0
-	for start < len(accounts) {
-		priority := accounts[start].Priority
-		end := start + 1
-		for end < len(accounts) && accounts[end].Priority == priority {
-			end++
-		}
-		// 对 [start, end) 范围内的账户随机打乱
-		if end-start > 1 {
-			r.Shuffle(end-start, func(i, j int) {
-				accounts[start+i], accounts[start+j] = accounts[start+j], accounts[start+i]
-			})
-		}
-		start = end
-	}
+	weightOrderAccountGroups(accounts, func(a, b *Account) bool {
+		return a.Priority == b.Priority
+	}, true)
 }
 
 // selectAccountForModelWithPlatform 选择单平台账户（完全隔离）
@@ -1838,6 +2013,7 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 		}
 
 		var selected *Account
+		eligible := make([]*Account, 0, len(accounts))
 		for i := range accounts {
 			acc := &accounts[i]
 			if _, ok := routingSet[acc.ID]; !ok {
@@ -1872,6 +2048,7 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 			if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 				continue
 			}
+			eligible = append(eligible, acc)
 			if selected == nil {
 				selected = acc
 				continue
@@ -1894,6 +2071,9 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 					}
 				}
 			}
+		}
+		if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(eligible, mathrand.Intn); ok {
+			selected = weighted
 		}
 
 		if selected != nil {
@@ -1952,6 +2132,7 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	// 因为粘性会话优先保持连接一致性，且 upstream 计费基准极少使用。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
 	var selected *Account
+	eligible := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -1986,6 +2167,7 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
+		eligible = append(eligible, acc)
 		if selected == nil {
 			selected = acc
 			continue
@@ -2008,6 +2190,9 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 				}
 			}
 		}
+	}
+	if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(eligible, mathrand.Intn); ok {
+		selected = weighted
 	}
 
 	if selected == nil {
@@ -2094,6 +2279,7 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 		}
 
 		var selected *Account
+		eligible := make([]*Account, 0, len(accounts))
 		for i := range accounts {
 			acc := &accounts[i]
 			if _, ok := routingSet[acc.ID]; !ok {
@@ -2132,6 +2318,7 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 			if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 				continue
 			}
+			eligible = append(eligible, acc)
 			if selected == nil {
 				selected = acc
 				continue
@@ -2154,6 +2341,9 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 					}
 				}
 			}
+		}
+		if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(eligible, mathrand.Intn); ok {
+			selected = weighted
 		}
 
 		if selected != nil {
@@ -2209,6 +2399,7 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	// needsUpstreamCheck 仅在主选择循环中使用；粘性会话命中时跳过此检查。
 	needsUpstreamCheck := s.needsUpstreamChannelRestrictionCheck(ctx, groupID)
 	var selected *Account
+	eligible := make([]*Account, 0, len(accounts))
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
@@ -2247,6 +2438,7 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 		if !s.isAccountSchedulableForRPM(ctx, acc, false) {
 			continue
 		}
+		eligible = append(eligible, acc)
 		if selected == nil {
 			selected = acc
 			continue
@@ -2269,6 +2461,9 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 				}
 			}
 		}
+	}
+	if weighted, ok := selectWeightedMinPriorityAccountWhenConfigured(eligible, mathrand.Intn); ok {
+		selected = weighted
 	}
 
 	if selected == nil {

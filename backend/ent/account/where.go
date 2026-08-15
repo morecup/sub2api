@@ -115,6 +115,11 @@ func Priority(v int) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldPriority, v))
 }
 
+// Weight applies equality check predicate on the "weight" field. It's identical to WeightEQ.
+func Weight(v int) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldWeight, v))
+}
+
 // RateMultiplier applies equality check predicate on the "rate_multiplier" field. It's identical to RateMultiplierEQ.
 func RateMultiplier(v float64) predicate.Account {
 	return predicate.Account(sql.FieldEQ(FieldRateMultiplier, v))
@@ -808,6 +813,46 @@ func PriorityLT(v int) predicate.Account {
 // PriorityLTE applies the LTE predicate on the "priority" field.
 func PriorityLTE(v int) predicate.Account {
 	return predicate.Account(sql.FieldLTE(FieldPriority, v))
+}
+
+// WeightEQ applies the EQ predicate on the "weight" field.
+func WeightEQ(v int) predicate.Account {
+	return predicate.Account(sql.FieldEQ(FieldWeight, v))
+}
+
+// WeightNEQ applies the NEQ predicate on the "weight" field.
+func WeightNEQ(v int) predicate.Account {
+	return predicate.Account(sql.FieldNEQ(FieldWeight, v))
+}
+
+// WeightIn applies the In predicate on the "weight" field.
+func WeightIn(vs ...int) predicate.Account {
+	return predicate.Account(sql.FieldIn(FieldWeight, vs...))
+}
+
+// WeightNotIn applies the NotIn predicate on the "weight" field.
+func WeightNotIn(vs ...int) predicate.Account {
+	return predicate.Account(sql.FieldNotIn(FieldWeight, vs...))
+}
+
+// WeightGT applies the GT predicate on the "weight" field.
+func WeightGT(v int) predicate.Account {
+	return predicate.Account(sql.FieldGT(FieldWeight, v))
+}
+
+// WeightGTE applies the GTE predicate on the "weight" field.
+func WeightGTE(v int) predicate.Account {
+	return predicate.Account(sql.FieldGTE(FieldWeight, v))
+}
+
+// WeightLT applies the LT predicate on the "weight" field.
+func WeightLT(v int) predicate.Account {
+	return predicate.Account(sql.FieldLT(FieldWeight, v))
+}
+
+// WeightLTE applies the LTE predicate on the "weight" field.
+func WeightLTE(v int) predicate.Account {
+	return predicate.Account(sql.FieldLTE(FieldWeight, v))
 }
 
 // RateMultiplierEQ applies the EQ predicate on the "rate_multiplier" field.

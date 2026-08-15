@@ -2302,6 +2302,8 @@ type AccountMutation struct {
 	addload_factor              *int
 	priority                    *int
 	addpriority                 *int
+	weight                      *int
+	addweight                   *int
 	rate_multiplier             *float64
 	addrate_multiplier          *float64
 	status                      *string
@@ -3092,6 +3094,62 @@ func (m *AccountMutation) AddedPriority() (r int, exists bool) {
 func (m *AccountMutation) ResetPriority() {
 	m.priority = nil
 	m.addpriority = nil
+}
+
+// SetWeight sets the "weight" field.
+func (m *AccountMutation) SetWeight(i int) {
+	m.weight = &i
+	m.addweight = nil
+}
+
+// Weight returns the value of the "weight" field in the mutation.
+func (m *AccountMutation) Weight() (r int, exists bool) {
+	v := m.weight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWeight returns the old "weight" field's value of the Account entity.
+// If the Account object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AccountMutation) OldWeight(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWeight is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWeight requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWeight: %w", err)
+	}
+	return oldValue.Weight, nil
+}
+
+// AddWeight adds i to the "weight" field.
+func (m *AccountMutation) AddWeight(i int) {
+	if m.addweight != nil {
+		*m.addweight += i
+	} else {
+		m.addweight = &i
+	}
+}
+
+// AddedWeight returns the value that was added to the "weight" field in this mutation.
+func (m *AccountMutation) AddedWeight() (r int, exists bool) {
+	v := m.addweight
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetWeight resets all changes to the "weight" field.
+func (m *AccountMutation) ResetWeight() {
+	m.weight = nil
+	m.addweight = nil
 }
 
 // SetRateMultiplier sets the "rate_multiplier" field.
@@ -4339,7 +4397,7 @@ func (m *AccountMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *AccountMutation) Fields() []string {
-	fields := make([]string, 0, 33)
+	fields := make([]string, 0, 34)
 	if m.created_at != nil {
 		fields = append(fields, account.FieldCreatedAt)
 	}
@@ -4381,6 +4439,9 @@ func (m *AccountMutation) Fields() []string {
 	}
 	if m.priority != nil {
 		fields = append(fields, account.FieldPriority)
+	}
+	if m.weight != nil {
+		fields = append(fields, account.FieldWeight)
 	}
 	if m.rate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
@@ -4475,6 +4536,8 @@ func (m *AccountMutation) Field(name string) (ent.Value, bool) {
 		return m.LoadFactor()
 	case account.FieldPriority:
 		return m.Priority()
+	case account.FieldWeight:
+		return m.Weight()
 	case account.FieldRateMultiplier:
 		return m.RateMultiplier()
 	case account.FieldStatus:
@@ -4550,6 +4613,8 @@ func (m *AccountMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldLoadFactor(ctx)
 	case account.FieldPriority:
 		return m.OldPriority(ctx)
+	case account.FieldWeight:
+		return m.OldWeight(ctx)
 	case account.FieldRateMultiplier:
 		return m.OldRateMultiplier(ctx)
 	case account.FieldStatus:
@@ -4694,6 +4759,13 @@ func (m *AccountMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetPriority(v)
+		return nil
+	case account.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWeight(v)
 		return nil
 	case account.FieldRateMultiplier:
 		v, ok := value.(float64)
@@ -4848,6 +4920,9 @@ func (m *AccountMutation) AddedFields() []string {
 	if m.addpriority != nil {
 		fields = append(fields, account.FieldPriority)
 	}
+	if m.addweight != nil {
+		fields = append(fields, account.FieldWeight)
+	}
 	if m.addrate_multiplier != nil {
 		fields = append(fields, account.FieldRateMultiplier)
 	}
@@ -4867,6 +4942,8 @@ func (m *AccountMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedLoadFactor()
 	case account.FieldPriority:
 		return m.AddedPriority()
+	case account.FieldWeight:
+		return m.AddedWeight()
 	case account.FieldRateMultiplier:
 		return m.AddedRateMultiplier()
 	}
@@ -4905,6 +4982,13 @@ func (m *AccountMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddPriority(v)
+		return nil
+	case account.FieldWeight:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddWeight(v)
 		return nil
 	case account.FieldRateMultiplier:
 		v, ok := value.(float64)
@@ -5092,6 +5176,9 @@ func (m *AccountMutation) ResetField(name string) error {
 		return nil
 	case account.FieldPriority:
 		m.ResetPriority()
+		return nil
+	case account.FieldWeight:
+		m.ResetWeight()
 		return nil
 	case account.FieldRateMultiplier:
 		m.ResetRateMultiplier()

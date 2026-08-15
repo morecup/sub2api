@@ -1075,6 +1075,7 @@ export interface Account {
   } | null
   scheduler_scores?: AccountSchedulerGroupScore[] | null
   priority: number
+  weight: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   status: 'active' | 'inactive' | 'error'
   error_message: string | null
@@ -1345,6 +1346,7 @@ export interface CreateAccountRequest {
   concurrency?: number
   load_factor?: number | null
   priority?: number
+  weight?: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   group_ids?: number[]
   expires_at?: number | null
@@ -1365,6 +1367,7 @@ export interface UpdateAccountRequest {
   concurrency?: number
   load_factor?: number | null
   priority?: number
+  weight?: number
   rate_multiplier?: number // Account billing multiplier (>=0, 0 means free)
   schedulable?: boolean
   status?: 'active' | 'inactive' | 'error'
@@ -1455,6 +1458,7 @@ export interface AdminDataAccount {
   proxy_key?: string | null
   concurrency: number
   priority: number
+  weight?: number
   rate_multiplier?: number | null
   expires_at?: number | null
   auto_pause_on_expired?: boolean
@@ -1485,6 +1489,7 @@ export interface CodexSessionImportRequest {
   proxy_id?: number | null
   concurrency?: number
   priority?: number
+  weight?: number
   rate_multiplier?: number
   load_factor?: number | null
   expires_at?: number | null
@@ -1504,6 +1509,7 @@ export interface OpenAICodexPATCreateRequest {
   proxy_id?: number | null
   concurrency?: number
   priority?: number
+  weight?: number
   rate_multiplier?: number
   load_factor?: number | null
   expires_at?: number | null
