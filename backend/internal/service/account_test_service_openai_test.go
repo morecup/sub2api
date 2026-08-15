@@ -51,17 +51,6 @@ func newJSONResponse(status int, body string) *http.Response {
 	}
 }
 
-func codexToolFrameAccountTestExtra(now time.Time) map[string]any {
-	return map[string]any{
-		openAICodexToolFrameOn5hExhaustedKey: true,
-		"codex_usage_updated_at":             now.Format(time.RFC3339),
-		"codex_5h_used_percent":              100.0,
-		"codex_5h_reset_at":                  now.Add(time.Hour).Format(time.RFC3339),
-		"codex_7d_used_percent":              70.0,
-		"codex_7d_reset_at":                  now.Add(24 * time.Hour).Format(time.RFC3339),
-	}
-}
-
 // --- test functions ---
 
 func newTestContext() (*gin.Context, *httptest.ResponseRecorder) {
@@ -153,7 +142,7 @@ func TestAccountTestService_OpenAISuccessPersistsSnapshotFromHeaders(t *testing.
 	require.Contains(t, recorder.Body.String(), "test_complete")
 }
 
-func TestAccountTestService_OpenAIToolFrameByQuota(t *testing.T) {
+func TestAccountTestService_OpenAITestAlwaysUsesToolFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
 
@@ -168,7 +157,14 @@ func TestAccountTestService_OpenAIToolFrameByQuota(t *testing.T) {
 		Type:        AccountTypeOAuth,
 		Concurrency: 1,
 		Credentials: map[string]any{"access_token": "test-token"},
-		Extra:       codexToolFrameAccountTestExtra(time.Now()),
+		Extra: map[string]any{
+			openAICodexToolFrameOn5hExhaustedKey: false,
+			"codex_usage_updated_at":             time.Now().Format(time.RFC3339),
+			"codex_5h_used_percent":              0.0,
+			"codex_5h_reset_at":                  time.Now().Add(time.Hour).Format(time.RFC3339),
+			"codex_7d_used_percent":              100.0,
+			"codex_7d_reset_at":                  time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+		},
 	}
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
@@ -293,7 +289,7 @@ func TestAccountTestService_OpenAIStreamEOFBeforeCompletedFails(t *testing.T) {
 	require.NotContains(t, recorder.Body.String(), `"success":true`)
 }
 
-func TestAccountTestService_OpenAI429RetriesWithToolFrame(t *testing.T) {
+func TestAccountTestService_OpenAI429AlreadyHasToolFrame(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, recorder := newTestContext()
 
@@ -302,12 +298,8 @@ func TestAccountTestService_OpenAI429RetriesWithToolFrame(t *testing.T) {
 	first.Header.Set("x-codex-primary-window-minutes", "10080")
 	first.Header.Set("x-codex-secondary-used-percent", "100")
 	first.Header.Set("x-codex-secondary-window-minutes", "300")
-	second := newJSONResponse(http.StatusOK, `data: {"type":"response.completed"}
-
-`)
-
 	repo := &openAIAccountTestRepo{}
-	upstream := &httpUpstreamRecorder{responses: []*http.Response{first, second}}
+	upstream := &httpUpstreamRecorder{responses: []*http.Response{first}}
 	svc := &AccountTestService{accountRepo: repo, httpUpstream: upstream}
 	account := &Account{
 		ID:          97,
@@ -321,14 +313,12 @@ func TestAccountTestService_OpenAI429RetriesWithToolFrame(t *testing.T) {
 	}
 
 	err := svc.testOpenAIAccountConnection(ctx, account, "gpt-5.4", "", "")
-	require.NoError(t, err)
-	require.Len(t, upstream.bodies, 2)
-	require.False(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
-	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[1]))
+	require.Error(t, err)
+	require.Len(t, upstream.bodies, 1)
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.bodies[0]))
 	require.Equal(t, 100.0, repo.updatedExtra["codex_5h_used_percent"])
 	require.Zero(t, repo.rateLimitedID)
-	require.Contains(t, recorder.Body.String(), "Tool Frame 重试")
-	require.Contains(t, recorder.Body.String(), "test_complete")
+	require.Contains(t, recorder.Body.String(), "测试请求已启用 Tool Frame")
 }
 
 func TestAccountTestService_OpenAI429PersistsSnapshotAndRateLimitState(t *testing.T) {

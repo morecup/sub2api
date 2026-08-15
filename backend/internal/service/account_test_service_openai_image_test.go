@@ -48,7 +48,9 @@ func TestAccountTestService_OpenAIImageOAuthHandlesOutputItemDoneFallback(t *tes
 	require.NotNil(t, upstream.lastReq)
 	require.Equal(t, HTTPUpstreamProfileOpenAI, HTTPUpstreamProfileFromContext(upstream.lastReq.Context()))
 	requireCodexDesktopBodyMetadataMatchesHeaders(t, upstream.lastReq, upstream.lastBody)
+	require.True(t, openAIRequestBodyHasCodexToolFrame(upstream.lastBody))
 	require.Contains(t, rec.Body.String(), "Calling Codex /responses image tool")
+	require.Contains(t, rec.Body.String(), "测试请求已启用 Tool Frame")
 	require.Contains(t, rec.Body.String(), "data:image/png;base64,aGVsbG8=")
 	require.Contains(t, rec.Body.String(), "\"success\":true")
 }

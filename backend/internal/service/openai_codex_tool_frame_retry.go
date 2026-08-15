@@ -66,9 +66,9 @@ func shouldSuppressCodexToolFrame429AccountMark(account *Account, headers http.H
 	}
 	// Force mode is an account-level 429 cooldown exemption. It deliberately
 	// applies even when the current request could not carry a Tool Frame (for
-	// example, a 7d-only exhaustion response or a function_call_output turn).
-	// Whether a Tool Frame should be injected remains governed by the 5h quota
-	// checks in shouldUseCodexToolFrameByQuota.
+	// example, a function_call_output turn). Whether a Tool Frame should be
+	// injected remains governed by the quota checks in
+	// shouldUseCodexToolFrameByQuota.
 	if shouldSuppressOpenAI429AccountCooldown(account) {
 		return true
 	}

@@ -413,14 +413,13 @@ func shouldAutoPauseOpenAIAccountByQuota(ctx context.Context, account *Account) 
 	disabled7d := resolveAccountExtraBool(account.Extra, "auto_pause_7d_disabled")
 	threshold5h, threshold7d := resolveOpenAIQuotaAutoPauseThresholds(ctx, account)
 	now := time.Now()
-	ignore5hAutoPauseForToolFrame := account.IsOpenAIOAuth() && resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey)
-	ignoreAllAutoPauseForForcedToolFrame := shouldForceCodexToolFrameAfter5h(account, now)
-	if !ignore5hAutoPauseForToolFrame && !disabled5h && threshold5h > 0 {
+	ignoreQuotaAutoPauseForToolFrame := account.IsOpenAIOAuth() && resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey)
+	if !ignoreQuotaAutoPauseForToolFrame && !disabled5h && threshold5h > 0 {
 		if utilization, ok := resolveOpenAIQuotaUtilization(account.Extra, "5h", now); ok && utilization >= threshold5h {
 			return true, openAIQuotaAutoPauseDecision{window: "5h", threshold: threshold5h, utilization: utilization}
 		}
 	}
-	if !ignoreAllAutoPauseForForcedToolFrame && !disabled7d && threshold7d > 0 {
+	if !ignoreQuotaAutoPauseForToolFrame && !disabled7d && threshold7d > 0 {
 		if utilization, ok := resolveOpenAIQuotaUtilization(account.Extra, "7d", now); ok && utilization >= threshold7d {
 			return true, openAIQuotaAutoPauseDecision{window: "7d", threshold: threshold7d, utilization: utilization}
 		}

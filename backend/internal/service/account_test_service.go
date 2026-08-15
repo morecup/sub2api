@@ -595,11 +595,13 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	}
 	payload := createOpenAITestPayload(upstreamTestModelID, isOAuth)
 	requestBody, _ := json.Marshal(payload)
-	codexToolFrameAppliedByQuota := false
-	if isOAuth && shouldUseCodexToolFrameByQuota(account, time.Now()) {
+	codexToolFrameApplied := false
+	if isOAuth {
+		// Manual OAuth probes always exercise the Tool Frame path, independent of
+		// the production gateway switch and the current 5h/7d quota snapshot.
 		if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
 			requestBody = nextBody
-			codexToolFrameAppliedByQuota = true
+			codexToolFrameApplied = true
 		}
 	}
 	if isOAuth {
@@ -611,8 +613,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 	// restart this probe after registering a replacement task.
 	if !agentIdentityTaskRecoveryWasTried(ctx) {
 		s.sendEvent(c, TestEvent{Type: "test_start", Model: testModelID})
-		if codexToolFrameAppliedByQuota {
-			s.sendEvent(c, TestEvent{Type: "status", Text: "已根据 Codex 5h 配额状态启用 Tool Frame"})
+		if codexToolFrameApplied {
+			s.sendEvent(c, TestEvent{Type: "status", Text: "OpenAI OAuth 测试请求已启用 Tool Frame"})
 		}
 	}
 
@@ -1872,11 +1874,11 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		return s.sendErrorAndEnd(c, fmt.Sprintf("Failed to build image request: %s", err.Error()))
 	}
 	requestBody := responsesBody
-	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
-		if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
-			requestBody = nextBody
-			s.sendEvent(c, TestEvent{Type: "status", Text: "已根据 Codex 5h 配额状态启用 Tool Frame"})
-		}
+	// Keep image probes consistent with regular OAuth account tests: a manual
+	// test always carries a Tool Frame regardless of the account quota snapshot.
+	if nextBody, changed := appendCodexToolFrameIfNeeded(requestBody); changed {
+		requestBody = nextBody
+		s.sendEvent(c, TestEvent{Type: "status", Text: "OpenAI OAuth 测试请求已启用 Tool Frame"})
 	}
 	// lite 探测模型的 body 同步下沉，与 lite 头契约一致（非 lite 原样返回）。
 	requestBody = sinkOpenAIResponsesLiteProbeBody(requestBody, parsed.Model)

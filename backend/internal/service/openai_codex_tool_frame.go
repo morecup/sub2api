@@ -27,17 +27,18 @@ func shouldUseCodexToolFrameByQuota(account *Account, now time.Time) bool {
 	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
 		return false
 	}
-	utilization5h, ok := resolveOpenAIQuotaUtilization(account.Extra, "5h", now)
-	if !ok || utilization5h < 1 {
-		return false
+	utilization5h, has5h := resolveOpenAIQuotaUtilization(account.Extra, "5h", now)
+	utilization7d, has7d := resolveOpenAIQuotaUtilization(account.Extra, "7d", now)
+	exhausted5h := has5h && utilization5h >= 1
+	exhausted7d := has7d && utilization7d >= 1
+
+	if exhausted5h && exhausted7d {
+		return shouldForceCodexToolFrameAfter5h(account, now)
 	}
-	if shouldForceCodexToolFrameAfter5h(account, now) {
+	if exhausted5h || exhausted7d {
 		return true
 	}
-	if utilization7d, ok := resolveOpenAIQuotaUtilization(account.Extra, "7d", now); ok && utilization7d >= 1 {
-		return false
-	}
-	return true
+	return false
 }
 
 func shouldForceCodexToolFrameAfter5h(account *Account, now time.Time) bool {
@@ -83,10 +84,11 @@ func shouldRetryCodexToolFrameFrom429(account *Account, headers http.Header) boo
 	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
 		return false
 	}
-	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) {
-		return codexRateLimitHeadersIndicate5hExhausted(headers)
+	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) &&
+		codexRateLimitHeadersIndicate5hExhausted(headers) {
+		return true
 	}
-	return codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers)
+	return codexRateLimitHeadersIndicateSingleWindowExhausted(headers)
 }
 
 func shouldRetryCodexToolFrameFromUsageLimit(account *Account, headers http.Header, now time.Time) bool {
@@ -96,13 +98,11 @@ func shouldRetryCodexToolFrameFromUsageLimit(account *Account, headers http.Head
 	if !resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) {
 		return false
 	}
-	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) {
-		if codexRateLimitHeadersIndicate5hExhausted(headers) {
-			return true
-		}
-		return shouldUseCodexToolFrameByQuota(account, now)
+	if resolveAccountExtraBool(account.Extra, openAICodexToolFrameForceAfter5hKey) &&
+		codexRateLimitHeadersIndicate5hExhausted(headers) {
+		return true
 	}
-	if codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers) {
+	if codexRateLimitHeadersIndicateSingleWindowExhausted(headers) {
 		return true
 	}
 	return shouldUseCodexToolFrameByQuota(account, now)
@@ -120,26 +120,22 @@ func codexRateLimitHeadersIndicate5hExhausted(headers http.Header) bool {
 	return *normalized.Used5hPercent >= 100
 }
 
-func codexRateLimitHeadersIndicate5hExhausted7dAvailable(headers http.Header) bool {
+func codexRateLimitHeadersIndicateSingleWindowExhausted(headers http.Header) bool {
 	snapshot := ParseCodexRateLimitHeaders(headers)
 	if snapshot == nil {
 		return false
 	}
-	return codexSnapshotIndicates5hExhausted7dAvailable(snapshot)
+	return codexSnapshotIndicatesSingleWindowExhausted(snapshot)
 }
 
-func codexSnapshotIndicates5hExhausted7dAvailable(snapshot *OpenAICodexUsageSnapshot) bool {
+func codexSnapshotIndicatesSingleWindowExhausted(snapshot *OpenAICodexUsageSnapshot) bool {
 	normalized := snapshot.Normalize()
 	if normalized == nil {
 		return false
 	}
-	if normalized.Used5hPercent == nil || *normalized.Used5hPercent < 100 {
-		return false
-	}
-	if normalized.Used7dPercent != nil && *normalized.Used7dPercent >= 100 {
-		return false
-	}
-	return true
+	exhausted5h := normalized.Used5hPercent != nil && *normalized.Used5hPercent >= 100
+	exhausted7d := normalized.Used7dPercent != nil && *normalized.Used7dPercent >= 100
+	return exhausted5h != exhausted7d
 }
 
 func (s *OpenAIGatewayService) persistCodexUsageSnapshotForRetry(ctx context.Context, account *Account, headers http.Header) {

@@ -156,7 +156,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 	if shouldUseCodexToolFrameByQuota(account, time.Now()) {
 		if nextBody, changed := appendCodexToolFrameIfNeeded(body); changed {
 			body = nextBody
-			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot for passthrough (account: %s)", account.Name)
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by quota snapshot for passthrough (account: %s)", account.Name)
 		}
 	}
 

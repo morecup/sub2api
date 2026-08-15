@@ -633,12 +633,12 @@ export default {
         codexCLIOnly: 'Codex official clients only',
         codexCLIOnlyDesc:
           'Only applies to OpenAI OAuth. When enabled, only Codex official client families are allowed; when disabled, the gateway bypasses this restriction and keeps existing behavior.',
-        codexToolFrameOn5hExhausted: 'Use Tool Frame after 5h is exhausted',
+        codexToolFrameOn5hExhausted: 'Use Tool Frame after a 5h/7d window is exhausted',
         codexToolFrameOn5hExhaustedDesc:
-          'Disabled by default. When enabled, the gateway uses Tool Frame only after the Codex 5h quota is exhausted while the 7d quota is still available; 7d exhaustion still follows normal rate-limit handling.',
+          'Disabled by default. When enabled, the gateway uses Tool Frame when exactly one Codex quota window (5h or 7d) is exhausted, including accounts with no 5h limit whose 7d quota is exhausted. If both windows are exhausted, normal rate-limit handling still applies. Account test requests always carry a Tool Frame regardless of this switch or quota state.',
         codexToolFrame429NoCooldown: 'Do not cooldown account on Tool Frame 429',
         codexToolFrame429NoCooldownDesc:
-          'Enabled by default. If a 5h-only 429 still occurs after Tool Frame is applied, record the request snapshot without marking the account as 429; 7d exhaustion still rate-limits normally.',
+          'Enabled by default. If a single-window exhaustion 429 (5h-only or 7d-only) still occurs after Tool Frame is applied, record the request snapshot without marking the account as 429. Exhaustion of both windows still rate-limits normally.',
         codexToolFrameForceAfter5h: 'Force Tool Frame after 5h',
         codexToolFrameForceAfter5hDesc:
           'Disabled by default. Once the 5h quota is exhausted, ignore the 7d quota check and still add Tool Frame. Any upstream 429 for this OpenAI OAuth account will not cooldown the account, including 7d-only exhaustion or requests without Tool Frame.',

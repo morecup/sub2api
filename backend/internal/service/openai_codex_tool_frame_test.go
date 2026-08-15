@@ -28,6 +28,17 @@ func TestShouldUseCodexToolFrameByQuota(t *testing.T) {
 	require.True(t, shouldUseCodexToolFrameByQuota(account, now))
 
 	account.Extra = cloneStringAnyMap(baseExtra)
+	account.Extra["codex_5h_used_percent"] = 40.0
+	account.Extra["codex_7d_used_percent"] = 100.0
+	require.True(t, shouldUseCodexToolFrameByQuota(account, now), "7d-only exhaustion must enable Tool Frame")
+
+	account.Extra = cloneStringAnyMap(baseExtra)
+	delete(account.Extra, "codex_5h_used_percent")
+	delete(account.Extra, "codex_5h_reset_at")
+	account.Extra["codex_7d_used_percent"] = 100.0
+	require.True(t, shouldUseCodexToolFrameByQuota(account, now), "accounts without a 5h window must use Tool Frame when 7d is exhausted")
+
+	account.Extra = cloneStringAnyMap(baseExtra)
 	account.Extra["codex_7d_used_percent"] = 100.0
 	require.False(t, shouldUseCodexToolFrameByQuota(account, now))
 
@@ -65,6 +76,15 @@ func TestShouldRetryCodexToolFrameFrom429(t *testing.T) {
 	headers.Set("x-codex-primary-used-percent", "100")
 	require.False(t, shouldRetryCodexToolFrameFrom429(account, headers))
 
+	headers.Set("x-codex-secondary-used-percent", "0")
+	require.True(t, shouldRetryCodexToolFrameFrom429(account, headers), "7d-only 429 must retry with Tool Frame")
+
+	headers.Del("x-codex-secondary-used-percent")
+	headers.Del("x-codex-secondary-window-minutes")
+	require.True(t, shouldRetryCodexToolFrameFrom429(account, headers), "a 7d-only header snapshot without a 5h window must retry with Tool Frame")
+
+	headers.Set("x-codex-secondary-window-minutes", "300")
+	headers.Set("x-codex-secondary-used-percent", "100")
 	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
 	require.True(t, shouldRetryCodexToolFrameFrom429(account, headers))
 }
@@ -96,9 +116,11 @@ func TestShouldSuppressCodexToolFrame429AccountMarkHonorsNoCooldownSwitch(t *tes
 	headers.Set("x-codex-primary-used-percent", "100")
 	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body))
 
-	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
-	headers.Set("x-codex-primary-used-percent", "100")
 	headers.Set("x-codex-secondary-used-percent", "0")
+	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, body), "7d-only Tool Frame 429 must not cooldown the account")
+	require.False(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "normal mode still requires the request to carry Tool Frame")
+
+	account.Extra[openAICodexToolFrameForceAfter5hKey] = true
 	require.True(t, shouldSuppressCodexToolFrame429AccountMark(account, headers, plainBody), "force mode must suppress a 7d-only 429 even without Tool Frame")
 
 	account.Type = AccountTypeAPIKey

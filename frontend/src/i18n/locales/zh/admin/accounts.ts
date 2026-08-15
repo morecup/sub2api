@@ -694,12 +694,12 @@ export default {
         planTypeClear: '清空（自动识别）',
         codexCLIOnly: '仅允许 Codex 官方客户端',
         codexCLIOnlyDesc: '仅对 OpenAI OAuth 生效。开启后仅允许 Codex 官方客户端家族访问；关闭后完全绕过并保持原逻辑。',
-        codexToolFrameOn5hExhausted: '5h 耗尽后启用 Tool Frame',
+        codexToolFrameOn5hExhausted: '5h/7d 单窗口耗尽后启用 Tool Frame',
         codexToolFrameOn5hExhaustedDesc:
-          '默认关闭。开启后仅当 Codex 5h 额度已耗尽且 7d 额度未耗尽时，自动使用 Tool Frame 继续访问；7d 耗尽仍走原限流逻辑。',
+          '默认关闭。开启后，当 Codex 5h 或 7d 中仅一个额度窗口耗尽时，自动使用 Tool Frame 继续访问；包括账号没有 5h 限制而仅 7d 耗尽的情况。两个窗口同时耗尽仍走原限流逻辑。账号测试请求不受此开关或配额状态影响，始终携带 Tool Frame。',
         codexToolFrame429NoCooldown: 'Tool Frame 真实 429 不冷却账号',
         codexToolFrame429NoCooldownDesc:
-          '默认开启。启用 Tool Frame 后若仍遇到 5h-only 429，只记录请求快照而不把账号标记为 429；7d 耗尽仍正常限流。',
+          '默认开启。启用 Tool Frame 后若仍遇到单窗口耗尽的 429（5h-only 或 7d-only），只记录请求快照而不把账号标记为 429；两个窗口同时耗尽仍正常限流。',
         codexToolFrameForceAfter5h: '5h 后强制 Tool Frame',
         codexToolFrameForceAfter5hDesc:
           '默认关闭。开启后只要 5h 额度已耗尽，就不再判断 7d 额度，仍然添加 Tool Frame；该 OpenAI OAuth 账号遇到任何上游 429 都不会冷却，包括仅 7d 耗尽或当前请求未带 Tool Frame。',

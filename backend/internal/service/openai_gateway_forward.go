@@ -535,7 +535,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			body = nextBody
 			requestView = newOpenAIRequestView(body)
 			reqBody = nil
-			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by 5h quota snapshot (account: %s)", account.Name)
+			logger.LegacyPrintf("service.openai_gateway", "[OpenAI] Enabled Codex tool-frame by quota snapshot (account: %s)", account.Name)
 		}
 	}
 	imageBillingModel := ""
