@@ -15,7 +15,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 )
 
 type alphaSearchAccountStateRepo struct {
@@ -39,7 +38,7 @@ func alphaSearchResponsesSSE(output string) string {
 		`data: {"type":"response.completed","response":{"output":[{"type":"message","content":[{"type":"output_text","text":` + strconv.Quote(output) + `}]}]}}` + "\n\n"
 }
 
-func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
+func TestForwardAlphaSearchOAuthUsesStandaloneSearchWireShape(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{
 		"id":"search-session",
@@ -89,12 +88,12 @@ func TestForwardAlphaSearchOAuthPreservesWire(t *testing.T) {
 	require.Equal(t, "Bearer oauth-token", upstream.lastReq.Header.Get("Authorization"))
 	require.Equal(t, "chatgpt-account", upstream.lastReq.Header.Get("chatgpt-account-id"))
 	require.Equal(t, "application/json", upstream.lastReq.Header.Get("Accept"))
+	require.Equal(t, "zstd", upstream.lastReq.Header.Get("Content-Encoding"))
 	require.Equal(t, "0.144.1", upstream.lastReq.Header.Get("Version"))
 	require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
-	requireCodexDesktopBodyMetadataMatchesHeaders(t, upstream.lastReq, upstream.lastBody)
-	bodyWithoutMetadata, err := sjson.DeleteBytes(upstream.lastBody, "client_metadata")
-	require.NoError(t, err)
-	require.JSONEq(t, string(body), string(bodyWithoutMetadata))
+	require.False(t, gjson.GetBytes(upstream.lastBody, "client_metadata").Exists())
+	require.False(t, gjson.GetBytes(upstream.lastBody, "prompt_cache_key").Exists())
+	require.JSONEq(t, string(body), string(upstream.lastBody))
 }
 
 func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {

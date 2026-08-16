@@ -373,23 +373,22 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchRequest(ctx context.Context
 		req.Header.Set("Version", codexCLIVersion)
 	}
 
-	// Alpha Search 复用 OAuth passthrough 构造器，以保留 morecup 的 Codex
-	// Desktop header/body metadata 同步；再剥离 Responses 专用状态头，保持
-	// SearchClient 的独立线协议。
+	// Alpha Search 复用 OAuth passthrough 构造器取得认证和 Codex 客户端画像，
+	// 再剥离 Responses 专用的头和 body 字段，恢复 SearchClient 独立线协议。
 	stripOpenAIAlphaSearchResponsesHeaders(req.Header)
-	// passthrough 构造器会把 body 的 prompt_cache_key 对齐为 session-id（0.145
-	// /responses 实抓行为），但 alpha/search 上游对该字段返回 Unknown parameter，
-	// 这里必须在最终 body 中剥除。
-	if err := stripOpenAIAlphaSearchPromptCacheKey(req); err != nil {
-		return nil, fmt.Errorf("strip alpha search prompt_cache_key: %w", err)
+	// OAuth passthrough applies the Responses request fingerprint, which adds
+	// client_metadata and prompt_cache_key. alpha/search uses the standalone
+	// SearchRequest protocol and rejects both fields as unknown parameters.
+	if err := stripOpenAIAlphaSearchResponsesBodyFields(req); err != nil {
+		return nil, fmt.Errorf("strip alpha search Responses-only body fields: %w", err)
 	}
 	return req, nil
 }
 
-// stripOpenAIAlphaSearchPromptCacheKey 从 alpha/search 上游请求体中删除
-// prompt_cache_key（同步 client_metadata 时被对齐注入），保持 SearchClient 协议形态。
-// passthrough 构造器可能已对 body 做 zstd 压缩，需先解码、删除后重压。
-func stripOpenAIAlphaSearchPromptCacheKey(req *http.Request) error {
+// stripOpenAIAlphaSearchResponsesBodyFields restores the standalone SearchRequest
+// wire shape after the OAuth Responses passthrough has added fingerprint fields.
+// The passthrough may have zstd-compressed the body, so decode before filtering.
+func stripOpenAIAlphaSearchResponsesBodyFields(req *http.Request) error {
 	if req == nil || req.Body == nil {
 		return nil
 	}
@@ -420,20 +419,21 @@ func stripOpenAIAlphaSearchPromptCacheKey(req *http.Request) error {
 		raw = plain
 		compressed = true
 	}
-	if len(raw) == 0 || !gjson.GetBytes(raw, "prompt_cache_key").Exists() {
-		if compressed {
-			raw = httputil.CompressZstd(raw)
+
+	next := raw
+	for _, field := range openAIAlphaSearchUnsupportedBodyFields {
+		if !gjson.GetBytes(next, field).Exists() {
+			continue
 		}
-		resetBody(raw)
-		return nil
-	}
-	next, err := sjson.DeleteBytes(raw, "prompt_cache_key")
-	if err != nil {
-		if compressed {
-			raw = httputil.CompressZstd(raw)
+		updated, deleteErr := sjson.DeleteBytes(next, field)
+		if deleteErr != nil {
+			if compressed {
+				raw = httputil.CompressZstd(raw)
+			}
+			resetBody(raw)
+			return deleteErr
 		}
-		resetBody(raw)
-		return err
+		next = updated
 	}
 	if compressed {
 		next = httputil.CompressZstd(next)
@@ -477,7 +477,8 @@ func openAIAlphaSearchInboundHeader(c *gin.Context, key string) string {
 var openAIAlphaSearchUnsupportedBodyFields = [...]string{
 	// Codex alpha/search 是 SearchRequest 独立协议，不是 /responses 子请求。
 	// 新版 Codex/第三方代理可能把 Responses 公共字段误带到搜索请求里；ChatGPT
-	// alpha/search 会对这些字段返回 Unknown parameter（例如 prompt_cache_key）。
+	// alpha/search 会对这些字段返回 Unknown parameter。
+	"client_metadata",
 	"prompt_cache_key",
 	"prompt_cache_retention",
 }
