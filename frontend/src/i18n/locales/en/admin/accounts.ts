@@ -1450,6 +1450,7 @@ export default {
         grokLastStatus: 'Status {status}',
         grokLastProbe: 'Probe {time}',
         grokLastHeadersSeen: 'Headers {time}',
+        first7dExhaustedAt: '7d first reached 100%: {time}',
         passiveSampled: 'Passive',
         activeQuery: 'Query'
       },

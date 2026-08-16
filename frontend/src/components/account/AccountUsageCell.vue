@@ -139,6 +139,13 @@
           :show-now-when-idle="true"
           color="emerald"
         />
+        <div
+          v-if="usageInfo?.seven_day?.first_exhausted_at"
+          class="text-[9px] text-red-500 dark:text-red-400"
+          :title="usageInfo.seven_day.first_exhausted_at"
+        >
+          {{ t('admin.accounts.usageWindow.first7dExhaustedAt', { time: formatExhaustedAt(usageInfo.seven_day.first_exhausted_at) }) }}
+        </div>
         <!--
           Upstream codex /wham/usage quota query + reset. The local active-sampling
           refresh button is rendered via the pre-actions slot so the user sees a
@@ -723,6 +730,12 @@ const hasOpenAIUsageFallback = computed(() => {
 })
 
 const openAIUsageRefreshKey = computed(() => buildOpenAIUsageRefreshKey(props.account))
+
+const formatExhaustedAt = (value: string): string => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, { hour12: false })
+}
 
 const shouldAutoLoadUsageOnMount = computed(() => {
   return shouldFetchUsage.value

@@ -2491,6 +2491,7 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 		}
 	}
 	extraExpression := "COALESCE(extra, '{}'::jsonb) || $1::jsonb"
+	extraExpression = codex7dExhaustionAwareExtraExpression(updates, extraExpression)
 	if clearProbeSnapshot {
 		extraExpression = "(" + extraExpression + ") - 'upstream_billing_probe'"
 	}
@@ -2532,6 +2533,92 @@ func (r *accountRepository) UpdateExtra(ctx context.Context, id int64, updates m
 		}
 	}
 	return nil
+}
+
+func codex7dExhaustionAwareExtraExpression(updates map[string]any, mergedExpression string) string {
+	usedPercent, ok := accountExtraUpdateFloat64(updates["codex_7d_used_percent"])
+	if !ok {
+		return mergedExpression
+	}
+
+	resetAt, hasResetAt := updates["codex_7d_reset_at"].(string)
+	if hasResetAt {
+		_, err := time.Parse(time.RFC3339, strings.TrimSpace(resetAt))
+		hasResetAt = err == nil
+	}
+	baseExpression := "COALESCE(extra, '{}'::jsonb)"
+	firstKey := pq.QuoteLiteral(service.Codex7dFirstExhaustedAtExtraKey)
+	windowResetKey := pq.QuoteLiteral(service.Codex7dFirstExhaustedWindowResetAtExtraKey)
+	resetKey := pq.QuoteLiteral("codex_7d_reset_at")
+	observedAtKey := pq.QuoteLiteral("codex_usage_updated_at")
+	incomingReset := "$1::jsonb -> " + resetKey
+	incomingResetText := "$1::jsonb ->> " + resetKey
+	observedAt := "COALESCE($1::jsonb -> " + observedAtKey + ", to_jsonb(NOW()))"
+	resetToleranceSeconds := strconv.Itoa(service.Codex7dWindowResetMatchToleranceSeconds)
+	resetWindowChanged := "ABS(EXTRACT(EPOCH FROM ((" + baseExpression + " ->> " + windowResetKey + ")::timestamptz - (" + incomingResetText + ")::timestamptz))) > " + resetToleranceSeconds
+
+	if usedPercent >= 100 {
+		if !hasResetAt {
+			return "CASE WHEN " + baseExpression + " ? " + firstKey +
+				" THEN " + mergedExpression +
+				" ELSE (" + mergedExpression + ") || jsonb_build_object(" + firstKey + ", " + observedAt + ") END"
+		}
+
+		return "CASE " +
+			"WHEN NOT (" + baseExpression + " ? " + firstKey + ") " +
+			"THEN (" + mergedExpression + ") || jsonb_build_object(" + firstKey + ", " + observedAt + ", " + windowResetKey + ", " + incomingReset + ") " +
+			"WHEN NOT (" + baseExpression + " ? " + windowResetKey + ") " +
+			"THEN (" + mergedExpression + ") || jsonb_build_object(" + windowResetKey + ", " + incomingReset + ") " +
+			"WHEN " + resetWindowChanged + " " +
+			"THEN (" + mergedExpression + ") || jsonb_build_object(" + firstKey + ", " + observedAt + ", " + windowResetKey + ", " + incomingReset + ") " +
+			"ELSE " + mergedExpression + " END"
+	}
+
+	if !hasResetAt {
+		return mergedExpression
+	}
+	return "CASE WHEN (" + baseExpression + " ? " + firstKey + ") AND (" +
+		"NOT (" + baseExpression + " ? " + windowResetKey + ") OR " +
+		resetWindowChanged + ") " +
+		"THEN ((" + mergedExpression + ") - " + firstKey + ") - " + windowResetKey + " " +
+		"ELSE " + mergedExpression + " END"
+}
+
+func accountExtraUpdateFloat64(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int8:
+		return float64(v), true
+	case int16:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case uint:
+		return float64(v), true
+	case uint8:
+		return float64(v), true
+	case uint16:
+		return float64(v), true
+	case uint32:
+		return float64(v), true
+	case uint64:
+		return float64(v), true
+	case json.Number:
+		parsed, err := v.Float64()
+		return parsed, err == nil
+	case string:
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+		return parsed, err == nil
+	default:
+		return 0, false
+	}
 }
 
 // UpdateUpstreamBillingProbeSnapshot stores a probe result only while the

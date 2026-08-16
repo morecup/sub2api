@@ -18,6 +18,19 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	// Codex7dFirstExhaustedAtExtraKey records when the current 7d quota window
+	// was first observed at 100%. The repository preserves it for the same
+	// window and replaces it only after the window reset identity changes.
+	Codex7dFirstExhaustedAtExtraKey = "codex_7d_first_exhausted_at"
+	// Codex7dFirstExhaustedWindowResetAtExtraKey identifies the 7d window to
+	// which Codex7dFirstExhaustedAtExtraKey belongs.
+	Codex7dFirstExhaustedWindowResetAtExtraKey = "codex_7d_first_exhausted_window_reset_at"
+	// Codex7dWindowResetMatchToleranceSeconds absorbs the small reset-after
+	// rounding drift seen across responses from the same upstream window.
+	Codex7dWindowResetMatchToleranceSeconds = 5 * 60
+)
+
 // OpenAIRecordUsageInput input for recording usage
 type OpenAIRecordUsageInput struct {
 	Result             *OpenAIForwardResult

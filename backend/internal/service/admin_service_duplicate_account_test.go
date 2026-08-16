@@ -109,14 +109,16 @@ func TestDuplicateAccountCopiesConfigurationAndResetsRuntimeState(t *testing.T) 
 			"nested":  map[string]any{"token": "source-token"},
 		},
 		Extra: map[string]any{
-			"config":                          map[string]any{"region": "us-east-1"},
-			"items":                           []any{map[string]any{"enabled": true}},
-			"quota_limit":                     1000,
-			"quota_used":                      450,
-			"quota_daily_used":                25,
-			"quota_daily_start":               "2026-07-15T00:00:00Z",
-			"model_rate_limits":               map[string]any{"gpt-5": "2099-01-01T00:00:00Z"},
-			"codex_5h_used_percent":           80,
+			"config":                        map[string]any{"region": "us-east-1"},
+			"items":                         []any{map[string]any{"enabled": true}},
+			"quota_limit":                   1000,
+			"quota_used":                    450,
+			"quota_daily_used":              25,
+			"quota_daily_start":             "2026-07-15T00:00:00Z",
+			"model_rate_limits":             map[string]any{"gpt-5": "2099-01-01T00:00:00Z"},
+			"codex_5h_used_percent":         80,
+			Codex7dFirstExhaustedAtExtraKey: "2026-07-15T01:02:03Z",
+			Codex7dFirstExhaustedWindowResetAtExtraKey: "2026-07-22T00:00:00Z",
 			"codex_cli_only":                  true,
 			"grok_usage_snapshot":             map[string]any{"status_code": 429},
 			"openai_responses_supported":      false,
@@ -162,6 +164,8 @@ func TestDuplicateAccountCopiesConfigurationAndResetsRuntimeState(t *testing.T) 
 		"quota_limit":    float64(1000),
 		"codex_cli_only": true,
 	}, duplicate.Extra)
+	require.NotContains(t, duplicate.Extra, Codex7dFirstExhaustedAtExtraKey)
+	require.NotContains(t, duplicate.Extra, Codex7dFirstExhaustedWindowResetAtExtraKey)
 	require.NotNil(t, duplicate.ExpiresAt)
 	require.True(t, source.ExpiresAt.Equal(*duplicate.ExpiresAt))
 	require.Equal(t, source.Notes, duplicate.Notes)

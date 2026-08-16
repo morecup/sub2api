@@ -1512,6 +1512,55 @@ func (s *AccountRepoSuite) TestUpdateExtra_ExhaustedCodexSnapshotSyncsSchedulerC
 	s.Require().Equal(100.0, cacheRecorder.setAccounts[0].Extra["codex_7d_used_percent"])
 }
 
+func (s *AccountRepoSuite) TestUpdateExtra_TracksFirstCodex7dExhaustionPerWindow() {
+	account := mustCreateAccount(s.T(), s.client, &service.Account{
+		Name:     "acc-extra-codex-7d-first-exhausted",
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
+		Extra:    map[string]any{},
+	})
+	firstObservedAt := "2026-08-15T08:00:00Z"
+	laterObservedAt := "2026-08-15T09:00:00Z"
+	firstResetAt := "2026-08-20T08:00:00Z"
+	secondResetAt := "2026-08-27T08:00:00Z"
+
+	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
+		"codex_7d_used_percent":  100.0,
+		"codex_7d_reset_at":      firstResetAt,
+		"codex_usage_updated_at": firstObservedAt,
+	}))
+	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
+		"codex_7d_used_percent":  100.0,
+		"codex_7d_reset_at":      firstResetAt,
+		"codex_usage_updated_at": laterObservedAt,
+	}))
+
+	got, err := s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(firstObservedAt, got.Extra[service.Codex7dFirstExhaustedAtExtraKey])
+	s.Require().Equal(firstResetAt, got.Extra[service.Codex7dFirstExhaustedWindowResetAtExtraKey])
+
+	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
+		"codex_7d_used_percent":  10.0,
+		"codex_7d_reset_at":      secondResetAt,
+		"codex_usage_updated_at": "2026-08-21T08:00:00Z",
+	}))
+	got, err = s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	s.Require().NotContains(got.Extra, service.Codex7dFirstExhaustedAtExtraKey)
+	s.Require().NotContains(got.Extra, service.Codex7dFirstExhaustedWindowResetAtExtraKey)
+
+	s.Require().NoError(s.repo.UpdateExtra(s.ctx, account.ID, map[string]any{
+		"codex_7d_used_percent":  100.0,
+		"codex_7d_reset_at":      secondResetAt,
+		"codex_usage_updated_at": laterObservedAt,
+	}))
+	got, err = s.repo.GetByID(s.ctx, account.ID)
+	s.Require().NoError(err)
+	s.Require().Equal(laterObservedAt, got.Extra[service.Codex7dFirstExhaustedAtExtraKey])
+	s.Require().Equal(secondResetAt, got.Extra[service.Codex7dFirstExhaustedWindowResetAtExtraKey])
+}
+
 func (s *AccountRepoSuite) TestUpdateExtra_SchedulerRelevantStillEnqueuesOutbox() {
 	account := mustCreateAccount(s.T(), s.client, &service.Account{
 		Name:     "acc-extra-mixed",

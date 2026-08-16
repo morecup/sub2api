@@ -1195,6 +1195,7 @@ export interface UsageProgress {
   utilization: number // Percentage (0-100+, 100 = 100%)
   resets_at: string | null
   remaining_seconds: number
+  first_exhausted_at?: string | null // Current window's first observed 100% timestamp
   window_stats?: WindowStats | null // 窗口期统计（从窗口开始到当前的使用量）
   used_requests?: number
   limit_requests?: number
@@ -1314,6 +1315,8 @@ export interface CodexUsageSnapshot {
   codex_7d_reset_after_seconds?: number // Seconds until 7d window reset
   codex_7d_reset_at?: string // 7-day window absolute reset time (RFC3339)
   codex_7d_window_minutes?: number // 7d window in minutes (should be ~10080)
+  codex_7d_first_exhausted_at?: string // First observed 100% timestamp in the current 7d window
+  codex_7d_first_exhausted_window_reset_at?: string // 7d reset identity associated with the timestamp
 
   codex_usage_updated_at?: string // Last update timestamp
 }

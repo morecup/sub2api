@@ -256,3 +256,61 @@ func TestBuildCodexUsageProgressFromExtra_ZerosExpiredWindow(t *testing.T) {
 		}
 	})
 }
+
+func TestBuildCodexUsageProgressFromExtra_TracksFirst7dExhaustionPerWindow(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 8, 15, 8, 0, 0, 0, time.UTC)
+	firstExhaustedAt := now.Add(-2 * time.Hour).Format(time.RFC3339)
+	currentResetAt := now.Add(5 * 24 * time.Hour).Format(time.RFC3339)
+
+	t.Run("returns persisted first exhaustion for current window", func(t *testing.T) {
+		extra := map[string]any{
+			"codex_7d_used_percent":                    100.0,
+			"codex_7d_reset_at":                        currentResetAt,
+			Codex7dFirstExhaustedAtExtraKey:            firstExhaustedAt,
+			Codex7dFirstExhaustedWindowResetAtExtraKey: currentResetAt,
+		}
+		progress := buildCodexUsageProgressFromExtra(extra, "7d", now)
+		if progress == nil || progress.FirstExhaustedAt == nil {
+			t.Fatalf("expected first exhausted timestamp, got %#v", progress)
+		}
+		if got := progress.FirstExhaustedAt.Format(time.RFC3339); got != firstExhaustedAt {
+			t.Fatalf("FirstExhaustedAt = %s, want %s", got, firstExhaustedAt)
+		}
+	})
+
+	t.Run("derives timestamp immediately for newly exhausted window", func(t *testing.T) {
+		observedAt := now.Add(-time.Minute).Format(time.RFC3339)
+		extra := map[string]any{
+			"codex_7d_used_percent":                    100.0,
+			"codex_7d_reset_at":                        currentResetAt,
+			"codex_usage_updated_at":                   observedAt,
+			Codex7dFirstExhaustedAtExtraKey:            firstExhaustedAt,
+			Codex7dFirstExhaustedWindowResetAtExtraKey: now.Add(-24 * time.Hour).Format(time.RFC3339),
+		}
+		progress := buildCodexUsageProgressFromExtra(extra, "7d", now)
+		if progress == nil || progress.FirstExhaustedAt == nil {
+			t.Fatalf("expected derived first exhausted timestamp, got %#v", progress)
+		}
+		if got := progress.FirstExhaustedAt.Format(time.RFC3339); got != observedAt {
+			t.Fatalf("FirstExhaustedAt = %s, want %s", got, observedAt)
+		}
+	})
+
+	t.Run("hides timestamp after window expiration", func(t *testing.T) {
+		expiredResetAt := now.Add(-time.Minute).Format(time.RFC3339)
+		extra := map[string]any{
+			"codex_7d_used_percent":                    100.0,
+			"codex_7d_reset_at":                        expiredResetAt,
+			Codex7dFirstExhaustedAtExtraKey:            firstExhaustedAt,
+			Codex7dFirstExhaustedWindowResetAtExtraKey: expiredResetAt,
+		}
+		progress := buildCodexUsageProgressFromExtra(extra, "7d", now)
+		if progress == nil {
+			t.Fatal("expected non-nil progress")
+		}
+		if progress.FirstExhaustedAt != nil {
+			t.Fatalf("expected expired window timestamp to be hidden, got %v", progress.FirstExhaustedAt)
+		}
+	})
+}

@@ -530,6 +530,7 @@ describe('AccountUsageCell', () => {
 	    utilization: 100,
 	    resets_at: '2026-03-13T12:00:00Z',
 	    remaining_seconds: 3600,
+	    first_exhausted_at: '2026-03-08T09:30:00Z',
 	    window_stats: {
 	      requests: 211,
 	      tokens: 106540000,
@@ -569,6 +570,7 @@ describe('AccountUsageCell', () => {
   expect(getUsage).toHaveBeenCalledWith(2004)
   expect(wrapper.text()).toContain('5h|100|106540000')
   expect(wrapper.text()).toContain('7d|100|106540000')
+  expect(wrapper.text()).toContain('admin.accounts.usageWindow.first7dExhaustedAt')
   })
 
   it('Key 账号会展示 today stats 徽章并带 A/U 提示', async () => {

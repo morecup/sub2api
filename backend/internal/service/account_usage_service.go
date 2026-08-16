@@ -147,10 +147,11 @@ type WindowStats struct {
 
 // UsageProgress 使用量进度
 type UsageProgress struct {
-	Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
-	ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
-	RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
-	WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
+	Utilization      float64      `json:"utilization"`                  // 使用率百分比 (0-100+，100表示100%)
+	ResetsAt         *time.Time   `json:"resets_at"`                    // 重置时间
+	RemainingSeconds int          `json:"remaining_seconds"`            // 距重置剩余秒数
+	FirstExhaustedAt *time.Time   `json:"first_exhausted_at,omitempty"` // 当前窗口首次达到 100% 的时间
+	WindowStats      *WindowStats `json:"window_stats,omitempty"`       // 窗口期统计（从窗口开始到当前的使用量）
 	UsedRequests     int64        `json:"used_requests,omitempty"`
 	LimitRequests    int64        `json:"limit_requests,omitempty"`
 }
@@ -1390,8 +1391,69 @@ func buildCodexUsageProgressFromExtra(extra map[string]any, window string, now t
 	if progress.ResetsAt != nil && !now.Before(*progress.ResetsAt) {
 		progress.Utilization = 0
 	}
+	if window == "7d" {
+		progress.FirstExhaustedAt = resolveCodex7dFirstExhaustedAt(extra, progress, now)
+	}
 
 	return progress
+}
+
+func resolveCodex7dFirstExhaustedAt(extra map[string]any, progress *UsageProgress, now time.Time) *time.Time {
+	if len(extra) == 0 || progress == nil {
+		return nil
+	}
+	if progress.ResetsAt != nil && !now.Before(*progress.ResetsAt) {
+		return nil
+	}
+
+	currentReset := codexExtraString(extra, "codex_7d_reset_at")
+	storedReset := codexExtraString(extra, Codex7dFirstExhaustedWindowResetAtExtraKey)
+	windowMatches := codex7dWindowResetMatches(currentReset, storedReset)
+
+	if windowMatches {
+		if raw, ok := extra[Codex7dFirstExhaustedAtExtraKey]; ok {
+			if exhaustedAt, err := parseTime(strings.TrimSpace(fmt.Sprint(raw))); err == nil {
+				return &exhaustedAt
+			}
+		}
+	}
+
+	// The active probe merges the raw quota snapshot into the in-memory account
+	// before the repository's atomic lifecycle update is read back. Derive the
+	// just-observed first timestamp so the current response can display it
+	// immediately; the repository persists the same codex_usage_updated_at value.
+	if progress.Utilization >= 100 {
+		if raw, ok := extra["codex_usage_updated_at"]; ok {
+			if observedAt, err := parseTime(strings.TrimSpace(fmt.Sprint(raw))); err == nil {
+				return &observedAt
+			}
+		}
+	}
+	return nil
+}
+
+func codexExtraString(extra map[string]any, key string) string {
+	raw, ok := extra[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
+func codex7dWindowResetMatches(currentReset, storedReset string) bool {
+	if currentReset == "" || storedReset == "" {
+		return true
+	}
+	current, currentErr := parseTime(currentReset)
+	stored, storedErr := parseTime(storedReset)
+	if currentErr != nil || storedErr != nil {
+		return currentReset == storedReset
+	}
+	delta := current.Sub(stored)
+	if delta < 0 {
+		delta = -delta
+	}
+	return delta <= time.Duration(Codex7dWindowResetMatchToleranceSeconds)*time.Second
 }
 
 func codexWindowStatsStart(progress *UsageProgress, fallbackWindow time.Duration, now time.Time) time.Time {

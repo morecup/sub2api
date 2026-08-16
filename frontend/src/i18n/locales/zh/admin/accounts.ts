@@ -493,6 +493,7 @@ export default {
         grokLastStatus: '状态 {status}',
         grokLastProbe: '探测 {time}',
         grokLastHeadersSeen: '响应头 {time}',
+        first7dExhaustedAt: '7d 首次达到 100%：{time}',
         passiveSampled: '被动采样',
         activeQuery: '查询'
       },
