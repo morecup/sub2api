@@ -1052,6 +1052,54 @@ describe('AccountUsageCell', () => {
     expect(wrapper.text()).not.toContain('stale error')
   })
 
+  it('Grok paid usage keeps 7d A/U stats when batch today stats temporarily fall back to zero', async () => {
+    getUsage.mockResolvedValue({
+      grok_billing: {
+        period_type: 'weekly',
+        usage_percent: 42,
+        period_end: '2026-07-17T00:00:00Z'
+      },
+      grok_local_usage_7d: {
+        requests: 12,
+        tokens: 1_250_000,
+        cost: 3.25,
+        standard_cost: 2.75,
+        user_cost: 1.5
+      }
+    })
+
+    const wrapper = mount(AccountUsageCell, {
+      props: {
+        account: makeAccount({ id: 4503, platform: 'grok', type: 'oauth', extra: {} }),
+        todayStats: {
+          requests: 0,
+          tokens: 0,
+          cost: 0,
+          standard_cost: 0,
+          user_cost: 0
+        }
+      },
+      global: {
+        stubs: {
+          UsageProgressBar: {
+            props: ['label', 'utilization', 'resetsAt'],
+            template: '<div class="usage-bar">{{ label }}|{{ utilization }}|{{ resetsAt }}</div>'
+          },
+          AccountQuotaInfo: true,
+          GrokQuotaProbeCell: true
+        }
+      }
+    })
+
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('12 req')
+    expect(wrapper.text()).toContain('1.3M')
+    expect(wrapper.text()).toContain('A $3.25')
+    expect(wrapper.text()).toContain('U $1.50')
+    expect(wrapper.text()).toContain('7d|42|2026-07-17T00:00:00Z')
+  })
+
   it('Grok successful probes immediately clear stale forbidden state', async () => {
     getUsage.mockResolvedValue({
       is_forbidden: true,

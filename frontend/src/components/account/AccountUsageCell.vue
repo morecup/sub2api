@@ -1123,10 +1123,10 @@ const grokIsFree = computed(() => {
 const grokFreeQuotaUsage = computed(() => usageInfo.value?.grok_local_usage_24h || null)
 const grokLocalUsage = computed(() => {
   if (grokIsFree.value) return grokFreeQuotaUsage.value
-  return props.todayStats ||
-    usageInfo.value?.grok_local_usage ||
-    usageInfo.value?.grok_local_usage_7d ||
+  return usageInfo.value?.grok_local_usage_7d ||
     usageInfo.value?.grok_local_usage_monthly ||
+    usageInfo.value?.grok_local_usage ||
+    props.todayStats ||
     null
 })
 const grokFreeTokenBar = computed(() => {
