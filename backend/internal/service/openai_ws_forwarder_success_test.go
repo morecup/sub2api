@@ -749,6 +749,9 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
 	require.Equal(t, codexDesktopUserAgent, captureDialer.lastHeaders.Get("user-agent"))
 	require.Equal(t, codexBetaFeaturesValue, captureDialer.lastHeaders.Get("x-codex-beta-features"))
+	require.Equal(t, "model="+gjson.Get(requestJSON, "model").String(), captureDialer.lastHeaders.Get("x-codex-routing-hint"))
+	require.Empty(t, captureDialer.lastHeaders.Get("x-openai-internal-codex-responses-lite"))
+	require.Empty(t, captureDialer.lastHeaders.Get("cookie"))
 	// OAuth WS 握手按 Codex CLI 画像使用 session-id/thread-id，不再发送 HTTP 兼容的
 	// session_id/conversation_id。测试中未设置 api_key 到 context，apiKeyID=0。
 	wantSessionID := captureDialer.lastHeaders.Get("session-id")
@@ -765,13 +768,19 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.Equal(t, wantSessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, wantSessionID, gjson.Get(meta, "thread_id").String())
 	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.Equal(t, "/root", gjson.Get(meta, "agent_name").String())
 	// 握手 prewarm 的 installation_id 同样按账号派生（account.ID=29）。
 	require.Equal(t, codexInstallationIDForAccount(29, ""), gjson.Get(meta, "installation_id").String())
 	require.Empty(t, gjson.Get(meta, "turn_id").String())
 	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "danger-full-access", gjson.Get(meta, "sandbox_mode").String())
 	require.Equal(t, "prewarm", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, wantSessionID+":0", gjson.Get(meta, "window_id").String())
-	require.True(t, gjson.Get(meta, "workspaces").IsObject())
+	require.Zero(t, gjson.Get(meta, "window_number").Int())
+	require.NotEmpty(t, gjson.Get(meta, "context_window_id").String())
+	require.False(t, gjson.Get(meta, "root_turn_id").Exists())
+	require.False(t, gjson.Get(meta, "turn_trigger").Exists())
+	require.False(t, gjson.Get(meta, "workspaces").Exists())
 	require.False(t, gjson.Get(meta, "turn_started_at_unix_ms").Exists())
 	require.False(t, gjson.Get(meta, "workspace_kind").Exists())
 
@@ -782,10 +791,15 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	// client_metadata 的 installation_id 按账号派生（account.ID=29）。
 	require.Equal(t, codexInstallationIDForAccount(29, ""), gjson.Get(requestJSON, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, wantSessionID+":0", gjson.Get(requestJSON, "client_metadata.x-codex-window-id").String())
+	require.NotEmpty(t, gjson.Get(requestJSON, "client_metadata.x-codex-ws-stream-request-start-ms").String())
+	require.False(t, gjson.Get(requestJSON, "client_metadata.ws_request_header_x_openai_internal_codex_responses_lite").Exists())
 	require.Equal(t, wantSessionID, gjson.Get(payloadMeta, "session_id").String())
 	require.Equal(t, "turn", gjson.Get(payloadMeta, "request_kind").String())
 	require.Equal(t, "user", gjson.Get(payloadMeta, "thread_source").String())
+	require.Equal(t, "composer", gjson.Get(payloadMeta, "turn_trigger").String())
 	require.NotEmpty(t, gjson.Get(payloadMeta, "turn_id").String())
+	require.Equal(t, gjson.Get(payloadMeta, "turn_id").String(), gjson.Get(payloadMeta, "root_turn_id").String())
+	require.Equal(t, gjson.Get(payloadMeta, "root_turn_id").String(), gjson.Get(requestJSON, "client_metadata.root_turn_id").String())
 	require.Greater(t, gjson.Get(payloadMeta, "turn_started_at_unix_ms").Int(), int64(0))
 }
 
@@ -909,6 +923,7 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 		"spoof-turn-state",
 		`{"spoof":true}`,
 		"",
+		"gpt-5.6-terra",
 	)
 	require.NoError(t, err)
 
@@ -921,6 +936,8 @@ func TestOpenAIGatewayService_BuildOpenAIWSHeaders_OAuthFinalMimicSanitizesInbou
 	require.Equal(t, codexDesktopUserAgent, headers.Get("user-agent"))
 	require.Equal(t, "Codex Desktop", headers.Get("originator"))
 	require.Equal(t, codexBetaFeaturesValue, headers.Get("x-codex-beta-features"))
+	require.Equal(t, "model=gpt-5.6-terra", headers.Get("x-codex-routing-hint"))
+	require.Empty(t, headers.Get("x-openai-internal-codex-responses-lite"))
 	require.Equal(t, wantSessionID, headers.Get("session-id"))
 	require.Equal(t, wantSessionID, headers.Get("thread-id"))
 	require.Equal(t, wantSessionID, headers.Get("x-client-request-id"))

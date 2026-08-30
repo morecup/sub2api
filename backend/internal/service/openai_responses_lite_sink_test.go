@@ -283,16 +283,18 @@ func TestApplyCodexOAuthMimicHeadersResponsesLiteConditional(t *testing.T) {
 	}
 
 	liteReq := newReq()
-	applyCodexOAuthMimicHeaders(liteReq, 1, 0, "seed", "", codexDesktopOriginator, false, true)
+	applyCodexOAuthMimicHeaders(liteReq, 1, 0, "seed", "", codexDesktopOriginator, false, true, "gpt-5.6-terra")
 	require.Equal(t, "true", liteReq.Header.Get("x-openai-internal-codex-responses-lite"))
+	require.Equal(t, "model=gpt-5.6-terra", liteReq.Header.Get("x-codex-routing-hint"))
 
 	nonLiteReq := newReq()
-	applyCodexOAuthMimicHeaders(nonLiteReq, 1, 0, "seed", "", codexDesktopOriginator, false, false)
+	applyCodexOAuthMimicHeaders(nonLiteReq, 1, 0, "seed", "", codexDesktopOriginator, false, false, "gpt-5.5")
 	require.Empty(t, nonLiteReq.Header.Get("x-openai-internal-codex-responses-lite"))
+	require.Equal(t, "model=gpt-5.5", nonLiteReq.Header.Get("x-codex-routing-hint"))
 
 	// compact 同样按条件发送。
 	compactReq := newReq()
-	applyCodexOAuthMimicHeaders(compactReq, 1, 0, "seed", "", codexDesktopOriginator, true, true)
+	applyCodexOAuthMimicHeaders(compactReq, 1, 0, "seed", "", codexDesktopOriginator, true, true, "gpt-5.6-luna")
 	require.Equal(t, "true", compactReq.Header.Get("x-openai-internal-codex-responses-lite"))
 }
 

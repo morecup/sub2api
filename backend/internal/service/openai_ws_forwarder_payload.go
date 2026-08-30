@@ -75,6 +75,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	turnState string,
 	turnMetadata string,
 	promptCacheKey string,
+	routingModel ...string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
@@ -146,7 +147,11 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	}
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
-		applyCodexOAuthWSMimicHeaders(headers, account.ID, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata)
+		model := ""
+		if len(routingModel) > 0 {
+			model = routingModel[0]
+		}
+		applyCodexOAuthWSMimicHeaders(headers, account.ID, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata, model)
 		// 终态收口：保证 Desktop originator 与最终 UA 配套。
 		enforceCodexIdentityHeaders(headers)
 	}
@@ -175,6 +180,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSCreatePayload(reqBody map[string]any
 	// OAuth 默认保持 store=false，避免误依赖服务端历史。
 	if account != nil && account.Type == AccountTypeOAuth && !s.isOpenAIWSStoreRecoveryAllowed(account) {
 		payload["store"] = false
+	}
+	if account != nil && account.Type == AccountTypeOAuth {
+		applyCodexWSRequestClientMetadata(payload, openAIWSPayloadString(payload, "model"))
 	}
 	return payload
 }

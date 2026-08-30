@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,20 +19,24 @@ import (
 	"github.com/google/uuid"
 )
 
-// 真实 Codex Desktop App 固定头值（基准：Desktop 26.715.61943 / codex-rs 0.145.0-alpha.27 实抓报文）。
+// 真实 Codex Desktop App 固定头值（基准：Desktop 26.825.41651 / codex-rs 0.151.0-alpha.7.1 实抓报文）。
 const (
 	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（实抓：Desktop App 恒定发送该值）。
 	codexBetaFeaturesValue = "remote_compaction_v2"
 	// codexTurnMetadataSandbox 对应 HTTP POST x-codex-turn-metadata.sandbox 字段（实抓：Desktop App HTTP POST 为 none）。
 	codexTurnMetadataSandbox = "none"
-	// codexDesktopThreadSource 对应 0.145 turn/prewarm metadata 的 thread_source。
+	// codexDesktopThreadSource 对应普通用户 turn/prewarm metadata 的 thread_source。
 	codexDesktopThreadSource = "user"
+	// codexDesktopAgentName 是根任务的 agent_name；若入站 metadata 携带合法的
+	// 子 agent 路径则保留入站值。
+	codexDesktopAgentName = "/root"
+	// codexDesktopTurnTrigger 是普通用户 turn 的触发来源。
+	codexDesktopTurnTrigger = "composer"
+	// codexTurnMetadataSandboxMode 是本地无沙箱用户 turn 的新版 sandbox_mode。
+	codexTurnMetadataSandboxMode = "danger-full-access"
 	// codexResponsesLiteValue 对应 x-openai-internal-codex-responses-lite 头
 	// （上游仅对 responses lite 模型发送该头，见 codexResponsesLiteModels）。
 	codexResponsesLiteValue = "true"
-	// codexOAIAttestationLite 对应 0.145 turn POST 的 x-oai-attestation
-	// （实抓：turn 不再携带 CBOR token，仅 {"v":1,"s":1}；compaction 与 WS prewarm 仍发完整 token）。
-	codexOAIAttestationLite = `{"v":1,"s":1}`
 	// codexDesktopOriginator 对应 originator 头（实抓：Desktop App 为 "Codex Desktop"）。
 	codexDesktopOriginator = "Codex Desktop"
 	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段的兜底值（实抓固定值），
@@ -47,12 +52,12 @@ const (
 )
 
 // Windows 端不使用 Apple DeviceCheck，而是为每个桌面进程生成带 app_session_id 的
-// error_code=1 CBOR envelope。保持进程内稳定、进程间变化，比复用旧抓包 token 更贴近 0.145。
+// error_code=1 CBOR envelope。保持进程内稳定、进程间变化，比复用旧抓包 token 更贴近 0.151。
 var codexOAIAttestation = buildCodexOAIAttestation(uuid.NewString())
 
 // codexResponsesLiteModels 为 responses lite 模型名单（use_responses_lite=true）。
-// 来源：codex-rs models-manager/models.json @ c5eb33aed，2026-07-22 核实，
-// 实抓清单交叉验证 terra=true/5.5=false。名单外模型（gpt-5.5、gpt-5.4、gpt-5.4-mini、
+// 来源：2026-08-30 的 0.151 实抓交叉验证 terra/luna=true、5.5=false。
+// 名单外模型（gpt-5.5、gpt-5.4、gpt-5.4-mini、
 // gpt-5.2、codex-auto-review 等）均为 false。
 var codexResponsesLiteModels = map[string]bool{
 	"gpt-5.6-sol":   true,
@@ -246,16 +251,115 @@ func extractCodexWorkspaces(turnMetadata string) map[string]any {
 	return payload.Workspaces
 }
 
+type codexTurnMetadataProfile struct {
+	AgentName                  string
+	ThreadSource               string
+	TurnTrigger                string
+	Sandbox                    string
+	SandboxMode                string
+	RootTurnID                 string
+	AutoReviewEnabled          bool
+	NodeReplAutoReviewRequired bool
+	NodeReplDisabled           bool
+}
+
+// codexTurnMetadataProfileFromInbound 保留会改变请求语义的少量官方 metadata，
+// 同时把旧版 system 标识归一为 0.151 使用的 thread_title。未知值不透传，
+// 避免入站客户端把任意字符串混入固定 Desktop 画像。
+func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataProfile {
+	profile := codexTurnMetadataProfile{
+		AgentName:    codexDesktopAgentName,
+		ThreadSource: codexDesktopThreadSource,
+		TurnTrigger:  codexDesktopTurnTrigger,
+		Sandbox:      codexTurnMetadataSandbox,
+		SandboxMode:  codexTurnMetadataSandboxMode,
+	}
+	if strings.TrimSpace(turnMetadata) == "" {
+		return profile
+	}
+
+	var inbound struct {
+		AgentName                  string `json:"agent_name"`
+		ThreadSource               string `json:"thread_source"`
+		TurnTrigger                string `json:"turn_trigger"`
+		Sandbox                    string `json:"sandbox"`
+		SandboxMode                string `json:"sandbox_mode"`
+		RootTurnID                 string `json:"root_turn_id"`
+		AutoReviewEnabled          bool   `json:"auto_review_enabled"`
+		NodeReplAutoReviewRequired bool   `json:"node_repl_auto_review_required"`
+		NodeReplDisabled           bool   `json:"node_repl_disabled"`
+	}
+	if err := json.Unmarshal([]byte(turnMetadata), &inbound); err != nil {
+		return profile
+	}
+
+	agentName := strings.TrimSpace(inbound.AgentName)
+	if strings.HasPrefix(agentName, "/") && len(agentName) <= 128 {
+		profile.AgentName = agentName
+	}
+	isThreadTitle := inbound.ThreadSource == "thread_title" ||
+		inbound.ThreadSource == "system" || inbound.TurnTrigger == "thread_title"
+	if isThreadTitle {
+		profile.ThreadSource = "thread_title"
+		profile.TurnTrigger = "thread_title"
+		profile.Sandbox = "windows_elevated"
+		profile.SandboxMode = "read-only"
+	}
+	if inbound.ThreadSource == codexDesktopThreadSource && !isThreadTitle {
+		profile.ThreadSource = codexDesktopThreadSource
+	}
+	if inbound.TurnTrigger == codexDesktopTurnTrigger && !isThreadTitle {
+		profile.TurnTrigger = codexDesktopTurnTrigger
+	}
+	if !isThreadTitle {
+		switch inbound.Sandbox {
+		case "none", "windows_elevated":
+			profile.Sandbox = inbound.Sandbox
+		}
+		switch inbound.SandboxMode {
+		case "read-only", "workspace-write", "danger-full-access":
+			profile.SandboxMode = inbound.SandboxMode
+		}
+	}
+	if rootTurnID := strings.TrimSpace(inbound.RootTurnID); rootTurnID != "" {
+		if _, err := uuid.Parse(rootTurnID); err == nil {
+			profile.RootTurnID = rootTurnID
+		}
+	}
+	profile.AutoReviewEnabled = inbound.AutoReviewEnabled
+	profile.NodeReplAutoReviewRequired = inbound.NodeReplAutoReviewRequired
+	profile.NodeReplDisabled = inbound.NodeReplDisabled
+	return profile
+}
+
+// generateCodexContextWindowUUID 为同一 session 派生稳定且不同的 UUIDv7 形态标识。
+// 保留 session 的前 48 位时间戳，使两者外观与真实 Desktop 同时创建的 UUID 一致。
+func generateCodexContextWindowUUID(sessionUUID string) string {
+	sum := sha256.Sum256([]byte("codex-context-window:" + sessionUUID))
+	var contextWindowID uuid.UUID
+	if sessionID, err := uuid.Parse(strings.TrimSpace(sessionUUID)); err == nil {
+		copy(contextWindowID[:6], sessionID[:6])
+	} else {
+		copy(contextWindowID[:6], sum[:6])
+	}
+	copy(contextWindowID[6:], sum[:10])
+	contextWindowID[6] = (contextWindowID[6] & 0x0f) | 0x70
+	contextWindowID[8] = (contextWindowID[8] & 0x3f) | 0x80
+	return contextWindowID.String()
+}
+
 // buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合与顺序严格对齐真实 Codex
-// Desktop App 0.145.0-alpha.27 实抓报文（普通一轮 request_kind=turn）：
-// installation_id, session_id, thread_id, turn_id, window_id, request_kind, thread_source,
-// sandbox, workspaces, turn_started_at_unix_ms, workspace_kind。
+// Desktop App 0.151.0-alpha.7.1 实抓报文（普通一轮 request_kind=turn）：
+// installation_id, session_id, thread_id, agent_name, turn_id, window_id, window_number,
+// context_window_id, request_kind, root_turn_id, thread_source, turn_trigger, sandbox,
+// sandbox_mode, auto_review_enabled, node_repl_auto_review_required, node_repl_disabled,
+// workspaces, turn_started_at_unix_ms, workspace_kind。
 // turn_id 为每请求新生成的 UUIDv7；session_id/thread_id 复用会话 UUID。
 // 注意：workspace_kind 仅在 workspaces 非空时出现（实抓恒为 "project"），
 // 系统 turn / compaction 等无 workspaces 的场景不发送该字段。
 // workspaces 优先使用入站 x-codex-turn-metadata 中的客户端值（代理端无法获知本地 git 信息），
 // 未提供时回退空对象 {} 以保持字段集合一致。
-func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
+func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string, inboundMetadata ...string) string {
 	turnID := sessionUUID
 	if v, err := uuid.NewV7(); err == nil {
 		turnID = v.String()
@@ -266,32 +370,59 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 	if strings.TrimSpace(installationID) == "" {
 		installationID = codexInstallationID
 	}
-	meta := struct {
-		InstallationID      string         `json:"installation_id"`
-		SessionID           string         `json:"session_id"`
-		ThreadID            string         `json:"thread_id"`
-		TurnID              string         `json:"turn_id"`
-		WindowID            string         `json:"window_id"`
-		RequestKind         string         `json:"request_kind"`
-		ThreadSource        string         `json:"thread_source"`
-		Sandbox             string         `json:"sandbox"`
-		Workspaces          map[string]any `json:"workspaces"`
-		TurnStartedAtUnixMs int64          `json:"turn_started_at_unix_ms"`
-		WorkspaceKind       string         `json:"workspace_kind,omitempty"`
-	}{
-		InstallationID:      installationID,
-		SessionID:           sessionUUID,
-		ThreadID:            sessionUUID,
-		TurnID:              turnID,
-		WindowID:            windowID,
-		RequestKind:         "turn",
-		ThreadSource:        codexDesktopThreadSource,
-		Sandbox:             codexTurnMetadataSandbox,
-		Workspaces:          workspaces,
-		TurnStartedAtUnixMs: time.Now().UnixMilli(),
+	profile := codexTurnMetadataProfileFromInbound("")
+	if len(inboundMetadata) > 0 {
+		profile = codexTurnMetadataProfileFromInbound(inboundMetadata[0])
 	}
-	// 0.145 实抓：workspaces 非空时末尾带 workspace_kind="project"；空 workspaces 不出现该字段。
-	if len(workspaces) > 0 {
+	rootTurnID := turnID
+	if profile.RootTurnID != "" {
+		rootTurnID = profile.RootTurnID
+	}
+	meta := struct {
+		InstallationID             string         `json:"installation_id"`
+		SessionID                  string         `json:"session_id"`
+		ThreadID                   string         `json:"thread_id"`
+		AgentName                  string         `json:"agent_name"`
+		TurnID                     string         `json:"turn_id"`
+		WindowID                   string         `json:"window_id"`
+		WindowNumber               int            `json:"window_number"`
+		ContextWindowID            string         `json:"context_window_id"`
+		RequestKind                string         `json:"request_kind"`
+		RootTurnID                 string         `json:"root_turn_id"`
+		ThreadSource               string         `json:"thread_source"`
+		TurnTrigger                string         `json:"turn_trigger"`
+		Sandbox                    string         `json:"sandbox"`
+		SandboxMode                string         `json:"sandbox_mode"`
+		AutoReviewEnabled          bool           `json:"auto_review_enabled"`
+		NodeReplAutoReviewRequired bool           `json:"node_repl_auto_review_required"`
+		NodeReplDisabled           bool           `json:"node_repl_disabled"`
+		Workspaces                 map[string]any `json:"workspaces"`
+		TurnStartedAtUnixMs        int64          `json:"turn_started_at_unix_ms"`
+		WorkspaceKind              string         `json:"workspace_kind,omitempty"`
+	}{
+		InstallationID:             installationID,
+		SessionID:                  sessionUUID,
+		ThreadID:                   sessionUUID,
+		AgentName:                  profile.AgentName,
+		TurnID:                     turnID,
+		WindowID:                   windowID,
+		WindowNumber:               0,
+		ContextWindowID:            generateCodexContextWindowUUID(sessionUUID),
+		RequestKind:                "turn",
+		RootTurnID:                 rootTurnID,
+		ThreadSource:               profile.ThreadSource,
+		TurnTrigger:                profile.TurnTrigger,
+		Sandbox:                    profile.Sandbox,
+		SandboxMode:                profile.SandboxMode,
+		AutoReviewEnabled:          profile.AutoReviewEnabled,
+		NodeReplAutoReviewRequired: profile.NodeReplAutoReviewRequired,
+		NodeReplDisabled:           profile.NodeReplDisabled,
+		Workspaces:                 workspaces,
+		TurnStartedAtUnixMs:        time.Now().UnixMilli(),
+	}
+	// 0.151 实抓：普通 composer turn 的项目 workspace 带 workspace_kind；
+	// thread_title 即使携带 workspaces 也不发送该字段。
+	if len(workspaces) > 0 && profile.ThreadSource == codexDesktopThreadSource && profile.TurnTrigger == codexDesktopTurnTrigger {
 		meta.WorkspaceKind = "project"
 	}
 	b, err := json.Marshal(meta)
@@ -302,36 +433,45 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 }
 
 // buildCodexWSPrewarmMetadata 生成 WS prewarm 的 x-codex-turn-metadata 头 JSON 值，
-// 字段集合与顺序对齐 Codex Desktop App 0.145.0-alpha.27 实抓报文：
-// installation_id, session_id, thread_id, turn_id, window_id, request_kind,
-// thread_source, sandbox, workspaces。prewarm 不含 turn_started_at_unix_ms 与 workspace_kind。
-func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[string]any, installationID string) string {
-	if workspaces == nil {
-		workspaces = map[string]any{}
-	}
+// 字段集合与顺序对齐 Codex Desktop App 0.151.0-alpha.7.1 实抓报文。
+// prewarm 不含 root_turn_id、turn_trigger、workspaces、turn_started_at_unix_ms 与 workspace_kind。
+func buildCodexWSPrewarmMetadata(sessionUUID, windowID, installationID, inboundMetadata string) string {
 	if strings.TrimSpace(installationID) == "" {
 		installationID = codexInstallationID
 	}
+	profile := codexTurnMetadataProfileFromInbound(inboundMetadata)
 	meta := struct {
-		InstallationID string         `json:"installation_id"`
-		SessionID      string         `json:"session_id"`
-		ThreadID       string         `json:"thread_id"`
-		TurnID         string         `json:"turn_id"`
-		WindowID       string         `json:"window_id"`
-		RequestKind    string         `json:"request_kind"`
-		ThreadSource   string         `json:"thread_source"`
-		Sandbox        string         `json:"sandbox"`
-		Workspaces     map[string]any `json:"workspaces"`
+		InstallationID             string `json:"installation_id"`
+		SessionID                  string `json:"session_id"`
+		ThreadID                   string `json:"thread_id"`
+		AgentName                  string `json:"agent_name"`
+		TurnID                     string `json:"turn_id"`
+		WindowID                   string `json:"window_id"`
+		WindowNumber               int    `json:"window_number"`
+		ContextWindowID            string `json:"context_window_id"`
+		RequestKind                string `json:"request_kind"`
+		ThreadSource               string `json:"thread_source"`
+		Sandbox                    string `json:"sandbox"`
+		SandboxMode                string `json:"sandbox_mode"`
+		AutoReviewEnabled          bool   `json:"auto_review_enabled"`
+		NodeReplAutoReviewRequired bool   `json:"node_repl_auto_review_required"`
+		NodeReplDisabled           bool   `json:"node_repl_disabled"`
 	}{
-		InstallationID: installationID,
-		SessionID:      sessionUUID,
-		ThreadID:       sessionUUID,
-		TurnID:         "",
-		WindowID:       windowID,
-		RequestKind:    "prewarm",
-		ThreadSource:   codexDesktopThreadSource,
-		Sandbox:        codexTurnMetadataSandbox,
-		Workspaces:     workspaces,
+		InstallationID:             installationID,
+		SessionID:                  sessionUUID,
+		ThreadID:                   sessionUUID,
+		AgentName:                  profile.AgentName,
+		TurnID:                     "",
+		WindowID:                   windowID,
+		WindowNumber:               0,
+		ContextWindowID:            generateCodexContextWindowUUID(sessionUUID),
+		RequestKind:                "prewarm",
+		ThreadSource:               profile.ThreadSource,
+		Sandbox:                    profile.Sandbox,
+		SandboxMode:                profile.SandboxMode,
+		AutoReviewEnabled:          profile.AutoReviewEnabled,
+		NodeReplAutoReviewRequired: profile.NodeReplAutoReviewRequired,
+		NodeReplDisabled:           profile.NodeReplDisabled,
 	}
 	b, err := json.Marshal(meta)
 	if err != nil {
@@ -340,7 +480,7 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID string, workspaces map[st
 	return string(b)
 }
 
-// codexDefaultCompactionProfile 为 0.145.0-alpha.27 实抓手动压缩请求的默认 compaction 对象
+// codexDefaultCompactionProfile 为 0.151.0-alpha.7.1 实抓手动压缩请求的默认 compaction 对象
 // （入站 metadata 未携带 compaction 字段时回退使用）。
 const codexDefaultCompactionProfile = `{"trigger":"manual","reason":"user_requested","implementation":"responses_compaction_v2","phase":"standalone_turn","strategy":"memento"}`
 
@@ -369,11 +509,10 @@ func extractCodexCompactionRequest(turnMetadata string) (json.RawMessage, bool) 
 }
 
 // buildCodexCompactionMetadata 生成手动压缩请求的 x-codex-turn-metadata 头 JSON 值，
-// 字段集合与顺序对齐 Codex Desktop App 0.145.0-alpha.27 实抓报文：
-// installation_id, session_id, thread_id, turn_id, window_id, request_kind="compaction",
-// thread_source, sandbox, turn_started_at_unix_ms, compaction。compaction 请求不含 workspaces。
+// 字段集合与顺序对齐 Codex Desktop App 0.151.0-alpha.7.1 实抓报文。
+// compaction 请求不含 root_turn_id、turn_trigger 与 workspaces。
 // turn_id 为每请求新生成的 UUIDv7；compaction 对象原样保留入站值，为空时回退实抓默认画像。
-func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, compaction json.RawMessage) string {
+func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, compaction json.RawMessage, inboundMetadata ...string) string {
 	turnID := ""
 	if v, err := uuid.NewV7(); err == nil {
 		turnID = v.String()
@@ -384,28 +523,46 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 	if len(compaction) == 0 {
 		compaction = json.RawMessage(codexDefaultCompactionProfile)
 	}
+	profile := codexTurnMetadataProfileFromInbound("")
+	if len(inboundMetadata) > 0 {
+		profile = codexTurnMetadataProfileFromInbound(inboundMetadata[0])
+	}
 	meta := struct {
-		InstallationID      string          `json:"installation_id"`
-		SessionID           string          `json:"session_id"`
-		ThreadID            string          `json:"thread_id"`
-		TurnID              string          `json:"turn_id"`
-		WindowID            string          `json:"window_id"`
-		RequestKind         string          `json:"request_kind"`
-		ThreadSource        string          `json:"thread_source"`
-		Sandbox             string          `json:"sandbox"`
-		TurnStartedAtUnixMs int64           `json:"turn_started_at_unix_ms"`
-		Compaction          json.RawMessage `json:"compaction"`
+		InstallationID             string          `json:"installation_id"`
+		SessionID                  string          `json:"session_id"`
+		ThreadID                   string          `json:"thread_id"`
+		AgentName                  string          `json:"agent_name"`
+		TurnID                     string          `json:"turn_id"`
+		WindowID                   string          `json:"window_id"`
+		WindowNumber               int             `json:"window_number"`
+		ContextWindowID            string          `json:"context_window_id"`
+		RequestKind                string          `json:"request_kind"`
+		ThreadSource               string          `json:"thread_source"`
+		Sandbox                    string          `json:"sandbox"`
+		SandboxMode                string          `json:"sandbox_mode"`
+		AutoReviewEnabled          bool            `json:"auto_review_enabled"`
+		NodeReplAutoReviewRequired bool            `json:"node_repl_auto_review_required"`
+		NodeReplDisabled           bool            `json:"node_repl_disabled"`
+		TurnStartedAtUnixMs        int64           `json:"turn_started_at_unix_ms"`
+		Compaction                 json.RawMessage `json:"compaction"`
 	}{
-		InstallationID:      installationID,
-		SessionID:           sessionUUID,
-		ThreadID:            sessionUUID,
-		TurnID:              turnID,
-		WindowID:            windowID,
-		RequestKind:         "compaction",
-		ThreadSource:        codexDesktopThreadSource,
-		Sandbox:             codexTurnMetadataSandbox,
-		TurnStartedAtUnixMs: time.Now().UnixMilli(),
-		Compaction:          compaction,
+		InstallationID:             installationID,
+		SessionID:                  sessionUUID,
+		ThreadID:                   sessionUUID,
+		AgentName:                  profile.AgentName,
+		TurnID:                     turnID,
+		WindowID:                   windowID,
+		WindowNumber:               0,
+		ContextWindowID:            generateCodexContextWindowUUID(sessionUUID),
+		RequestKind:                "compaction",
+		ThreadSource:               profile.ThreadSource,
+		Sandbox:                    profile.Sandbox,
+		SandboxMode:                profile.SandboxMode,
+		AutoReviewEnabled:          profile.AutoReviewEnabled,
+		NodeReplAutoReviewRequired: profile.NodeReplAutoReviewRequired,
+		NodeReplDisabled:           profile.NodeReplDisabled,
+		TurnStartedAtUnixMs:        time.Now().UnixMilli(),
+		Compaction:                 compaction,
 	}
 	b, err := json.Marshal(meta)
 	if err != nil {
@@ -422,10 +579,10 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 // sessionSeed 为隔离前的原始会话种子；为空时回退随机 UUIDv7，
 // 以保证 session-id/thread-id 始终存在（与真实 Codex 行为一致）。
 //
-// responsesLite 控制是否发送 x-openai-internal-codex-responses-lite 头：上游
-// （codex-rs client.rs add_responses_lite_header）仅在 responses lite 模型时发送，
-// 合成路径按出站最终模型判定，透传路径按入站头原样保留（调用方计算后传入）。
-func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator string, isCompact bool, responsesLite bool) {
+// responsesLite 控制是否发送 x-openai-internal-codex-responses-lite 头；合成路径
+// 按最终模型判定，透传路径也允许入站标记作为前向兼容信号。model 是可选的
+// 最终上游模型，用于发送 x-codex-routing-hint: model=<实际模型>。
+func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator string, isCompact bool, responsesLite bool, model ...string) {
 	if req == nil {
 		return
 	}
@@ -442,6 +599,10 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
 	_ = originator
+	actualModel := ""
+	if len(model) > 0 {
+		actualModel = strings.TrimSpace(model[0])
+	}
 
 	// User-Agent 无条件强制为 Codex Desktop 画像（忽略入站 UA），后续调用方不得覆盖。
 	req.Header.Set("user-agent", codexDesktopUserAgent)
@@ -453,16 +614,15 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	if responsesLite {
 		req.Header.Set("x-openai-internal-codex-responses-lite", codexResponsesLiteValue)
 	}
+	if actualModel != "" {
+		req.Header.Set("x-codex-routing-hint", "model="+actualModel)
+	}
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("originator", codexDesktopOriginator)
-	// x-oai-attestation：0.145 实抓 turn POST 仅发 {"v":1,"s":1}；
-	// compact POST 与 WS prewarm 仍发完整 CBOR token（app_session_id 按账号派生）。
-	if isCompact {
-		req.Header.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
-	} else {
-		req.Header.Set("x-oai-attestation", codexOAIAttestationLite)
-	}
+	// 0.151 实抓：普通 turn、手动 compaction 与 WS prewarm 均恢复完整
+	// s=0 CBOR token（app_session_id 按账号派生）。
+	req.Header.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
 
 	if isCompact {
 		req.Header.Set("accept", "application/json")
@@ -488,12 +648,12 @@ func applyCodexOAuthMimicHeaders(req *http.Request, accountID, apiKeyID int64, s
 	// x-client-request-id 与真实 Codex 一致，取 thread-id（实抓三者同值）。
 	req.Header.Set("x-client-request-id", sessUUID)
 	req.Header.Set("x-codex-window-id", windowID)
-	// 0.145 实抓：手动压缩请求的 metadata request_kind="compaction"、无 workspaces，
+	// 0.151 实抓：手动压缩请求的 metadata request_kind="compaction"、无 workspaces，
 	// compaction 对象原样保留入站值；普通一轮仍走 turn 画像。
 	if compaction, isCompaction := extractCodexCompactionRequest(inboundTurnMetadata); isCompaction {
-		req.Header.Set("x-codex-turn-metadata", buildCodexCompactionMetadata(sessUUID, windowID, installationID, compaction))
+		req.Header.Set("x-codex-turn-metadata", buildCodexCompactionMetadata(sessUUID, windowID, installationID, compaction, inboundTurnMetadata))
 	} else {
-		req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces, installationID))
+		req.Header.Set("x-codex-turn-metadata", buildCodexTurnMetadata(sessUUID, windowID, inboundWorkspaces, installationID, inboundTurnMetadata))
 	}
 }
 
@@ -524,7 +684,7 @@ func syncCodexOAuthMimicRequestBody(req *http.Request, body []byte, isCompact bo
 // applyCodexOAuthWSMimicHeaders 将 OAuth 上游 WebSocket 握手业务头重建为 Codex Desktop App 画像。
 // WebSocket 协议层头（Host/Upgrade/Sec-WebSocket-*）由底层 WS 库生成；这里仅处理
 // Codex/OpenAI 业务头，避免把 HTTP 兼容头（session_id/conversation_id 等）带到握手里。
-func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator, turnMetadata string) {
+func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int64, sessionSeed, fixedSessionID, originator, turnMetadata string, model ...string) {
 	if headers == nil {
 		return
 	}
@@ -547,6 +707,11 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int6
 	headers.Set("openai-beta", openAIWSBetaV2Value)
 	headers.Set("originator", codexDesktopOriginator)
 	headers.Set("x-codex-beta-features", codexBetaFeaturesValue)
+	if len(model) > 0 {
+		if actualModel := strings.TrimSpace(model[0]); actualModel != "" {
+			headers.Set("x-codex-routing-hint", "model="+actualModel)
+		}
+	}
 	// x-oai-attestation 为 Desktop App 特有的证明头（app_session_id 按账号派生）。
 	headers.Set("x-oai-attestation", codexOAIAttestationForAccount(accountID, chatgptAccountID))
 
@@ -568,10 +733,52 @@ func applyCodexOAuthWSMimicHeaders(headers http.Header, accountID, apiKeyID int6
 	headers.Set("x-client-request-id", sessUUID)
 	headers.Set("x-codex-window-id", windowID)
 
-	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID, extractCodexWorkspaces(turnMetadata), installationID)
+	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID, installationID, turnMetadata)
 	if metadata != "" {
 		headers.Set("x-codex-turn-metadata", metadata)
 	}
+}
+
+// applyCodexWSRequestClientMetadata 对齐 0.151 WS response.create 的传输专用
+// client_metadata。Lite 标记不再出现在握手头中，而是只写入 payload。
+func applyCodexWSRequestClientMetadata(reqBody map[string]any, model string) bool {
+	if reqBody == nil {
+		return false
+	}
+	var clientMetadata map[string]any
+	switch existing := reqBody["client_metadata"].(type) {
+	case map[string]any:
+		clientMetadata = existing
+	case map[string]string:
+		clientMetadata = make(map[string]any, len(existing)+2)
+		for key, value := range existing {
+			clientMetadata[key] = value
+		}
+	default:
+		clientMetadata = make(map[string]any, 2)
+	}
+
+	modified := false
+	if value, ok := clientMetadata["x-codex-ws-stream-request-start-ms"].(string); !ok || strings.TrimSpace(value) == "" {
+		clientMetadata["x-codex-ws-stream-request-start-ms"] = strconv.FormatInt(time.Now().UnixMilli(), 10)
+		modified = true
+	}
+	if actualModel := strings.TrimSpace(model); actualModel != "" {
+		if isCodexResponsesLiteModel(actualModel) {
+			if value, ok := clientMetadata[responsesLiteWSMetadataKey].(string); !ok || value != codexResponsesLiteValue {
+				clientMetadata[responsesLiteWSMetadataKey] = codexResponsesLiteValue
+				modified = true
+			}
+		} else if _, exists := clientMetadata[responsesLiteWSMetadataKey]; exists {
+			delete(clientMetadata, responsesLiteWSMetadataKey)
+			modified = true
+		}
+	}
+	if !modified {
+		return false
+	}
+	reqBody["client_metadata"] = clientMetadata
+	return true
 }
 
 // codexRequestCompressionEnabled 是否对 OAuth Codex 上游请求体启用 zstd 压缩（默认启用）。

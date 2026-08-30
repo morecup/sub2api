@@ -648,7 +648,8 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		// Set OAuth-specific headers for ChatGPT internal API
 		if isOAuth {
 			req.Host = "chatgpt.com"
-			applyCodexOAuthMimicHeaders(req, account.ID, 0, sessionSeed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(upstreamTestModelID))
+			applyCodexOAuthMimicHeaders(req, account.ID, 0, sessionSeed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(upstreamTestModelID), upstreamTestModelID)
+			applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, false)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)
@@ -994,7 +995,8 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 
 	if isOAuth {
 		req.Host = "chatgpt.com"
-		applyCodexOAuthMimicHeaders(req, account.ID, 0, probeSessionID, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, true, isCodexResponsesLiteModel(testModelID))
+		applyCodexOAuthMimicHeaders(req, account.ID, 0, probeSessionID, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, true, isCodexResponsesLiteModel(testModelID), testModelID)
+		applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 		payloadBytes, err = syncCodexOAuthMimicRequestBody(req, payloadBytes, true)
 		if err != nil {
 			return s.sendErrorAndEnd(c, "Failed to apply Codex request metadata")
@@ -1903,7 +1905,8 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 		} else {
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}
-		applyCodexOAuthMimicHeaders(req, account.ID, 0, parsed.StickySessionSeed(), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(parsed.Model))
+		applyCodexOAuthMimicHeaders(req, account.ID, 0, parsed.StickySessionSeed(), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(parsed.Model), parsed.Model)
+		applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 		body, err = syncCodexOAuthMimicRequestBody(req, body, false)
 		if err != nil {
 			return nil, fmt.Errorf("apply codex client metadata: %w", err)

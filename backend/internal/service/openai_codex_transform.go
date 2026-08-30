@@ -1324,12 +1324,12 @@ func ensureCodexReasoningInclude(reqBody map[string]any) bool {
 	}
 }
 
-// applyCodexClientMetadata 写入 Desktop 0.144 的 client_metadata 画像。
+// applyCodexClientMetadata 写入 Desktop 0.151 的 client_metadata 画像。
 // installationID 为按账号派生的安装标识；去空白后为空时，若 turnMetadata 可解析且含
 // installation_id 则用之，否则回退实抓固定值 codexInstallationID。
 // 未提供 turn metadata 时保留旧行为，只注入 installation id；提供时把 header 中的
-// session/thread/turn/window 标识同步进 body，并把 prompt_cache_key 对齐为 session_id
-// （0.145 实抓二者恒等），确保同一请求不存在两套身份元数据。
+// session/thread/turn/root-turn/window 标识同步进 body，并把 prompt_cache_key 对齐为
+// session_id，确保同一请求不存在两套身份元数据。
 func applyCodexClientMetadata(reqBody map[string]any, installationID string, turnMetadata ...string) bool {
 	if reqBody == nil {
 		return false
@@ -1337,6 +1337,7 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 
 	installationID = strings.TrimSpace(installationID)
 	values := map[string]string{}
+	metadataParsed := false
 	if len(turnMetadata) > 0 {
 		metadata := strings.TrimSpace(turnMetadata[0])
 		if metadata != "" {
@@ -1345,15 +1346,18 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 				SessionID      string `json:"session_id"`
 				ThreadID       string `json:"thread_id"`
 				TurnID         string `json:"turn_id"`
+				RootTurnID     string `json:"root_turn_id"`
 				WindowID       string `json:"window_id"`
 			}
 			if err := json.Unmarshal([]byte(metadata), &parsed); err == nil {
+				metadataParsed = true
 				if installationID == "" {
 					installationID = strings.TrimSpace(parsed.InstallationID)
 				}
 				values["session_id"] = parsed.SessionID
 				values["thread_id"] = parsed.ThreadID
 				values["turn_id"] = parsed.TurnID
+				values["root_turn_id"] = parsed.RootTurnID
 				values["x-codex-window-id"] = parsed.WindowID
 				values["x-codex-turn-metadata"] = metadata
 			}
@@ -1381,6 +1385,13 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 	}
 
 	modified := false
+	if metadataParsed && strings.TrimSpace(values["root_turn_id"]) == "" {
+		if _, exists := clientMetadata["root_turn_id"]; exists {
+			delete(clientMetadata, "root_turn_id")
+			modified = true
+		}
+		delete(values, "root_turn_id")
+	}
 	for key, value := range values {
 		if existing, ok := clientMetadata[key].(string); ok && existing == value {
 			continue
@@ -1388,7 +1399,7 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 		clientMetadata[key] = value
 		modified = true
 	}
-	// 0.145 实抓：prompt_cache_key 与 session-id 头恒等；有可解析的 session_id 时
+	// 0.151 实抓：prompt_cache_key 与 session-id 头恒等；有可解析的 session_id 时
 	// 强制把 body 的 prompt_cache_key 对齐（覆盖客户端原值）。无 metadata 时不处理。
 	if sessionID := strings.TrimSpace(values["session_id"]); sessionID != "" {
 		if existing, ok := reqBody["prompt_cache_key"].(string); !ok || existing != sessionID {

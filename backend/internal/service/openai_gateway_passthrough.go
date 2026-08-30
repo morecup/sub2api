@@ -435,10 +435,12 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		if seed == "" && isCompact {
 			seed = resolveOpenAICompactMimicSessionID(c)
 		}
-		// 透传路径：responses-lite 头按入站原样保留（入站有就透，没有就不加）；
-		// 入站头经白名单复制进 req.Header，伪装层重建头部前取出判定。
+		// 透传路径保留入站 Lite 标记作为前向兼容信号（未来模型可能尚未进入本地名单）；
+		// 实际出站模型另用于 routing hint。
 		responsesLite := isOpenAIResponsesLiteHeader(req.Header.Get(responsesLiteHeader))
-		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite)
+		actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite, actualModel)
+		applyCodexDesktopOptionalCookie(req.Header, account)
 		body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 		if err != nil {
 			return nil, fmt.Errorf("apply codex client metadata: %w", err)

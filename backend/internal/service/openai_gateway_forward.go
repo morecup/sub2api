@@ -1143,7 +1143,9 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			}
 			// 合成路径：responses-lite 头仅对出站 lite 模型发送（对齐上游按模型条件发送）。
 			responsesLite := isCodexResponsesLiteModel(gjson.GetBytes(body, "model").String())
-			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite)
+			actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite, actualModel)
+			applyCodexDesktopOptionalCookie(req.Header, account)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 			if err != nil {
 				return nil, fmt.Errorf("apply codex client metadata: %w", err)

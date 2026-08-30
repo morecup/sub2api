@@ -10,6 +10,7 @@ sub2api 伪装层（`backend/internal/service/openai_codex_mimic.go`）的对齐
 | `2026-06-21_0.142.0-alpha.6/` | 26.616.6631.0 | 0.142.0-alpha.6 | 2026-06-21 | 首轮抓包（WS 426 拦截 → HTTP SSE 回退） |
 | `2026-07-21_0.145.0-alpha.27/` | 26.715.8383.0 | 0.145.0-alpha.27 | 2026-07-21/22 | 第二轮抓包，含 0.144→0.145 diff 与风控记录 |
 | `2026-07-22_0.145.0-alpha.27/` | 26.715.8383.0 | 0.145.0-alpha.27 | 2026-07-22 | 补充抓包：`/wham/rate-limit-reset-credits` GET（实抓）与 consume（手工构造） |
+| `2026-08-30_0.151.0-alpha.7.1/` | 26.825.41651 | 0.151.0-alpha.7.1 | 2026-08-30 | WS、HTTP 回退、Lite/非 Lite、附件与 compaction；仅提交脱敏结论 |
 
 ## 抓包方法（两轮相同）
 
@@ -23,6 +24,11 @@ sub2api 伪装层（`backend/internal/service/openai_codex_mimic.go`）的对齐
 
 ## 跨版本要点
 
+- 0.151 新增 `x-codex-routing-hint: model=<实际模型>`。
+- 0.151 普通 turn 恢复完整 `s=0 + token` attestation；0.145 的 `s=1` 已过时。
+- 0.151 WS 的 Lite 标记位于 `response.create.client_metadata`，握手不发送 Lite 头。
+- 0.151 turn metadata 新增 agent/window/context/root/trigger/sandbox-mode/auto-review/node-repl 字段。
+- 0.151 WebView UA 新增 `CodexBrowser` 前缀并升级到 Chrome 151。
 - 0.145 新增 `x-openai-internal-codex-responses-lite: true`（responses-lite 模型）。
 - 0.145 turn POST 的 attestation 简化为 `{"v":1,"s":1}`（不带 CBOR token）；
   prewarm / compaction 仍带完整 token。
@@ -34,7 +40,7 @@ sub2api 伪装层（`backend/internal/service/openai_codex_mimic.go`）的对齐
 
 ## 注意
 
-- 归档文件均为**未脱敏**原始记录（含 JWT、cookie）——账号为临时测试 free 号，
-  按需求原样留存；注意不要外发整个目录。
+- 2026-08-30 起只提交脱敏结论；原始流量放在 Git 忽略目录，禁止提交或外发。
+- 早期 0.142/0.145 归档仍包含**未脱敏**原始记录（含 JWT、cookie），不要外发整个目录。
 - 两个抓包日期的账号均为临时测试号，其中 2026-07-21 的第一个账号
   （KarlRemien...）在登录约 2 分钟后被服务端吊销 token（详见 0.145 目录 README）。

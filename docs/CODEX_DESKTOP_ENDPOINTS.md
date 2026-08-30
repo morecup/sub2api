@@ -1,166 +1,99 @@
 # Codex Desktop App API Endpoints
 
-从 Codex 桌面端 Electron 应用（`app.asar`，版本 26.616.6631.0）中提取的四个管理接口。
+Codex 桌面端管理接口与请求画像。当前基准为 2026-08-30 实抓的
+Codex App `26.825.41651`、codex-rs `0.151.0-alpha.7.1`、Owl/Chrome `151.0.7922.174`。
 
-> **2026-07-22 更新**（依据 26.715.61943 实抓，见 `codex-desktop-capture/2026-07-22_0.145.0-alpha.27/`）：
-> 1. 实抓请求中**未出现** `X-OpenAI-Attach-Auth` / `X-OpenAI-Attach-Integrity-State`，26.715 疑似已移除这两个头。
-> 2. 「CLI 没有这些接口」已过时：0.145 的 codex-rs 新增 `backend-client/src/client/rate_limit_resets.rs`
->    （GET/consume 均支持，`credit_id` 可选），并有 TUI 兑换流程与 app-server JSONRPC 处理器
->    （`account/rateLimits/read` 并发拉取 `/wham/usage` + `/wham/rate-limit-reset-credits`）。
+Base URL：`https://chatgpt.com/backend-api`
 
-Base URL: `https://chatgpt.com/backend-api`
+## 0.151 WebView 请求画像
 
-## 通用请求头
+管理接口由 Owl WebView 发出，与 `/codex/responses` 使用的 Rust 客户端画像不同：
 
-所有接口通过统一的 API 客户端（`request-BypB0TG1.js` 中的 `p` 实例）发出，自动携带以下头：
-
-| Header | 值 | 说明 |
-|---|---|---|
-| `Authorization` | `Bearer <jwt>` | Electron 主进程注入的 OAuth JWT |
-| `ChatGPT-Account-Id` | `<account_uuid>` | Electron 主进程注入的账号 ID |
-| `OAI-Language` | `en` | UI 语言标识，可变 |
-| `X-OpenAI-Attach-Auth` | `1` | 桌面端特有，CLI 不发送 |
-| `X-OpenAI-Attach-Integrity-State` | `1` | 桌面端特有，CLI 不发送 |
-| `originator` | `Codex Desktop` | 桌面端标识，区别于 CLI 的 `codex_cli_rs` |
-
-POST 请求额外携带：
-
-| Header | 值 |
+| Header | 当前值或语义 |
 |---|---|
-| `Content-Type` | `application/json` |
+| `Authorization` | `Bearer <redacted>` |
+| `ChatGPT-Account-Id` | `<redacted>` |
+| `User-Agent` | `CodexBrowser Mozilla/5.0 ... Chrome/151.0.0.0 ...` |
+| `OAI-Language` | UI 语言，可变 |
+| `Accept-Language` | 系统 WebView 语言，可变 |
+| `originator` | 通常为 `Codex Desktop`；少数通用 ChatGPT 接口为 `Codex Browser` |
+| `Sentry-Trace` | release 固定画像中的零 trace |
+| `Baggage` | `sentry-release=codex%4026.825.41651` 等固定 release 信息 |
+| `Accept-Encoding` | `gzip, deflate, br, zstd` |
+| `Sec-Fetch-Site` / `Mode` / `Dest` | `none` / `no-cors` / `empty` |
+| `Priority` | `u=4, i` |
+| `Cookie` | 登录 WebView 会话 cookie；服务端只能使用账号保存的 cookie，不应透传调用方 cookie |
+
+POST 请求另带 `Content-Type: application/json`。
+
+从 26.715 开始，实抓已不再出现旧版
+`X-OpenAI-Attach-Auth` / `X-OpenAI-Attach-Integrity-State`；26.825 仍未恢复，
+因此当前实现不发送这两个头。
 
 ## 接口 1：查询邀请资格
 
-| 项目 | 值 |
-|---|---|
-| **方法** | `GET` |
-| **路径** | `/referrals/invite/eligibility` |
-| **完整 URL** | `https://chatgpt.com/backend-api/referrals/invite/eligibility` |
-| **Query 参数** | `referral_key=codex_referral_persistent_invite` |
-| **请求体** | 无 |
-| **代码函数** | `ie()` in `codex-api-BFMAEsqy.js` |
-| **Query Key** | `["persistent-referral-invite-eligibility"]` |
-| **轮询间隔** | 5 秒（`staleTime: FIVE_SECONDS`） |
-
-### 请求头
-
-```
+```http
 GET /backend-api/referrals/invite/eligibility?referral_key=codex_referral_persistent_invite
-
-Authorization: Bearer <jwt>
-ChatGPT-Account-Id: <account_uuid>
-OAI-Language: en
-X-OpenAI-Attach-Auth: 1
-X-OpenAI-Attach-Integrity-State: 1
-originator: Codex Desktop
 ```
 
-> **注意**：此路径没有 `/wham/` 前缀，是 `/referrals/invite/eligibility`。
+- 请求体：无
+- Query key：`["persistent-referral-invite-eligibility"]`
+- 路径没有 `/wham/` 前缀
 
 ## 接口 2：发送邀请邮件
 
-| 项目 | 值 |
-|---|---|
-| **方法** | `POST` |
-| **路径** | `/wham/referrals/invite` |
-| **完整 URL** | `https://chatgpt.com/backend-api/wham/referrals/invite` |
-| **请求体** | `{"referral_key":"codex_referral_persistent_invite","emails":["xxx@xxx.com"]}` |
-| **代码函数** | `X(e)` in `codex-api-BFMAEsqy.js` |
-| **成功后** | 使 `["persistent-referral-invite-eligibility"]` query 失效刷新 |
-
-### 请求头
-
-```
+```http
 POST /backend-api/wham/referrals/invite
-
-Authorization: Bearer <jwt>
-ChatGPT-Account-Id: <account_uuid>
 Content-Type: application/json
-OAI-Language: en
-X-OpenAI-Attach-Auth: 1
-X-OpenAI-Attach-Integrity-State: 1
-originator: Codex Desktop
+
+{"referral_key":"codex_referral_persistent_invite","emails":["<redacted-email>"]}
 ```
 
-### 请求体字段
-
-| 字段 | 类型 | 值 |
-|---|---|---|
-| `referral_key` | string | 固定值 `"codex_referral_persistent_invite"` |
-| `emails` | string[] | 被邀请人邮箱数组 |
+成功后 UI 会刷新邀请资格 query。
 
 ## 接口 3：获取重置额度
 
-| 项目 | 值 |
-|---|---|
-| **方法** | `GET` |
-| **路径** | `/wham/rate-limit-reset-credits` |
-| **完整 URL** | `https://chatgpt.com/backend-api/wham/rate-limit-reset-credits` |
-| **请求体** | 无 |
-| **代码函数** | `oe()` in `codex-api-BFMAEsqy.js` |
-| **Query Key** | `["rate-limit-reset-credits"]` |
-| **轮询间隔** | 5 秒（`staleTime: FIVE_SECONDS`） |
-
-### 请求头
-
-```
+```http
 GET /backend-api/wham/rate-limit-reset-credits
-
-Authorization: Bearer <jwt>
-ChatGPT-Account-Id: <account_uuid>
-OAI-Language: en
-X-OpenAI-Attach-Auth: 1
-X-OpenAI-Attach-Integrity-State: 1
-originator: Codex Desktop
 ```
+
+空券账号的典型响应：
+
+```json
+{"credits":[],"available_count":0,"total_earned_count":0}
+```
+
+桌面 UI 通过 WebView 直接调用；codex-rs 同时也实现了 CLI/TUI 的
+`rate_limit_resets` 客户端链路。
 
 ## 接口 4：消耗重置额度
 
-| 项目 | 值 |
-|---|---|
-| **方法** | `POST` |
-| **路径** | `/wham/rate-limit-reset-credits/consume` |
-| **完整 URL** | `https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume` |
-| **请求体** | `{"credit_id":"xxx","redeem_request_id":"xxx"}` |
-| **代码函数** | `ce(e)` in `codex-api-BFMAEsqy.js` |
-| **成功后** | 使 `["rate-limit-status"]` 和 `["rate-limit-reset-credits"]` 两个 query 失效刷新 |
-
-### 请求头
-
-```
+```http
 POST /backend-api/wham/rate-limit-reset-credits/consume
-
-Authorization: Bearer <jwt>
-ChatGPT-Account-Id: <account_uuid>
 Content-Type: application/json
-OAI-Language: en
-X-OpenAI-Attach-Auth: 1
-X-OpenAI-Attach-Integrity-State: 1
-originator: Codex Desktop
+
+{"credit_id":"<credit-id>","redeem_request_id":"<uuid-v4>"}
 ```
 
-### 请求体字段
+`redeem_request_id` 必填且非空；`credit_id` 在 codex-rs 协议中可选。
+无可用额度时服务端可返回：
 
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `credit_id` | string | 额度 ID，从接口 3 获取 |
-| `redeem_request_id` | string | 兑换请求 ID |
+```json
+{"code":"no_credit","credit":null,"windows_reset":0}
+```
 
-## CLI vs 桌面端
+## 与 `/codex/responses` 的区别
 
-这四个接口**只存在于桌面端**（Electron/JS），CLI（Rust）中没有。
+`/backend-api/codex/responses` 由内置 codex-rs 发出，使用
+`Codex Desktop/0.151.0-alpha.7.1 ...` UA、zstd 请求体、HTTP/2 SSE 或 WebSocket，
+并携带 attestation、routing hint、session/thread/window 与 turn metadata。
+完整的 0.151 脱敏差异记录见
+[`codex-desktop-capture/2026-08-30_0.151.0-alpha.7.1/README.md`](codex-desktop-capture/2026-08-30_0.151.0-alpha.7.1/README.md)。
 
-CLI 的 `backend-client` 只有相关的：
-- `GET /wham/usage`（获取速率限制）
-- `POST /wham/accounts/send_add_credits_nudge_email`（发送充值提醒邮件）
+## 实现位置
 
-没有邀请和重置额度功能。
-
-## 源文件位置
-
-| 文件 | 说明 |
+| 文件 | 作用 |
 |---|---|
-| `webview/assets/codex-api-BFMAEsqy.js` | 四个接口的调用代码 |
-| `webview/assets/request-BypB0TG1.js` | API 客户端和默认头构建 |
-| `webview/assets/src-C7fSIbpz.js` | Header 常量定义（`X-OpenAI-Attach-Auth` 等） |
-| `webview/assets/vscode-api-B8VvwF1m.js` | Electron 主进程通信层 |
+| `backend/internal/service/codex_desktop_webview_profile.go` | WebView UA、Sentry、Fetch 与压缩画像 |
+| `backend/internal/service/codex_desktop_api_service.go` | 邀请与重置额度接口 |
+| `backend/internal/service/openai_codex_mimic.go` | `/codex/responses` HTTP/WS 请求画像 |

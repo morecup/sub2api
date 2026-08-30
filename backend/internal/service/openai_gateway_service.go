@@ -34,9 +34,9 @@ const (
 	openaiPlatformAPIInputTokensURL = "https://api.openai.com/v1/responses/input_tokens"
 	openaiStickySessionTTL          = time.Hour // 粘性会话TTL
 	// 与真实 Codex Desktop App 的 User-Agent 结构对齐：
-	// Codex Desktop/{codex_rs_version} ({OS_type} {OS_version}; {arch}) unknown (Codex Desktop; {app_version})
-	// 取值来自 Codex 桌面应用 26.715.61943（内置 codex-rs 0.145.0-alpha.27）实抓报文。
-	codexDesktopUserAgent = "Codex Desktop/0.145.0-alpha.27 (Windows 10.0.26100; x86_64) unknown (Codex Desktop; 26.715.61943)"
+	// Codex Desktop/{codex_rs_version} ({OS_type} {OS_version}; {arch}) dumb (Codex Desktop; {app_version})
+	// 取值来自 Codex 桌面应用 26.825.41651（内置 codex-rs 0.151.0-alpha.7.1）实抓报文。
+	codexDesktopUserAgent = "Codex Desktop/0.151.0-alpha.7.1 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.825.41651)"
 	// main 中仍有 API Key、自定义上游和非 Desktop 兜底路径使用 CLI 画像；
 	// 与 OAuth 固定 Desktop 画像并存，不能互相覆盖。
 	codexCLIUserAgent = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
@@ -54,7 +54,7 @@ const (
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
 	// Codex OAuth 上游请求统一使用本地实抓的 Desktop 画像。
-	codexDesktopVersion              = "0.145.0-alpha.27"
+	codexDesktopVersion              = "0.151.0-alpha.7.1"
 	openAIUpstreamEndpointContextKey = "openai_actual_upstream_endpoint"
 	codexCLIVersion                  = "0.144.1"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
@@ -1029,7 +1029,7 @@ func getAPIKeyIDFromContext(c *gin.Context) int64 {
 }
 
 // codexDesktopClientVersion 返回 models 清单 query 参数 client_version 使用的三段式版本号
-// （实抓：真实应用发 client_version=0.145.0，不带 alpha 等预发布后缀）。
+// （实抓：真实应用发 client_version=0.151.0，不带 alpha 等预发布后缀）。
 func codexDesktopClientVersion() string {
 	base, _, _ := strings.Cut(codexDesktopVersion, "-")
 	return base

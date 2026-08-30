@@ -146,11 +146,15 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	c.Request.Header.Set("session_id", "inbound-session-should-be-ignored")
 	c.Request.Header.Set("conversation_id", "inbound-conversation-should-be-ignored")
 	c.Request.Header.Set("originator", "Codex Desktop")
-	// 0.144 仅保留入站 workspaces；旧 workspace_kind 与伪造 thread_source 均由画像重建。
+	// 仅保留入站 workspaces；旧 workspace_kind 与伪造 thread_source 均由画像重建。
 	c.Request.Header.Set("X-Codex-Turn-Metadata", `{"workspaces":{"/foo/bar":{"associated_remote_urls":{"origin":"https://github.com/foo/bar"},"latest_git_commit_hash":"abc123","has_changes":true}},"workspace_kind":"projectless","session_id":"inbound-should-be-overwritten","thread_source":"inbound-should-be-removed"}`)
 
 	svc := &OpenAIGatewayService{cfg: &config.Config{}}
-	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{"chatgpt_account_id": "chatgpt-acc", "user_agent": "custom-ua-should-not-override"}}
+	account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
+		"chatgpt_account_id": "chatgpt-acc",
+		"chatgpt_cookie":     "session=stored-account-cookie",
+		"user_agent":         "custom-ua-should-not-override",
+	}}
 
 	req, err := svc.buildUpstreamRequest(c.Request.Context(), c, account, body, "token", true, "sess-seed-1", true)
 	require.NoError(t, err)
@@ -164,6 +168,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
 	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=remote_compaction_v2。
 	require.Equal(t, "remote_compaction_v2", req.Header.Get("X-Codex-Beta-Features"))
+	require.Equal(t, "model=gpt-5.5", req.Header.Get("X-Codex-Routing-Hint"))
 	// responses-lite 头按出站模型条件发送：gpt-5.5 非 lite，不发送；
 	// 0.144 的 timing-metrics 头已移除。
 	require.Empty(t, req.Header.Get("X-Openai-Internal-Codex-Responses-Lite"))
@@ -172,6 +177,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, "Codex Desktop", req.Header.Get("Originator"))
 	// UA 无条件强制为 Codex Desktop 画像（忽略入站 UA）。
 	require.Equal(t, codexDesktopUserAgent, req.Header.Get("User-Agent"))
+	require.Equal(t, "session=stored-account-cookie", req.Header.Get("Cookie"))
 	// HTTP 路径不发送 OpenAI-Beta / x-codex-installation-id，且旧下划线 session_id 变体已移除。
 	require.Empty(t, req.Header.Get("OpenAI-Beta"))
 	require.Empty(t, req.Header.Get("Session_Id"))
@@ -181,26 +187,38 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Empty(t, req.Header.Get("X-Codex-Turn-State"))
 	require.Equal(t, "application/json", req.Header.Get("Content-Type"))
 
-	// x-codex-turn-metadata：字段与 Desktop 26.715.61943 / codex-rs 0.145.0-alpha.27 对齐。
+	// x-codex-turn-metadata：字段与 Desktop 26.825.41651 / codex-rs 0.151.0-alpha.7.1 对齐。
 	meta := req.Header.Get("X-Codex-Turn-Metadata")
 	require.Equal(t, sessionID, gjson.Get(meta, "session_id").String())
 	require.Equal(t, sessionID, gjson.Get(meta, "thread_id").String())
 	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.Equal(t, "/root", gjson.Get(meta, "agent_name").String())
+	require.Equal(t, "composer", gjson.Get(meta, "turn_trigger").String())
 	// installation_id 按账号派生：此处 apiKeyID=0（未设置 api_key），回退 chatgpt-account-id 种子。
 	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.Get(meta, "installation_id").String())
 	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "danger-full-access", gjson.Get(meta, "sandbox_mode").String())
 	require.Equal(t, "turn", gjson.Get(meta, "request_kind").String())
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
+	require.Zero(t, gjson.Get(meta, "window_number").Int())
+	require.NotEqual(t, sessionID, gjson.Get(meta, "context_window_id").String())
 	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
+	require.Equal(t, gjson.Get(meta, "turn_id").String(), gjson.Get(meta, "root_turn_id").String())
+	require.False(t, gjson.Get(meta, "auto_review_enabled").Bool())
+	require.False(t, gjson.Get(meta, "node_repl_auto_review_required").Bool())
+	require.False(t, gjson.Get(meta, "node_repl_disabled").Bool())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
-	// 0.145 实抓：workspaces 非空时带 workspace_kind="project"。
+	// 0.151 实抓：普通 composer turn 的 workspaces 非空时带 workspace_kind="project"。
 	require.Equal(t, "project", gjson.Get(meta, "workspace_kind").String())
 	require.True(t, gjson.Get(meta, "workspaces").IsObject())
 	require.Equal(t, "https://github.com/foo/bar", gjson.Get(meta, "workspaces./foo/bar.associated_remote_urls.origin").String())
 	require.Equal(t, "abc123", gjson.Get(meta, "workspaces./foo/bar.latest_git_commit_hash").String())
 	require.True(t, gjson.Get(meta, "workspaces./foo/bar.has_changes").Bool())
-	// 0.145 实抓：turn POST 的 attestation 简化为 {"v":1,"s":1}（不带 CBOR token）。
-	require.Equal(t, `{"v":1,"s":1}`, req.Header.Get("X-Oai-Attestation"))
+	// 0.151 实抓：普通 turn 恢复完整 s=0 attestation token。
+	attestation := req.Header.Get("X-Oai-Attestation")
+	require.Equal(t, int64(1), gjson.Get(attestation, "v").Int())
+	require.Zero(t, gjson.Get(attestation, "s").Int())
+	require.True(t, strings.HasPrefix(gjson.Get(attestation, "t").String(), "v1."))
 
 	// 请求体 zstd 压缩，解压后包含与 header 同源的完整 client_metadata。
 	require.Equal(t, "zstd", req.Header.Get("Content-Encoding"))
@@ -213,6 +231,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID, gjson.GetBytes(decodedBody, "client_metadata.session_id").String())
 	require.Equal(t, sessionID, gjson.GetBytes(decodedBody, "client_metadata.thread_id").String())
 	require.Equal(t, gjson.Get(meta, "turn_id").String(), gjson.GetBytes(decodedBody, "client_metadata.turn_id").String())
+	require.Equal(t, gjson.Get(meta, "root_turn_id").String(), gjson.GetBytes(decodedBody, "client_metadata.root_turn_id").String())
 	require.Equal(t, codexInstallationIDForAccount(0, "chatgpt-acc"), gjson.GetBytes(decodedBody, "client_metadata.x-codex-installation-id").String())
 	require.Equal(t, sessionID+":0", gjson.GetBytes(decodedBody, "client_metadata.x-codex-window-id").String())
 	require.Equal(t, meta, gjson.GetBytes(decodedBody, "client_metadata.x-codex-turn-metadata").String())

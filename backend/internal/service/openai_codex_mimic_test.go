@@ -45,14 +45,14 @@ func TestCodexInstallationIDForAccount(t *testing.T) {
 }
 
 // 手动压缩（request_kind=compaction）入站 metadata：出站 x-codex-turn-metadata 保留
-// compaction 画像（0.145.0-alpha.27 实抓），无 workspaces，body 经 sync 后与头部一致。
+// compaction 画像（0.151.0-alpha.7.1 实抓），无 workspaces，body 经 sync 后与头部一致。
 func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	inboundCompaction := `{"trigger":"manual","reason":"user_requested","implementation":"responses_compaction_v2","phase":"standalone_turn","strategy":"memento"}`
 	inboundMeta := `{"installation_id":"inbound-should-be-overwritten","session_id":"inbound-should-be-overwritten","request_kind":"compaction","compaction":` + inboundCompaction + `,"workspaces":{"/foo/bar":{}}}`
 	body := []byte(`{"model":"gpt-5.6","input":"compact me","prompt_cache_key":"client-original"}`)
 	req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(string(body)))
 	req.Header.Set("x-codex-turn-metadata", inboundMeta)
-	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", "", codexDesktopOriginator, false, false)
+	applyCodexOAuthMimicHeaders(req, 7, 0, "sess-seed-compaction", "", codexDesktopOriginator, false, false, "gpt-5.5")
 
 	meta := req.Header.Get("x-codex-turn-metadata")
 	sessionID := req.Header.Get("session-id")
@@ -63,7 +63,13 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	require.NotEmpty(t, gjson.Get(meta, "turn_id").String())
 	require.Equal(t, sessionID+":0", gjson.Get(meta, "window_id").String())
 	require.Equal(t, "user", gjson.Get(meta, "thread_source").String())
+	require.Equal(t, "/root", gjson.Get(meta, "agent_name").String())
 	require.Equal(t, "none", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "danger-full-access", gjson.Get(meta, "sandbox_mode").String())
+	require.Zero(t, gjson.Get(meta, "window_number").Int())
+	require.NotEmpty(t, gjson.Get(meta, "context_window_id").String())
+	require.False(t, gjson.Get(meta, "root_turn_id").Exists())
+	require.False(t, gjson.Get(meta, "turn_trigger").Exists())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
 	// accountID=7：installation_id 按账号派生（而非回退固定值）。
 	require.Equal(t, codexInstallationIDForAccount(7, ""), gjson.Get(meta, "installation_id").String())
@@ -74,12 +80,54 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	require.Equal(t, "standalone_turn", gjson.Get(meta, "compaction.phase").String())
 	require.Equal(t, "memento", gjson.Get(meta, "compaction.strategy").String())
 	require.False(t, gjson.Get(meta, "workspaces").Exists())
+	require.Equal(t, "model=gpt-5.5", req.Header.Get("x-codex-routing-hint"))
+	require.Zero(t, gjson.Get(req.Header.Get("x-oai-attestation"), "s").Int())
+	require.NotEmpty(t, gjson.Get(req.Header.Get("x-oai-attestation"), "t").String())
 
 	// body 同步：client_metadata.x-codex-turn-metadata 与头部一致，prompt_cache_key 对齐 session_id。
 	updated, err := syncCodexOAuthMimicRequestBody(req, body, false)
 	require.NoError(t, err)
 	require.Equal(t, meta, gjson.GetBytes(updated, "client_metadata.x-codex-turn-metadata").String())
 	require.Equal(t, sessionID, gjson.GetBytes(updated, "prompt_cache_key").String())
+}
+
+func TestBuildCodexTurnMetadataThreadTitleProfile(t *testing.T) {
+	sessionID := "01a052d7-b018-7630-ad5b-f23494429b7a"
+	workspaces := map[string]any{"D:\\repo": map[string]any{"has_changes": true}}
+	inbound := `{"agent_name":"/root","thread_source":"thread_title","turn_trigger":"thread_title","sandbox":"windows_elevated","sandbox_mode":"read-only","auto_review_enabled":false,"node_repl_auto_review_required":false,"node_repl_disabled":false}`
+
+	meta := buildCodexTurnMetadata(sessionID, sessionID+":0", workspaces, "", inbound)
+	require.Equal(t, "/root", gjson.Get(meta, "agent_name").String())
+	require.Equal(t, "thread_title", gjson.Get(meta, "thread_source").String())
+	require.Equal(t, "thread_title", gjson.Get(meta, "turn_trigger").String())
+	require.Equal(t, "windows_elevated", gjson.Get(meta, "sandbox").String())
+	require.Equal(t, "read-only", gjson.Get(meta, "sandbox_mode").String())
+	require.True(t, gjson.Get(meta, "workspaces").IsObject())
+	require.False(t, gjson.Get(meta, "workspace_kind").Exists())
+	require.Equal(t, gjson.Get(meta, "turn_id").String(), gjson.Get(meta, "root_turn_id").String())
+
+	prewarm := buildCodexWSPrewarmMetadata(sessionID, sessionID+":0", "", inbound)
+	require.Equal(t, "thread_title", gjson.Get(prewarm, "thread_source").String())
+	require.Equal(t, "windows_elevated", gjson.Get(prewarm, "sandbox").String())
+	require.Equal(t, "read-only", gjson.Get(prewarm, "sandbox_mode").String())
+	require.False(t, gjson.Get(prewarm, "turn_trigger").Exists())
+	require.False(t, gjson.Get(prewarm, "root_turn_id").Exists())
+	require.False(t, gjson.Get(prewarm, "workspaces").Exists())
+	require.Equal(t, gjson.Get(meta, "context_window_id").String(), gjson.Get(prewarm, "context_window_id").String())
+}
+
+func TestApplyCodexWSRequestClientMetadataLiteInPayloadOnly(t *testing.T) {
+	lite := map[string]any{"model": "gpt-5.6-terra"}
+	require.True(t, applyCodexWSRequestClientMetadata(lite, "gpt-5.6-terra"))
+	liteMetadata := lite["client_metadata"].(map[string]any)
+	require.Equal(t, "true", liteMetadata[responsesLiteWSMetadataKey])
+	require.NotEmpty(t, liteMetadata["x-codex-ws-stream-request-start-ms"])
+
+	nonLite := map[string]any{"client_metadata": map[string]any{responsesLiteWSMetadataKey: "true"}}
+	require.True(t, applyCodexWSRequestClientMetadata(nonLite, "gpt-5.5"))
+	nonLiteMetadata := nonLite["client_metadata"].(map[string]any)
+	require.NotContains(t, nonLiteMetadata, responsesLiteWSMetadataKey)
+	require.NotEmpty(t, nonLiteMetadata["x-codex-ws-stream-request-start-ms"])
 }
 
 func TestApplyCodexOAuthMimicHeadersFixedSessionID(t *testing.T) {
