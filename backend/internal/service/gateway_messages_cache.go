@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -51,9 +53,9 @@ func stripMessageCacheControl(body []byte) []byte {
 // 与 Parrot add_cache_breakpoints 一致。两个断点 + system prompt block 的断点
 // + tools[-1] 的断点共同构成最多 4 个断点（Anthropic 上限）。
 //
-// cache_control 策略：
-//   - 若目标 block 已有 cache_control → 原样保留
-//   - 否则写入 {"type":"ephemeral"}，不默认补 ttl
+// cache_control ttl 策略：
+//   - 若目标 block 已有 cache_control.ttl → 不覆盖
+//   - 否则写入 {"type":"ephemeral","ttl": claude.DefaultCacheControlTTL}
 //
 // 调用前应先 stripMessageCacheControl 以保证幂等和稳定。
 func addMessageCacheBreakpoints(body []byte) []byte {
@@ -115,8 +117,8 @@ func injectCacheControlOnLastContentBlock(body []byte, idx int, msg *gjson.Resul
 	if content.Type == gjson.String {
 		text := content.String()
 		blockRaw := fmt.Sprintf(
-			`[{"type":"text","text":%s,"cache_control":{"type":"ephemeral"}}]`,
-			mustJSONString(text),
+			`[{"type":"text","text":%s,"cache_control":{"type":"ephemeral","ttl":%q}}]`,
+			mustJSONString(text), claude.DefaultCacheControlTTL,
 		)
 		if next, err := sjson.SetRawBytes(body, fmt.Sprintf("messages.%d.content", idx), []byte(blockRaw)); err == nil {
 			body = next
@@ -134,12 +136,19 @@ func injectCacheControlOnLastContentBlock(body []byte, idx int, msg *gjson.Resul
 	lastBlockIdx := len(contentArr) - 1
 	lastBlock := contentArr[lastBlockIdx]
 
-	if cc := lastBlock.Get("cache_control"); cc.Exists() {
+	if cc := lastBlock.Get("cache_control"); cc.Exists() && cc.Get("ttl").String() != "" {
 		return body
 	}
 
 	pathPrefix := fmt.Sprintf("messages.%d.content.%d.cache_control", idx, lastBlockIdx)
-	raw := `{"type":"ephemeral"}`
+	existingCC := lastBlock.Get("cache_control")
+	if existingCC.Exists() {
+		if next, err := sjson.SetBytes(body, pathPrefix+".ttl", claude.DefaultCacheControlTTL); err == nil {
+			body = next
+		}
+		return body
+	}
+	raw := fmt.Sprintf(`{"type":"ephemeral","ttl":%q}`, claude.DefaultCacheControlTTL)
 	if next, err := sjson.SetRawBytes(body, pathPrefix, []byte(raw)); err == nil {
 		body = next
 	}
@@ -149,5 +158,8 @@ func injectCacheControlOnLastContentBlock(body []byte, idx int, msg *gjson.Resul
 // mustJSONString 把一个 Go string 序列化为合法 JSON string（含引号），
 // 用于 sjson.SetRawBytes 场景下手工拼 JSON。
 func mustJSONString(s string) string {
-	return fmt.Sprintf("%q", s)
+	// Go string quoting can emit non-JSON escapes such as \x7f or \a.
+	// Marshaling a string cannot fail.
+	encoded, _ := json.Marshal(s)
+	return string(encoded)
 }

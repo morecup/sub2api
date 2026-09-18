@@ -206,7 +206,7 @@ func (h *AccountHandler) ExportData(c *gin.Context) {
 			Platform:           acc.Platform,
 			Type:               acc.Type,
 			Credentials:        acc.Credentials,
-			Extra:              acc.Extra,
+			Extra:              service.RedactOpenAICodexTicketExtra(acc.Extra),
 			ProxyKey:           proxyKey,
 			Concurrency:        acc.Concurrency,
 			Priority:           acc.Priority,
@@ -311,15 +311,17 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 					_, _ = h.adminService.UpdateProxy(ctx, existingID, &service.UpdateProxyInput{
 						Status:         normalizedStatus,
 						ExpiresAt:      existingExpiresAt,
+						ClearExpiresAt: existingExpiresAt == nil,
 						FallbackMode:   existingFallbackMode,
 						BackupProxyID:  existingBackupProxyID,
-						ExpiryWarnDays: item.ExpiryWarnDays,
+						ClearBackupID:  existingBackupProxyID == nil,
+						ExpiryWarnDays: &item.ExpiryWarnDays,
 						Name:           proxy.Name,
 						Protocol:       proxy.Protocol,
 						Host:           proxy.Host,
 						Port:           proxy.Port,
-						Username:       proxy.Username,
-						Password:       proxy.Password,
+						Username:       &proxy.Username,
+						Password:       &proxy.Password,
 					})
 				}
 			}
@@ -385,15 +387,17 @@ func (h *AccountHandler) importData(ctx context.Context, req DataImportRequest) 
 			_, _ = h.adminService.UpdateProxy(ctx, created.ID, &service.UpdateProxyInput{
 				Status:         normalizedStatus,
 				ExpiresAt:      expiresAt,
+				ClearExpiresAt: expiresAt == nil,
 				FallbackMode:   fallbackMode,
 				BackupProxyID:  backupProxyID,
-				ExpiryWarnDays: item.ExpiryWarnDays,
+				ClearBackupID:  backupProxyID == nil,
+				ExpiryWarnDays: &item.ExpiryWarnDays,
 				Name:           created.Name,
 				Protocol:       created.Protocol,
 				Host:           created.Host,
 				Port:           created.Port,
-				Username:       created.Username,
-				Password:       created.Password,
+				Username:       &created.Username,
+				Password:       &created.Password,
 			})
 		}
 	}

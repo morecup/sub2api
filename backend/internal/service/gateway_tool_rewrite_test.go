@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -133,12 +134,13 @@ func TestApplyToolNameRewriteToBody_RenamesToolUseWithDynamicMapping(t *testing.
 	require.Equal(t, "ok", gjson.GetBytes(out, "messages.1.content.0.content").String())
 }
 
-func TestApplyToolsLastCacheBreakpoint_DoesNotInjectDefault(t *testing.T) {
+func TestApplyToolsLastCacheBreakpoint_InjectsDefault(t *testing.T) {
 	body := []byte(`{"tools":[{"name":"a","input_schema":{}},{"name":"b","input_schema":{}}]}`)
 	out := applyToolsLastCacheBreakpoint(body)
-	require.JSONEq(t, string(body), string(out))
+	require.Equal(t, "ephemeral", gjson.GetBytes(out, "tools.1.cache_control.type").String())
+	require.Equal(t, "5m", gjson.GetBytes(out, "tools.1.cache_control.ttl").String())
+	// First tool untouched
 	require.False(t, gjson.GetBytes(out, "tools.0.cache_control").Exists())
-	require.False(t, gjson.GetBytes(out, "tools.1.cache_control").Exists())
 }
 
 func TestApplyToolsLastCacheBreakpoint_PassesThroughClientTTL(t *testing.T) {
@@ -146,6 +148,34 @@ func TestApplyToolsLastCacheBreakpoint_PassesThroughClientTTL(t *testing.T) {
 	out := applyToolsLastCacheBreakpoint(body)
 	// User-provided ttl must be preserved.
 	require.Equal(t, "1h", gjson.GetBytes(out, "tools.0.cache_control.ttl").String())
+}
+
+func TestApplyToolsLastCacheBreakpoint_StripsDeferredToolCacheControl(t *testing.T) {
+	body := []byte(`{"tools":[{"name":"a","custom":{"defer_loading":true},"cache_control":{"type":"ephemeral","ttl":"1h"}},{"name":"b","custom":{"defer_loading":true}}]}`)
+	out := applyToolsLastCacheBreakpoint(body)
+
+	require.False(t, gjson.GetBytes(out, "tools.0.cache_control").Exists())
+	require.False(t, gjson.GetBytes(out, "tools.1.cache_control").Exists())
+}
+
+func TestApplyToolsLastCacheBreakpoint_SkipsDeferredFinalTool(t *testing.T) {
+	body := []byte(`{"tools":[{"name":"a","input_schema":{}},{"name":"b","defer_loading":true}]}`)
+	out := applyToolsLastCacheBreakpoint(body)
+
+	require.Equal(t, "ephemeral", gjson.GetBytes(out, "tools.0.cache_control.type").String())
+	require.Equal(t, "5m", gjson.GetBytes(out, "tools.0.cache_control.ttl").String())
+	require.False(t, gjson.GetBytes(out, "tools.1.cache_control").Exists())
+}
+
+func TestApplyToolsLastCacheBreakpoint_OnlyLiteralTrueIsDeferred(t *testing.T) {
+	body := []byte(`{"tools":[{"name":"custom-true","custom":{"defer_loading":true},"cache_control":{"type":"ephemeral"}},{"name":"top-level-true","defer_loading":true,"cache_control":{"type":"ephemeral"}},{"name":"false","defer_loading":false,"cache_control":{"type":"ephemeral"}},{"name":"string","defer_loading":"true","cache_control":{"type":"ephemeral"}},{"name":"number","defer_loading":1,"cache_control":{"type":"ephemeral"}},{"name":"object","defer_loading":{},"cache_control":{"type":"ephemeral"}}]}`)
+	out := stripDeferredToolCacheControl(body)
+
+	require.False(t, gjson.GetBytes(out, "tools.0.cache_control").Exists())
+	require.False(t, gjson.GetBytes(out, "tools.1.cache_control").Exists())
+	for idx := 2; idx < 6; idx++ {
+		require.Equal(t, "ephemeral", gjson.GetBytes(out, fmt.Sprintf("tools.%d.cache_control.type", idx)).String())
+	}
 }
 
 func TestStripMessageCacheControl(t *testing.T) {
@@ -158,7 +188,7 @@ func TestAddMessageCacheBreakpoints_LastMessageOnly(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"user","content":[{"type":"text","text":"hello"}]}]}`)
 	out := addMessageCacheBreakpoints(body)
 	require.Equal(t, "ephemeral", gjson.GetBytes(out, "messages.0.content.0.cache_control.type").String())
-	require.False(t, gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").Exists())
+	require.Equal(t, "5m", gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").String())
 }
 
 func TestAddMessageCacheBreakpoints_SecondToLastUserTurn(t *testing.T) {
@@ -186,8 +216,7 @@ func TestAddMessageCacheBreakpoints_StringContentPromoted(t *testing.T) {
 	require.True(t, gjson.GetBytes(out, "messages.0.content").IsArray())
 	require.Equal(t, "text", gjson.GetBytes(out, "messages.0.content.0.type").String())
 	require.Equal(t, "hi", gjson.GetBytes(out, "messages.0.content.0.text").String())
-	require.Equal(t, "ephemeral", gjson.GetBytes(out, "messages.0.content.0.cache_control.type").String())
-	require.False(t, gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").Exists())
+	require.Equal(t, "5m", gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").String())
 }
 
 func TestRewriteMessageCacheControlIfEnabled_DefaultKeepsClientAnchors(t *testing.T) {
@@ -204,7 +233,7 @@ func TestRewriteMessageCacheControlIfEnabled_DefaultKeepsClientAnchors(t *testin
 	require.Equal(t, "5m", gjson.GetBytes(out, "messages.2.content.0.cache_control.ttl").String())
 }
 
-func TestRewriteMessageCacheControlIfEnabled_OptInRewritesWithoutDefaultTTL(t *testing.T) {
+func TestRewriteMessageCacheControlIfEnabled_OptInPreservesLegacyRewrite(t *testing.T) {
 	body := []byte(`{"messages":[
 		{"role":"user","content":[{"type":"text","text":"stable","cache_control":{"type":"ephemeral","ttl":"1h"}}]},
 		{"role":"assistant","content":[{"type":"text","text":"ok"}]},
@@ -219,11 +248,9 @@ func TestRewriteMessageCacheControlIfEnabled_OptInRewritesWithoutDefaultTTL(t *t
 
 	out := svc.rewriteMessageCacheControlIfEnabled(context.Background(), body)
 
-	require.Equal(t, "ephemeral", gjson.GetBytes(out, "messages.0.content.0.cache_control.type").String())
-	require.False(t, gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").Exists())
+	require.Equal(t, "5m", gjson.GetBytes(out, "messages.0.content.0.cache_control.ttl").String())
 	require.False(t, gjson.GetBytes(out, "messages.2.content.0.cache_control").Exists())
-	require.Equal(t, "ephemeral", gjson.GetBytes(out, "messages.3.content.0.cache_control.type").String())
-	require.False(t, gjson.GetBytes(out, "messages.3.content.0.cache_control.ttl").Exists())
+	require.Equal(t, "5m", gjson.GetBytes(out, "messages.3.content.0.cache_control.ttl").String())
 }
 
 func TestBuildToolNameRewriteFromBody_ReverseOrderedByLengthDesc(t *testing.T) {

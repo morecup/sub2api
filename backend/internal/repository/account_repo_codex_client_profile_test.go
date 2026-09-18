@@ -36,9 +36,9 @@ func TestCodexClientProfileSurvivesExternalSyncUnderRowLock(t *testing.T) {
 			}
 			mock.ExpectQuery(`(?s)SELECT.*openai_codex_client_profile.*FOR NO KEY UPDATE`).
 				WithArgs(stored.ID, stored.Platform, stored.Type, `{"access_token":"refreshed"}`, nil).
-				WillReturnRows(sqlmock.NewRows([]string{"same", "ollama_same", "proxy_same", "enabled", "snapshot", "session", "auto", "usage", "profile"}).
-					AddRow(false, false, true, nil, nil, nil, nil, nil, raw))
-			got, err := lockAndMergeAccountProbeExtra(context.Background(), client, incoming, nil)
+				WillReturnRows(sqlmock.NewRows([]string{"same", "ollama_same", "proxy_same", "enabled", "rate_sync_enabled", "snapshot", "session", "auto", "usage", "profile", "current_extra"}).
+					AddRow(false, false, true, nil, nil, nil, nil, nil, nil, raw, nil))
+			got, err := lockAndMergeAccountProbeExtra(context.Background(), client, incoming, nil, nil)
 			if name == "another account" {
 				require.ErrorContains(t, err, "cannot be replaced")
 			} else {

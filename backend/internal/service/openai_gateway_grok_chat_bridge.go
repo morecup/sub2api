@@ -11,6 +11,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/apicompat"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"go.uber.org/zap"
@@ -560,6 +561,19 @@ func grokChatBridgeBlockingReason(reason string) bool {
 	return false
 }
 
+func grokChatResponsesBridgeModel(model string) bool {
+	switch strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model))) {
+	case "grok-4.5", "grok-4.6", "grok-4.6-latest":
+		return true
+	default:
+		return false
+	}
+}
+
+func grokChatResponsesRuntimeEligible(upstreamModel, cacheIdentity string) bool {
+	return grokChatResponsesBridgeModel(upstreamModel) && strings.TrimSpace(cacheIdentity) != ""
+}
+
 // forwardGrokChatCompletionsViaResponses converts a strictly compatible Chat
 // request into xAI Responses format and reuses the established Responses-to-
 // Chat response translators. It intentionally does not run the Codex OAuth
@@ -677,7 +691,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 		return nil, fmt.Errorf("get grok access token: %w", err)
 	}
 	upstreamCtx, releaseUpstreamCtx := detachUpstreamContext(ctx)
-	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, cacheIdentity, s.cfg)
+	upstreamReq, err := s.buildGrokResponsesRequest(upstreamCtx, c, account, responsesBody, token, cacheIdentity, s.cfg, s.settingService)
 	releaseUpstreamCtx()
 	if err != nil {
 		return nil, fmt.Errorf("build grok responses bridge request: %w", err)
@@ -688,7 +702,7 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 	if account.ProxyID != nil && account.Proxy != nil {
 		proxyURL = account.Proxy.URL()
 	}
-	resp, err := s.doUpstreamRequest(upstreamReq, proxyURL, account)
+	resp, err := s.doOpenAIUpstream(upstreamReq, proxyURL, account)
 	if err != nil {
 		return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, false)
 	}
@@ -704,6 +718,8 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 			kind = "failover"
 		}
 		appendGrokOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
 			Platform:           account.Platform,
 			AccountID:          account.ID,
 			AccountName:        account.Name,
@@ -712,14 +728,14 @@ func (s *OpenAIGatewayService) forwardGrokChatCompletionsViaResponses(
 			Kind:               kind,
 			Message:            upstreamMsg,
 		}, resp.Header, respBody)
-		s.handleGrokAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		s.handleGrokAccountUpstreamError(withGrokTeamRateLimitModel(ctx, upstreamModel), account, resp.StatusCode, resp.Header, respBody)
 		if kind == "failover" {
 			return nil, newGrokUpstreamFailoverError(account, resp.StatusCode, resp.Header, respBody, account.IsPoolMode() && account.IsPoolModeRetryableStatus(resp.StatusCode))
 		}
 		return s.handleChatCompletionsErrorResponse(resp, c, account, responsesBody, billingModel)
 	}
 
-	s.updateGrokUsageFromResponse(ctx, account, resp.Header, resp.StatusCode)
+	s.updateGrokUsageFromResponse(withGrokTeamRateLimitModel(ctx, upstreamModel), account, resp.Header, resp.StatusCode)
 
 	var result *OpenAIForwardResult
 	if clientStream {

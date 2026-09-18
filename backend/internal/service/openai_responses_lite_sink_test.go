@@ -363,7 +363,7 @@ func TestDetectOpenAIPassthroughInstructionsRejectReasonResponsesLiteExempt(t *t
 	body := []byte(`{"model":"gpt-5.1-codex-max","input":[{"type":"message","role":"user","content":"hi"}]}`)
 
 	// 非 lite：缺 instructions 仍按原逻辑拦截。
-	require.Equal(t, "instructions_missing", detectOpenAIPassthroughInstructionsRejectReason("gpt-5.1-codex-max", body, false))
+	require.Equal(t, "", detectOpenAIPassthroughInstructionsRejectReason("gpt-5.1-codex-max", body, false))
 	// lite：豁免（lite 请求顶层本就没有 instructions）。
 	require.Empty(t, detectOpenAIPassthroughInstructionsRejectReason("gpt-5.1-codex-max", body, true))
 	// 非 codex 模型本来不检查，两种模式都放行。

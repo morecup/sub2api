@@ -287,7 +287,7 @@ func TestCodexTelemetryModelManifestActualFetch(t *testing.T) {
 	cfg.Gateway.CodexTelemetry = config.CodexTelemetryConfig{Mode: "local", LocalPath: filepath.Join(t.TempDir(), "metrics.jsonl")}
 	svc := &OpenAIGatewayService{cfg: cfg}
 	t.Cleanup(svc.CloseOpenAIWSPool)
-	request := codexModelsManifestRequest{url: "https://chatgpt.com/backend-api/codex/models", proxyURL: proxy, accountID: 9, credentialAccount: &Account{ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth}}
+	request := openAIModelsRequest{url: "https://chatgpt.com/backend-api/codex/models", proxyURL: proxy, accountID: 9, credentialAccount: &Account{ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth}}
 	for _, code := range []int{200, 304} {
 		status = code
 		manifest, err := svc.fetchCodexModelsManifestUpstream(context.Background(), request, "")

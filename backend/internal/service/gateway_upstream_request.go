@@ -12,12 +12,14 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
+	"github.com/google/uuid"
 	"github.com/tidwall/gjson"
 
 	"github.com/gin-gonic/gin"
 )
 
-func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, shouldMimicClaudeCode bool) (*http.Request, []byte, error) {
+func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token, tokenType, modelID string, reqStream bool, mimicClaudeCode bool) (*http.Request, []byte, error) {
+	body = stripDeferredToolCacheControl(body)
 	if account.Platform == PlatformAnthropic && account.Type == AccountTypeServiceAccount {
 		req, err := s.buildUpstreamRequestAnthropicVertex(ctx, c, account, body, token, modelID, reqStream)
 		return req, body, err
@@ -50,11 +52,6 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if c != nil && c.Request != nil {
 		clientHeaders = c.Request.Header
 	}
-	bodyProfile := classifyClaudeMessagesBody(body)
-	bodyProfile = refineClaudeCodeMessagesProfileForHTTPRequest(bodyProfile, c, clientHeaders)
-	inboundIsClaudeCode := bodyProfile.isClaudeCodeFamily()
-	outboundIsClaudeOAuth := tokenType == "oauth" && isAnthropicClaudeOAuthAccount(account)
-	useClaudeCodeHeaders := outboundIsClaudeOAuth && (shouldMimicClaudeCode || inboundIsClaudeCode)
 
 	// OAuth账号：应用统一指纹和metadata重写（受设置开关控制）
 	var fingerprint *Fingerprint
@@ -62,74 +59,51 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if s.settingService != nil {
 		enableFP, enableMPT, _ = s.settingService.GetGatewayForwardingSettings(ctx)
 	}
-	if outboundIsClaudeOAuth && s.identityService != nil {
+	if account.IsOAuth() && s.identityService != nil {
 		// 1. 获取或创建指纹（包含随机生成的ClientID）
-		fingerprintHeaders := clientHeaders
-		if useClaudeCodeHeaders {
-			fingerprintHeaders = http.Header{}
-		}
-		fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, fingerprintHeaders)
+		fp, err := s.identityService.GetOrCreateFingerprint(ctx, account.ID, clientHeaders)
 		if err != nil {
 			logger.LegacyPrintf("service.gateway", "Warning: failed to get fingerprint for account %d: %v", account.ID, err)
 			// 失败时降级为透传原始headers
 		} else {
-			effectiveFP := fp
-			if useClaudeCodeHeaders {
-				effectiveFP = claudeCodeMimicFingerprint(fp)
-			}
-			if enableFP || useClaudeCodeHeaders {
-				fingerprint = effectiveFP
+			if enableFP {
+				fingerprint = fp
 			}
 
-			// 2. 重写 metadata.user_id。缺少 account_uuid 时直接报错，避免写出不可用身份。
+			// 2. 重写metadata.user_id（需要指纹中的ClientID和账号的account_uuid）
 			// 如果启用了会话ID伪装，会在重写后替换 session 部分为固定值
 			// 当 metadata 透传开启时跳过重写
-			if !enableMPT || useClaudeCodeHeaders {
-				accountUUID := strings.TrimSpace(account.GetExtraString("account_uuid"))
-				if accountUUID == "" {
-					return nil, nil, missingAnthropicAccountUUIDError(account)
-				}
-				if useClaudeCodeHeaders {
-					if uid := s.buildOAuthMetadataUserIDFromBody(ctx, account, effectiveFP, body); uid != "" {
-						if next, changed := ensureClaudeOAuthMetadataUserID(body, uid); changed {
-							body = next
-						}
-					}
-				}
-				if effectiveFP.ClientID != "" {
-					if newBody, err := s.identityService.RewriteUserIDWithMasking(ctx, body, account, accountUUID, effectiveFP.ClientID, effectiveFP.UserAgent); err == nil && len(newBody) > 0 {
+			if !enableMPT {
+				accountUUID := account.GetExtraString("account_uuid")
+				if accountUUID != "" && fp.ClientID != "" {
+					if newBody, err := s.identityService.RewriteUserIDWithMasking(ctx, body, account, accountUUID, fp.ClientID, fp.UserAgent); err == nil && len(newBody) > 0 {
 						body = newBody
-					} else if err != nil {
-						return nil, nil, err
 					}
 				}
 			}
 		}
 	}
 
-	if outboundIsClaudeOAuth && inboundIsClaudeCode {
-		if normalizedBody, changed := normalizeClaudeCodeOfficialProfileBody(body, bodyProfile); changed {
-			body = normalizedBody
-			bodyProfile = classifyClaudeMessagesBody(body)
-			bodyProfile = refineClaudeCodeMessagesProfileForHTTPRequest(bodyProfile, c, clientHeaders)
-		}
+	// Mimicry may override the cached User-Agent later, even without a fingerprint.
+	if billingUA := effectiveBillingUserAgent(tokenType, mimicClaudeCode, fingerprint); billingUA != "" {
+		body = syncBillingHeaderVersion(body, billingUA)
 	}
 
-	// === 计算最终 anthropic-beta header（先于 body sanitize 与请求创建）===
+	// === 计算最终 anthropic-beta header（先于 body sanitize 与 CCH 签名）===
 	//
 	// 顺序约束：
-	//   1) 算 finalBeta（纯函数，不依赖 req.Header；OAuth 路径会从 body profile 和
-	//      body.betas/anthropic_beta 推导，不信任调用方 header）
-	//   2) strip body.betas/anthropic_beta（SDK/CLI 会把它们转换为 header）
-	//   3) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
+	//   1) 算 finalBeta（纯函数，不依赖 req.Header；mimicry 路径会忽略客户端 beta，
+	//      与原“OAuth + mimicClaudeCode 跳过白名单透传”行为对齐）
+	//   2) 按 finalBeta 做能力维度 body sanitize（如 context-management beta 缺失 →
 	//      strip body.context_management，与 Bedrock 路径对称）
-	//   4) 刷新 system[0] billing attribution 并按最终 body 字节补 CCH
-	//   5) NewRequest（body 至此最终敲定）
-	//   6) 透传白名单 / fingerprint / OAuth profile header / 写入 finalBeta
+	//   3) CCH 签名（必须使用 strip 后的 body，否则 hash 与最终 body 不一致 →
+	//      被 Anthropic 判 third-party）
+	//   4) NewRequest（body 至此最终敲定）
+	//   5) 透传白名单 / fingerprint / mimic header / 写入 finalBeta
 	policyFilterSet := s.getBetaPolicyFilterSet(ctx, c, account, modelID)
 	effectiveDropSet := mergeDropSets(policyFilterSet)
 	finalBetaHeader, finalBetaShouldSet := s.computeFinalAnthropicBeta(
-		tokenType, shouldMimicClaudeCode, modelID, clientHeaders, body, effectiveDropSet,
+		tokenType, mimicClaudeCode, modelID, clientHeaders, body, effectiveDropSet,
 	)
 
 	// 账号覆写了 anthropic-beta 时，覆写值即最终上游值（由下方 ApplyHeaderOverrides 写入）：
@@ -137,25 +111,16 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if beta, ok := account.HeaderOverrideValue("anthropic-beta"); ok {
 		finalBetaHeader, finalBetaShouldSet = beta, true
 	}
-	if tokenType == "oauth" {
-		if next, changed := stripAnthropicBetaBodyFields(body); changed {
-			body = next
-		}
-	}
 
 	// 能力维度 body sanitize：与最终 anthropic-beta header 对称
 	if sanitized, changed := sanitizeAnthropicBodyForBetaTokens(body, finalBetaHeader); changed {
 		body = sanitized
 	}
 
-	if tokenType == "oauth" {
-		if claudeCodeOfficialProfileOmitsCCH(bodyProfile) {
-			body = refreshClaudeCodeBillingAttributionWithoutCCH(body, claudeCodeVersionForFingerprint(fingerprint))
-		} else {
-			body = refreshClaudeCodeBillingAttribution(body, claudeCodeVersionForFingerprint(fingerprint))
-		}
-	}
-	body = applyClaudeCodeCCH(body)
+	// Ollama Cloud DeepSeek 出站 max_tokens clamp：判定与上方 targetURL 的
+	// base 取值同源（GetBaseURL），仅实际上游为 ollama.com 且映射后出站模型
+	// 为 DeepSeek 系时压到 cap，详见 helper 注释。
+	body = clampOllamaCloudAnthropicMessagesMaxTokens(account, account.GetBaseURL(), body)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", targetURL, bytes.NewReader(body))
 	if err != nil {
@@ -166,12 +131,17 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	if tokenType == "oauth" {
 		setHeaderRaw(req.Header, "authorization", "Bearer "+token)
 	} else {
-		setAnthropicAPIKeyAuthHeader(req.Header, account, token)
+		// Ollama Cloud Anthropic 兼容端点按实际 base_url 强制 Bearer（同上方
+		// targetURL 的 base 取值），其余保持 extra/default 行为。
+		setAnthropicAPIKeyAuthHeader(req.Header, account, token, account.GetBaseURL())
 	}
 
-	// 白名单透传 headers 只用于非 OAuth 路径。OAuth 上游请求头由当前账号、
-	// Claude Code profile 和最终 body 重新生成，不信任调用方 header。
-	if tokenType != "oauth" {
+	// 白名单透传 headers
+	// OAuth mimicry 路径：跳过客户端 header 透传，与 Parrot 对齐。
+	// Parrot 的 build_upstream_headers 只发 9 个精确 header，不透传任何客户端 header。
+	// 透传客户端 header 会引入不一致的 x-stainless-* / anthropic-beta / user-agent /
+	// x-claude-code-session-id 等值，和我们注入的伪装 header 冲突，被 Anthropic 判 third-party。
+	if tokenType != "oauth" || !mimicClaudeCode {
 		for key, values := range clientHeaders {
 			lowerKey := strings.ToLower(key)
 			if allowedHeaders[lowerKey] {
@@ -199,12 +169,10 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		applyClaudeOAuthHeaderDefaults(req)
 	}
 
-	// OAuth + 非 Claude Code 入站：主动注入 TTY CLI 指纹相关 header。
-	// （user-agent/x-stainless-*/x-app/Accept/x-client-request-id）
-	if outboundIsClaudeOAuth && shouldMimicClaudeCode {
-		applyClaudeCodeMimicHeaders(req)
-	} else if useClaudeCodeHeaders {
-		applyClaudeCodeFamilyHeaders(req, bodyProfile, body, clientHeaders)
+	// OAuth + mimic Claude Code：强制注入 CLI 指纹相关 header
+	// （user-agent/x-stainless-*/x-app/Accept/x-stainless-helper-method/x-client-request-id）
+	if tokenType == "oauth" && mimicClaudeCode {
+		applyClaudeCodeMimicHeaders(req, reqStream)
 	}
 
 	// 写入最终 anthropic-beta header
@@ -215,9 +183,14 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 		setHeaderRaw(req.Header, "anthropic-beta", finalBetaHeader)
 	}
 
-	// 同步 X-Claude-Code-Session-Id 头：Claude Code OAuth profile 路径必须由
-	// metadata.user_id 派生；普通透明路径只在客户端已经带该头时覆盖为同源 session。
-	syncClaudeCodeSessionIDHeader(req, body, useClaudeCodeHeaders)
+	// 同步 X-Claude-Code-Session-Id 头：取 body 中已处理的 metadata.user_id 的 session_id 覆盖
+	if sessionHeader := getHeaderRaw(req.Header, "X-Claude-Code-Session-Id"); sessionHeader != "" {
+		if uid := gjson.GetBytes(body, "metadata.user_id").String(); uid != "" {
+			if parsed := ParseMetadataUserID(uid); parsed != nil {
+				setHeaderRaw(req.Header, "X-Claude-Code-Session-Id", parsed.SessionID)
+			}
+		}
+	}
 
 	// 账号级请求头覆写（仅 anthropic/openai api_key 账号启用时生效；OAuth 路径 no-op）。
 	// 放在所有 header 逻辑之后，确保配置值对同名头拥有最终决定权。
@@ -227,8 +200,7 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	s.debugLogGatewaySnapshot("UPSTREAM_FORWARD", req.Header, body, map[string]string{
 		"url":                 req.URL.String(),
 		"token_type":          tokenType,
-		"inbound_claude_code": strconv.FormatBool(inboundIsClaudeCode),
-		"mimic_claude_code":   strconv.FormatBool(shouldMimicClaudeCode),
+		"mimic_claude_code":   strconv.FormatBool(mimicClaudeCode),
 		"fingerprint_applied": strconv.FormatBool(fingerprint != nil),
 		"enable_fp":           strconv.FormatBool(enableFP),
 		"enable_mpt":          strconv.FormatBool(enableMPT),
@@ -237,10 +209,10 @@ func (s *GatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Contex
 	// Always capture a compact fingerprint line for later error diagnostics.
 	// We only print it when needed (or when the explicit debug flag is enabled).
 	if c != nil && tokenType == "oauth" {
-		c.Set(claudeMimicDebugInfoKey, buildClaudeMimicDebugLine(req, body, account, tokenType, shouldMimicClaudeCode))
+		c.Set(claudeMimicDebugInfoKey, buildClaudeMimicDebugLine(req, body, account, tokenType, mimicClaudeCode))
 	}
 	if s.debugClaudeMimicEnabled() {
-		logClaudeMimicDebug(req, body, account, tokenType, shouldMimicClaudeCode)
+		logClaudeMimicDebug(req, body, account, tokenType, mimicClaudeCode)
 	}
 
 	return req, body, nil
@@ -427,19 +399,15 @@ func requestNeedsBetaFeatures(body []byte) bool {
 	if strings.EqualFold(thinkingType, "enabled") || strings.EqualFold(thinkingType, "adaptive") {
 		return true
 	}
-	if gjson.GetBytes(body, "context_management").Exists() ||
-		gjson.GetBytes(body, "output_config.effort").Exists() ||
-		gjson.GetBytes(body, "output_config.format").Exists() ||
-		gjson.GetBytes(body, "output_format").Exists() ||
-		claudeCodeBodyHasGlobalSystemCache(body) {
-		return true
-	}
 	return false
 }
 
 func defaultAPIKeyBetaHeader(body []byte) string {
 	modelID := gjson.GetBytes(body, "model").String()
-	return strings.Join(claudeCodeBodyDrivenBetaTokens(modelID, body), ",")
+	if strings.Contains(strings.ToLower(modelID), "haiku") {
+		return claude.APIKeyHaikuBetaHeader
+	}
+	return claude.APIKeyBetaHeader
 }
 
 func applyClaudeOAuthHeaderDefaults(req *http.Request) {
@@ -523,7 +491,7 @@ func mergeAnthropicBetaDropping(required []string, incoming string, drop map[str
 // 不兼容字段之前的版本。
 func (s *GatewayService) computeFinalAnthropicBeta(
 	tokenType string,
-	shouldMimicClaudeCode bool,
+	mimicClaudeCode bool,
 	modelID string,
 	clientHeaders http.Header,
 	body []byte,
@@ -535,15 +503,13 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 	}
 
 	if tokenType == "oauth" {
-		classification := classifyClaudeMessagesBody(body)
-		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
-		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
-		if shouldMimicClaudeCode {
-			// mimic 路径对所有模型（包括 Haiku）注入完整 Claude Code beta 集合；
-			// body profile 额外需要的能力位仍然合并保留。
-			requiredBetas = append(claude.FullClaudeCodeMimicryBetas(), requiredBetas...)
+		if mimicClaudeCode {
+			// mimic 路径跳过白名单透传，incomingBeta 始终为空；所有模型都必须
+			// 携带完整 Claude Code beta 集合，避免 Haiku 被识别为第三方客户端。
+			return mergeAnthropicBetaDropping(claude.FullClaudeCodeMimicryBetas(), "", effectiveDropSet), true
 		}
-		return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
+		// 真 Claude Code 客户端透传路径
+		return stripBetaTokensWithSet(s.getBetaHeader(modelID, clientBeta), effectiveDropSet), true
 	}
 
 	// API-key accounts
@@ -572,7 +538,7 @@ func (s *GatewayService) computeFinalAnthropicBeta(
 // 返回语义同 computeFinalAnthropicBeta。
 func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 	tokenType string,
-	shouldMimicClaudeCode bool,
+	mimicClaudeCode bool,
 	modelID string,
 	clientHeaders http.Header,
 	body []byte,
@@ -584,14 +550,22 @@ func (s *GatewayService) computeFinalCountTokensAnthropicBeta(
 	}
 
 	if tokenType == "oauth" {
-		classification := classifyClaudeMessagesBody(body)
-		classification = refineClaudeCodeMessagesProfileForClientHeaders(classification, clientHeaders)
-		requiredBetas := claudeCodeBodyProfileBetaTokens(modelID, classification)
-		if shouldMimicClaudeCode {
-			requiredBetas = append(claude.FullClaudeCodeMimicryBetas(), requiredBetas...)
+		if mimicClaudeCode {
+			// 与原代码严格等价：original buildCountTokensRequest 在 count_tokens mimic
+			// 分支上**不**会跳过白名单透传（与 messages mimic 路径不同），所以
+			// incomingBeta = req.Header[anthropic-beta] = 客户端透传过来的 client beta。
+			// 重构后直接从 clientHeaders 拿同一个值，保持行为一致。
+			requiredBetas := append(claude.FullClaudeCodeMimicryBetas(), claude.BetaTokenCounting)
+			return mergeAnthropicBetaDropping(requiredBetas, clientBeta, effectiveDropSet), true
 		}
-		requiredBetas = append(requiredBetas, claude.BetaTokenCounting)
-		return mergeAnthropicBetaDropping(requiredBetas, "", effectiveDropSet), true
+		if clientBeta == "" {
+			return claude.CountTokensBetaHeader, true
+		}
+		beta := s.getBetaHeader(modelID, clientBeta)
+		if !strings.Contains(beta, claude.BetaTokenCounting) {
+			beta = beta + "," + claude.BetaTokenCounting
+		}
+		return stripBetaTokensWithSet(beta, effectiveDropSet), true
 	}
 
 	// API-key accounts
@@ -880,7 +854,7 @@ var defaultDroppedBetasSet = buildBetaTokenSet(claude.DroppedBetas)
 // applyClaudeCodeMimicHeaders forces "Claude Code-like" request headers.
 // This mirrors opencode-anthropic-auth behavior: do not trust downstream
 // headers when using Claude Code-scoped OAuth credentials.
-func applyClaudeCodeMimicHeaders(req *http.Request) {
+func applyClaudeCodeMimicHeaders(req *http.Request, isStream bool) {
 	if req == nil {
 		return
 	}
@@ -896,7 +870,14 @@ func applyClaudeCodeMimicHeaders(req *http.Request) {
 	}
 	// Real Claude CLI uses Accept: application/json (even for streaming).
 	setHeaderRaw(req.Header, "Accept", "application/json")
-	ensureClaudeCodeRequestIDHeader(req)
+	if isStream {
+		setHeaderRaw(req.Header, "x-stainless-helper-method", "stream")
+	}
+	// Real Claude CLI 每个请求都会生成一个新的 UUID 放在 x-client-request-id。
+	// 上游会以此作为会话/请求指纹的一部分，缺失或重复都可能触发第三方判定。
+	if getHeaderRaw(req.Header, "x-client-request-id") == "" {
+		setHeaderRaw(req.Header, "x-client-request-id", uuid.NewString())
+	}
 }
 
 func truncateForLog(b []byte, maxBytes int) string {

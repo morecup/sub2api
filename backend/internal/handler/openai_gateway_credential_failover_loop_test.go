@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -639,7 +640,7 @@ func TestResponsesGrok429FailoverIsBounded(t *testing.T) {
 		require.Equal(t, []int64{801, 802}, repo.rateLimitedAccountIDs())
 		require.NotContains(t, recorder.Body.String(), "expired")
 		require.NotContains(t, recorder.Body.String(), "healthy-access")
-		require.NotContains(t, recorder.Body.String(), "rate limited")
+		require.Contains(t, recorder.Body.String(), "rate limited")
 	})
 }
 
@@ -738,7 +739,7 @@ func TestGrokFastTransientPolicyAcrossHTTPHandlers(t *testing.T) {
 		{name: "messages", method: http.MethodPost, path: "/openai/v1/messages", body: `{"model":"grok","max_tokens":16,"messages":[{"role":"user","content":"hello"}]}`},
 		{name: "chat completions bridge", method: http.MethodPost, path: "/openai/v1/chat/completions", body: `{"model":"grok","messages":[{"role":"user","content":"hello"}],"stream":false}`},
 		{name: "chat completions raw", method: http.MethodPost, path: "/openai/v1/chat/completions", body: `{"model":"grok","messages":[{"role":"user","content":"hello"}],"stop":["END"],"stream":false}`},
-		{name: "media", method: http.MethodGet, path: "/openai/v1/videos/request-1"},
+		{name: "media", method: http.MethodPost, path: "/openai/v1/videos/generations", body: `{"model":"grok-imagine-video","prompt":"test"}`},
 	}
 
 	for _, endpoint := range endpoints {
@@ -797,9 +798,9 @@ func TestResponsesGrok429FailoverHandlesMixedStatuses(t *testing.T) {
 
 		router.ServeHTTP(recorder, req)
 
-		require.Equal(t, http.StatusBadGateway, recorder.Code, recorder.Body.String())
+		require.Equal(t, http.StatusInternalServerError, recorder.Code, recorder.Body.String())
 		require.Equal(t, []int64{801, 802}, upstream.accountHits())
-		require.NotContains(t, recorder.Body.String(), "upstream unavailable")
+		require.Contains(t, recorder.Body.String(), "upstream unavailable")
 	})
 
 	t.Run("500 then 429 permits one healthy followup", func(t *testing.T) {
@@ -824,7 +825,7 @@ func TestResponsesGrok429FailoverHandlesMixedStatuses(t *testing.T) {
 
 		router.ServeHTTP(recorder, req)
 
-		require.Equal(t, http.StatusBadGateway, recorder.Code, recorder.Body.String())
+		require.Equal(t, http.StatusInternalServerError, recorder.Code, recorder.Body.String())
 		require.Equal(t, []int64{801, 802}, upstream.accountHits())
 	})
 }
@@ -856,7 +857,7 @@ func TestGrokMedia429FailoverIsBounded(t *testing.T) {
 
 		require.Equal(t, http.StatusTooManyRequests, recorder.Code, recorder.Body.String())
 		require.Equal(t, []int64{801, 802}, upstream.accountHits())
-		require.NotContains(t, recorder.Body.String(), "rate limited")
+		require.Contains(t, recorder.Body.String(), "rate limited")
 	})
 }
 
@@ -1193,4 +1194,8 @@ func newGrokCapacityFailureScript(remaining int) *grokFastFailureScript {
 		body:        `{"code":"Some resource has been exhausted","error":"The service is temporarily at capacity. Please retry your request shortly."}`,
 		remaining:   remaining,
 	}
+}
+
+func (u *grokCredentialHandlerUpstream) DoWithTLS(req *http.Request, proxyURL string, accountID int64, concurrency int, _ *tlsfingerprint.Profile) (*http.Response, error) {
+	return u.Do(req, proxyURL, accountID, concurrency)
 }

@@ -47,8 +47,12 @@ const CLIClientIdentifierHeader = "x-grok-client-identifier"
 // when an embedding client sets a different origin via GROK_CLIENT_NAME; a plain
 // `grok` process collapses to this short form (UserAgent::render in
 // crates/codegen/xai-grok-http/src/lib.rs).
-func CLIUserAgent() string {
-	return fmt.Sprintf("%s/%s (%s; %s)", CLIClientIdentifier, EffectiveCLIClientVersion(), cliPlatformOS(), cliPlatformArch())
+func CLIUserAgent(versions ...string) string {
+	version := EffectiveCLIClientVersion()
+	if len(versions) > 0 && isSupportedCLIClientVersion(versions[0]) {
+		version = versions[0]
+	}
+	return fmt.Sprintf("%s/%s (%s; %s)", CLIClientIdentifier, version, cliPlatformOS(), cliPlatformArch())
 }
 
 // cliPlatformOS and cliPlatformArch mirror the CLI's PlatformInfo::current()
