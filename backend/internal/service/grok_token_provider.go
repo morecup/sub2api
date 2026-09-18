@@ -167,18 +167,23 @@ func (p *GrokTokenProvider) GetAccessToken(ctx context.Context, account *Account
 	return accessToken, nil
 }
 
-// GetAccessTokenForManualTest returns an access token for an admin-initiated
-// "test connection" probe. Unlike GetAccessToken it does not apply the
+// GetAccessTokenForManualTest uses the same credential flow as quota probes.
+func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, account *Account) (string, error) {
+	return p.GetAccessTokenForProbe(ctx, account)
+}
+
+// GetAccessTokenForProbe returns an access token for quota queries and
+// connection tests. Unlike GetAccessToken it does not apply the
 // request-path scheduling eligibility gate (manual Schedulable switch,
-// rate-limit / overload / temp-unschedulable cooldowns): a manual test exists
-// precisely to check accounts in those states, matching how Codex/OpenAI
-// account tests read credentials regardless of scheduling state (#4598).
+// rate-limit / overload / temp-unschedulable cooldowns): these probes must
+// remain usable while an account is excluded from production scheduling.
 //
 // Credential integrity still applies: the configured-proxy-missing check, the
-// shared refresh lock protocol, and the refresh API's own account re-read.
+// shared refresh lock protocol, the refresh API's own account re-read, and
+// consistency with the proxy already selected by the caller.
 // Credential rotation for non-active (disabled/error) accounts remains
 // blocked inside RefreshIfNeeded; their still-valid tokens are probed as-is.
-func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, account *Account) (string, error) {
+func (p *GrokTokenProvider) GetAccessTokenForProbe(ctx context.Context, account *Account) (string, error) {
 	if account == nil {
 		return "", errors.New("account is nil")
 	}
@@ -191,6 +196,7 @@ func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, acc
 	if strings.TrimSpace(account.GetGrokRefreshToken()) == "" {
 		return "", errGrokOAuthRefreshTokenMissing
 	}
+	selectedProxyID := cloneGrokProxyID(account.ProxyID)
 
 	accessToken := strings.TrimSpace(account.GetGrokAccessToken())
 	expiresAt := account.GetCredentialAsTime("expires_at")
@@ -208,7 +214,7 @@ func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, acc
 
 	// Deliberately not marked as a request-path refresh: the request path
 	// re-applies scheduling eligibility inside RefreshIfNeeded, which is
-	// exactly what a manual test must bypass.
+	// exactly what quota queries and connection tests must bypass.
 	refreshCtx, cancel := context.WithTimeout(ctx, grokRequestRefreshTimeout)
 	defer cancel()
 	result, err := p.refreshAPI.RefreshIfNeeded(refreshCtx, account, p.executor, grokTokenRefreshSkew)
@@ -225,6 +231,13 @@ func (p *GrokTokenProvider) GetAccessTokenForManualTest(ctx context.Context, acc
 		return "", errors.New("token refresh is already in progress on another worker; retry in a few seconds")
 	}
 	if result != nil && result.Account != nil {
+		if result.Account.ID != account.ID || !result.Account.IsGrokOAuth() ||
+			!grokCredentialProxyIDsEqual(result.Account.ProxyID, selectedProxyID) {
+			return "", fmt.Errorf("%w: account identity or proxy changed during probe; retry with the latest account", errOAuthRefreshAccountStateChanged)
+		}
+		if result.Account.ProxyID != nil && result.Account.Proxy == nil {
+			return "", errGrokOAuthConfiguredProxyMiss
+		}
 		account = result.Account
 	}
 

@@ -503,7 +503,10 @@ func (s *GrokQuotaService) prepareProbe(ctx context.Context, accountID int64) (*
 	}
 	proxyURL := s.resolveProxyURL(ctx, account)
 
-	token, err := s.tokenProvider.GetAccessToken(ctx, account)
+	// Quota inspection must remain available while normal model traffic is
+	// paused or cooling down. Keep credential refresh and proxy checks, but
+	// do not apply the production request's scheduling eligibility gate.
+	token, err := s.tokenProvider.GetAccessTokenForProbe(ctx, account)
 	if err != nil {
 		return nil, "", "", infraerrors.Newf(http.StatusBadGateway, "GROK_QUOTA_TOKEN_UNAVAILABLE", "failed to acquire access token: %v", err)
 	}
