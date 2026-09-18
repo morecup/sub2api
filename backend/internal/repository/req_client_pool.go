@@ -17,7 +17,7 @@ import (
 type reqClientOptions struct {
 	ProxyURL    string        // 代理 URL（支持 http/https/socks5）
 	Timeout     time.Duration // 请求超时时间
-	Impersonate bool          // 是否模拟浏览器指纹（当前为 Firefox，Chrome 伪装会被 chatgpt.com 的 Cloudflare 质询）
+	Impersonate bool          // 是否保留 OpenAI 控制面原有的 Chrome 传输画像
 	ForceHTTP2  bool          // 是否强制使用 HTTP/2
 }
 
@@ -50,12 +50,12 @@ func getSharedReqClient(opts reqClientOptions) (*req.Client, error) {
 		client = client.EnableForceHTTP2()
 	}
 	if opts.Impersonate {
-		// chatgpt.com 的 Cloudflare 会对 req 内置的 Chrome 伪装（UA 固定为 Chrome/120，
-		// 与 sec-ch-ua 等 Client Hints 一起已明显过时）直接返回 403 cf-mitigated=challenge，
-		// 导致 accounts/check、subscriptions、隐私设置等 backend-api 调用全部失败，
-		// 订阅到期时间因此长期不更新（见 issue #4825）。Firefox 伪装的 UA/头部组合
-		// 在同一出口 IP 下稳定通过，故改用 Firefox 指纹。
-		client = client.ImpersonateFirefox()
+		// Desktop WebView callers replace the common headers but inherit this
+		// TLS/HTTP2 transport. Keep its pre-merge Chrome identity with their UA.
+		client = client.ImpersonateChrome()
+		// req/v3 3.59 changed the generic Chrome Accept value. Preserve the old
+		// default too; individual API callers can still override it as before.
+		client.SetCommonHeader("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
 	}
 	trimmed, _, err := proxyurl.Parse(opts.ProxyURL)
 	if err != nil {
@@ -95,11 +95,11 @@ func buildReqClientKey(opts reqClientOptions) string {
 
 // CreatePrivacyReqClient creates an HTTP client for OpenAI privacy settings API
 // This is exported for use by OpenAIPrivacyService
-// Uses Chrome TLS fingerprint impersonation to bypass Cloudflare checks
+// Retains the existing Chrome TLS and HTTP/2 profile for Desktop WebView callers.
 func CreatePrivacyReqClient(proxyURL string) (*req.Client, error) {
 	return getSharedReqClient(reqClientOptions{
 		ProxyURL:    proxyURL,
 		Timeout:     30 * time.Second,
-		Impersonate: true, // Enable browser TLS fingerprint impersonation (Firefox, see getSharedReqClient)
+		Impersonate: true,
 	})
 }

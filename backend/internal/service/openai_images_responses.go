@@ -1854,7 +1854,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		if !parsed.Stream {
 			upstreamReq.Header.Set("Accept", "application/json")
 		}
-	} else {
+	} else if !usesCapturedCodexClientProfile(account) {
 		upstreamReq.Header.Set("OpenAI-Beta", "responses=experimental")
 	}
 

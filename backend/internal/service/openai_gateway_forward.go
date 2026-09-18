@@ -1604,7 +1604,15 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 		}
 
 		// 浏览器型 UA 兜底：仅 OAuth（ChatGPT 内部接口）账号生效。
-		// Identity fallback is handled below for non-profile requests.
+		if usesCapturedCodexClientProfile(account) && strings.HasPrefix(strings.ToLower(strings.TrimSpace(req.Header.Get("user-agent"))), "mozilla/") {
+			userAgent := codexDesktopUserAgent
+			if s.settingService != nil {
+				if configured := strings.TrimSpace(s.settingService.GetOpenAICodexUserAgent(ctx)); configured != "" {
+					userAgent = configured
+				}
+			}
+			req.Header.Set("user-agent", userAgent)
+		}
 	}
 
 	applyCodexAccountIdentityHeaders(req.Header, codexAccountIdentitySource(c, account), getAPIKeyIDFromContext(c))

@@ -13,26 +13,26 @@ func usesCapturedCodexClientProfile(account *Account) bool {
 	return account != nil && account.Type == AccountTypeOAuth && (account.Platform == PlatformOpenAI || account.Platform == "")
 }
 
-// Live used this CLI identity before the upstream merge. The captured Desktop
-// Responses profile must not silently change a separate realtime protocol.
-const preservedCodexLiveUserAgent = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
-const preservedCodexLiveVersion = "0.144.1"
+// Live and the final Messages bridge used this fallback before the merge.
+// They must not inherit upstream's global identity/version rewriting.
+const preservedCodexLegacyUserAgent = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+const preservedCodexLegacyVersion = "0.144.1"
 
-func preserveCodexLiveIdentityHeaders(headers http.Header) {
+func preservePreMergeCodexIdentityHeaders(headers http.Header) {
 	if strings.TrimSpace(headers.Get("user-agent")) == "" {
-		headers.Set("user-agent", preservedCodexLiveUserAgent)
+		headers.Set("user-agent", preservedCodexLegacyUserAgent)
 	}
 	if strings.TrimSpace(headers.Get("version")) == "" {
-		headers.Set("version", preservedCodexLiveVersion)
+		headers.Set("version", preservedCodexLegacyVersion)
 	}
 	originator, userAgent, ok := openai.PairCodexClientIdentity(headers.Get("user-agent"))
 	if !ok {
-		originator, userAgent = "codex_cli_rs", preservedCodexLiveUserAgent
+		originator, userAgent = "codex_cli_rs", preservedCodexLegacyUserAgent
 	}
 	headers.Set("originator", originator)
 	headers.Set("user-agent", userAgent)
 	if version := strings.TrimSpace(headers.Get("version")); version != "" && CompareVersions(version, codexUpstreamMinVersion) < 0 {
-		headers.Set("version", preservedCodexLiveVersion)
+		headers.Set("version", preservedCodexLegacyVersion)
 	}
 }
 

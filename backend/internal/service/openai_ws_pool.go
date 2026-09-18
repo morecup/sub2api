@@ -298,10 +298,11 @@ type openAIWSConn struct {
 
 	// readerLoopResults 非 nil 表示池为该连接常驻了读循环：coder/websocket 只在
 	// 阻塞读期间应答上游 ping，空闲连接没有读循环会被上游按保活超时关闭。
-	readerLoopResults    chan []byte
-	readerLoopErrMu      sync.Mutex
-	readerLoopErr        error
-	readerLoopPeerClosed atomic.Bool
+	readerLoopResults        chan openAIWSPoolReadResult
+	readerLoopErrMu          sync.Mutex
+	readerLoopErr            error
+	readerLoopErrObservation func(time.Duration)
+	readerLoopPeerClosed     atomic.Bool
 	// onPeerClosed 由池在建连后设置：上游主动关闭时立刻把连接移出账号池，不等清理周期。
 	onPeerClosed atomic.Pointer[func()]
 	// unusable 表示空闲期收到数据被判为脏连接：持有令牌不再借出，由池在锁外关闭。
@@ -326,7 +327,7 @@ func newOpenAIWSConn(id string, _ int64, ws openAIWSClientConn, handshakeHeaders
 	conn.createdAtNano.Store(now.UnixNano())
 	conn.lastUsedNano.Store(now.UnixNano())
 	if capable, ok := ws.(openAIWSReaderLoopCapable); ok && capable.RequiresReaderLoop() {
-		conn.readerLoopResults = make(chan []byte, 1)
+		conn.readerLoopResults = make(chan openAIWSPoolReadResult, 1)
 		go conn.runReaderLoop()
 	}
 	return conn
@@ -335,10 +336,16 @@ func newOpenAIWSConn(id string, _ int64, ws openAIWSClientConn, handshakeHeaders
 func (c *openAIWSConn) runReaderLoop() {
 	defer close(c.readerLoopResults)
 	for {
-		payload, err := c.ws.ReadMessage(context.Background())
-		if err != nil {
+		var result openAIWSPoolReadResult
+		if reader, ok := c.ws.(openAIWSPoolTelemetryReader); ok {
+			result = reader.ReadMessageForPool(context.Background())
+		} else {
+			result.payload, result.err = c.ws.ReadMessage(context.Background())
+		}
+		if err := result.err; err != nil {
 			c.readerLoopErrMu.Lock()
 			c.readerLoopErr = err
+			c.readerLoopErrObservation = result.observe
 			c.readerLoopErrMu.Unlock()
 			// 本地主动关闭时对端会回 close 帧，同样以读错误结束循环，不算上游事件。
 			peerClosed := false
@@ -370,7 +377,7 @@ func (c *openAIWSConn) runReaderLoop() {
 			return
 		}
 		select {
-		case c.readerLoopResults <- payload:
+		case c.readerLoopResults <- result:
 		case <-c.closedCh:
 			return
 		}
@@ -401,11 +408,15 @@ func (c *openAIWSConn) readerLoopPending() bool {
 	return c.hasReaderLoop() && len(c.readerLoopResults) > 0
 }
 
-func (c *openAIWSConn) readerLoopError() error {
+func (c *openAIWSConn) readerLoopError(duration time.Duration) error {
 	c.readerLoopErrMu.Lock()
-	defer c.readerLoopErrMu.Unlock()
-	if c.readerLoopErr != nil {
-		return c.readerLoopErr
+	err, observe := c.readerLoopErr, c.readerLoopErrObservation
+	c.readerLoopErrMu.Unlock()
+	if observe != nil {
+		observe(duration)
+	}
+	if err != nil {
+		return err
 	}
 	return errOpenAIWSConnClosed
 }
@@ -423,8 +434,8 @@ func (c *openAIWSConn) leaseTokenUsable() bool {
 		// 只记事件类型，不记报文原文，避免模型输出进日志。
 		eventType := ""
 		select {
-		case payload := <-c.readerLoopResults:
-			eventType = effectiveOpenAISSEEventType(payload, "")
+		case result := <-c.readerLoopResults:
+			eventType = effectiveOpenAISSEEventType(result.payload, "")
 		default:
 		}
 		logOpenAIWSModeWarn(
@@ -652,17 +663,24 @@ func (c *openAIWSConn) readMessage(readCtx context.Context) ([]byte, error) {
 		c.touch()
 		return payload, nil
 	}
+	started := time.Now()
 	select {
-	case payload, ok := <-c.readerLoopResults:
+	case result, ok := <-c.readerLoopResults:
 		if !ok {
-			return nil, c.readerLoopError()
+			return nil, c.readerLoopError(time.Since(started))
+		}
+		if result.observe != nil {
+			result.observe(time.Since(started))
 		}
 		c.touch()
-		return payload, nil
+		return result.payload, nil
 	case <-readCtx.Done():
 		// 与库在 ctx 取消时切断连接的语义一致：读超时后消息边界已不可信，且对端多半
 		// 已不响应，直接切断而不做关闭握手。
 		c.abort()
+		if observer, ok := c.ws.(openAIWSPoolTelemetryReader); ok {
+			observer.ObservePoolReadError(readCtx.Err(), time.Since(started))
+		}
 		return nil, readCtx.Err()
 	}
 }

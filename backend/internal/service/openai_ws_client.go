@@ -85,6 +85,20 @@ type openAIWSReaderLoopCapable interface {
 	RequiresReaderLoop() bool
 }
 
+// A resident pool reader handles control frames while idle. Defer model-event
+// telemetry until a foreground read consumes the result, matching the original
+// observation boundary instead of measuring the whole idle connection lifetime.
+type openAIWSPoolReadResult struct {
+	payload []byte
+	err     error
+	observe func(time.Duration)
+}
+
+type openAIWSPoolTelemetryReader interface {
+	ReadMessageForPool(context.Context) openAIWSPoolReadResult
+	ObservePoolReadError(error, time.Duration)
+}
+
 // openAIWSUpstreamPingCounter 报告连接收到过多少个上游 ping 帧，用于核对读循环是否在应答保活。
 type openAIWSUpstreamPingCounter interface {
 	UpstreamPingCount() int64
@@ -610,26 +624,43 @@ func (c *coderOpenAIWSClientConn) WriteJSON(ctx context.Context, value any) erro
 }
 
 func (c *coderOpenAIWSClientConn) ReadMessage(ctx context.Context) ([]byte, error) {
+	started := time.Now()
+	result := c.ReadMessageForPool(ctx)
+	if result.observe != nil {
+		result.observe(time.Since(started))
+	}
+	return result.payload, result.err
+}
+
+func (c *coderOpenAIWSClientConn) ReadMessageForPool(ctx context.Context) openAIWSPoolReadResult {
 	if c == nil || c.conn == nil {
-		return nil, errOpenAIWSConnClosed
+		return openAIWSPoolReadResult{err: errOpenAIWSConnClosed}
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	start := time.Now()
 	msgType, payload, err := c.conn.Read(ctx)
+	result := openAIWSPoolReadResult{payload: payload, err: err}
 	if msgType == coderws.MessageText || err != nil {
-		c.telemetry.received(payload, time.Since(start), err)
+		result.observe = func(duration time.Duration) { c.telemetry.received(payload, duration, err) }
 	}
 	if err != nil {
-		return nil, err
+		result.payload = nil
+		return result
 	}
 	switch msgType {
 	case coderws.MessageText, coderws.MessageBinary:
-		return payload, nil
+		return result
 	default:
-		return nil, errOpenAIWSConnClosed
+		result.payload, result.err = nil, errOpenAIWSConnClosed
+		return result
+	}
+}
+
+func (c *coderOpenAIWSClientConn) ObservePoolReadError(err error, duration time.Duration) {
+	if c != nil {
+		c.telemetry.received(nil, duration, err)
 	}
 }
 

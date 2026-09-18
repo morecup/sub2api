@@ -406,7 +406,7 @@ func applyLiveUpstreamIdentityHeaders(headers http.Header, fixedSessionID string
 	}
 	headers.Set("OpenAI-Alpha", "quicksilver=v2")
 	if usesCapturedCodexClientProfile(account) {
-		preserveCodexLiveIdentityHeaders(headers)
+		preservePreMergeCodexIdentityHeaders(headers)
 	} else {
 		ensureCodexIdentityHeaders(headers)
 		enforceCodexIdentityHeadersForAccount(headers, account)

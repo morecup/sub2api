@@ -375,7 +375,12 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 			upstreamReq.Header.Set("conversation_id", isolatedSessionID)
 		}
 	}
-	if account.UsesOpenAICodexProtocol() && !usesCapturedCodexClientProfile(account) && account.Platform != PlatformGrok {
+	if usesCapturedCodexClientProfile(account) {
+		// The builder is neutral, but the pre-merge Messages entry point restored
+		// a paired identity immediately before sending. Preserve that final wire.
+		preservePreMergeCodexIdentityHeaders(upstreamReq.Header)
+		upstreamReq.Header.Set("OpenAI-Beta", "responses=experimental")
+	} else if account.UsesOpenAICodexProtocol() && account.Platform != PlatformGrok {
 		// buildUpstreamRequest 保留 Messages bridge 的 body/session 兼容行为，并会先
 		// 清除身份头。真正发送前恢复完整 Codex 身份，避免 ChatGPT Codex 上游因缺失
 		// originator/OpenAI-Beta 返回 404（issue #3901）。

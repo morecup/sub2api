@@ -1115,7 +1115,7 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, firstResult)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
-	requireOpenAIMessagesNeutralIdentity(t, upstream.requests[0])
+	requireOpenAIMessagesLegacyIdentity(t, upstream.requests[0])
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
 	secondRec := httptest.NewRecorder()
@@ -1129,25 +1129,25 @@ func TestForwardAsAnthropic_ReusesOAuthCodexTurnState(t *testing.T) {
 	require.Equal(t, "turn_state_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Equal(t, generateSessionUUID(isolateOpenAISessionIDForAccount(account.ID, 0, "stable-cache-key")), upstream.requests[1].Header.Get("session_id"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
-	requireOpenAIMessagesNeutralIdentity(t, upstream.requests[1])
+	requireOpenAIMessagesLegacyIdentity(t, upstream.requests[1])
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
 
-func TestForwardAsAnthropic_OAuthPreservesNeutralBridgeIdentity(t *testing.T) {
+func TestForwardAsAnthropic_OAuthPreservesPreMergeIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	const tuiUA = "codex-tui/9.9.9 (Mac OS X 14.0; arm64) iTerm (codex-tui; 9.9.9)"
 	const vscodeUA = "codex_vscode/9.9.9 (Mac OS X 14.0; arm64) vscode (codex_vscode; 9.9.9)"
-	// Preserve the existing neutral Messages bridge: inbound UA, no Codex originator.
+	// Preserve the final pre-merge Messages identity, after the neutral builder.
 	tests := []struct {
 		name       string
 		userAgent  string
 		originator string
 	}{
-		{name: "官方vscode身份", userAgent: vscodeUA, originator: "opencode"},
-		{name: "TUI身份", userAgent: tuiUA, originator: "opencode"},
-		{name: "第三方UA", userAgent: "third-party-client/1.0.0", originator: "opencode"},
+		{name: "官方vscode身份", userAgent: vscodeUA, originator: "codex_vscode"},
+		{name: "TUI身份", userAgent: tuiUA, originator: "codex-tui"},
+		{name: "第三方UA", userAgent: "third-party-client/1.0.0", originator: "codex_cli_rs"},
 	}
 
 	for _, tt := range tests {
@@ -1158,7 +1158,7 @@ func TestForwardAsAnthropic_OAuthPreservesNeutralBridgeIdentity(t *testing.T) {
 			c.Request = httptest.NewRequest(http.MethodPost, "/v1/messages", bytes.NewReader(body))
 			c.Request.Header.Set("Content-Type", "application/json")
 			c.Request.Header.Set("User-Agent", tt.userAgent)
-			c.Request.Header.Set("originator", tt.originator)
+			c.Request.Header.Set("originator", "opencode")
 
 			upstream := &httpUpstreamRecorder{resp: openAICompatSSECompletedResponse("resp_identity", "gpt-5.4")}
 			svc := &OpenAIGatewayService{
@@ -1180,10 +1180,14 @@ func TestForwardAsAnthropic_OAuthPreservesNeutralBridgeIdentity(t *testing.T) {
 			result, err := svc.ForwardAsAnthropic(context.Background(), c, account, body, "", "gpt-5.4")
 			require.NoError(t, err)
 			require.NotNil(t, result)
-			require.Equal(t, tt.userAgent, upstream.lastReq.Header.Get("User-Agent"))
-			require.Empty(t, upstream.lastReq.Header.Get("originator"))
-			require.Empty(t, upstream.lastReq.Header.Get("version"))
-			require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
+			wantUA := tt.userAgent
+			if tt.originator == "codex_cli_rs" {
+				wantUA = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
+			}
+			require.Equal(t, wantUA, upstream.lastReq.Header.Get("User-Agent"))
+			require.Equal(t, tt.originator, upstream.lastReq.Header.Get("originator"))
+			require.Equal(t, "0.144.1", upstream.lastReq.Header.Get("version"))
+			require.Equal(t, "responses=experimental", upstream.lastReq.Header.Get("OpenAI-Beta"))
 			require.Empty(t, upstream.lastReq.Header.Get("x-codex-beta-features"))
 			require.Empty(t, upstream.lastReq.Header.Get("x-codex-routing-hint"))
 		})
@@ -1228,7 +1232,7 @@ func TestForwardAsAnthropic_OAuthDigestFallbackReusesTurnStateWithoutExplicitKey
 	firstSessionID := upstream.requests[0].Header.Get("session_id")
 	require.NotEmpty(t, firstSessionID)
 	require.Empty(t, upstream.requests[0].Header.Get("x-codex-turn-state"))
-	requireOpenAIMessagesNeutralIdentity(t, upstream.requests[0])
+	requireOpenAIMessagesLegacyIdentity(t, upstream.requests[0])
 	require.False(t, gjson.GetBytes(upstream.bodies[0], "prompt_cache_key").Exists())
 
 	secondBody := []byte(`{"model":"claude-sonnet-4-5","max_tokens":16,"messages":[{"role":"user","content":"first"},{"role":"assistant","content":"ok"},{"role":"user","content":"second"}],"stream":false}`)
@@ -1243,7 +1247,7 @@ func TestForwardAsAnthropic_OAuthDigestFallbackReusesTurnStateWithoutExplicitKey
 	require.Equal(t, firstSessionID, upstream.requests[1].Header.Get("session_id"))
 	require.Equal(t, "turn_state_digest_first", upstream.requests[1].Header.Get("x-codex-turn-state"))
 	require.Empty(t, upstream.requests[1].Header.Get("conversation_id"))
-	requireOpenAIMessagesNeutralIdentity(t, upstream.requests[1])
+	requireOpenAIMessagesLegacyIdentity(t, upstream.requests[1])
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "prompt_cache_key").Exists())
 	require.False(t, gjson.GetBytes(upstream.bodies[1], "previous_response_id").Exists())
 }
@@ -1398,7 +1402,7 @@ func TestForwardAsAnthropic_OAuthKeepsSystemAsDeveloperInput(t *testing.T) {
 	instructions := gjson.GetBytes(upstream.lastBody, "instructions")
 	require.True(t, instructions.Exists())
 	require.Empty(t, instructions.String())
-	requireOpenAIMessagesNeutralIdentity(t, upstream.requests[0])
+	requireOpenAIMessagesLegacyIdentity(t, upstream.requests[0])
 }
 
 func TestForwardAsAnthropic_OAuthAddsClaudeCodeTodoGuardForCompatModel(t *testing.T) {
@@ -2331,12 +2335,12 @@ func TestForwardAsAnthropic_AstraContinuationRestoresHistoryAndDisablesUnsupport
 	require.False(t, isOpenAICompatPreviousResponseUnsupported(http.StatusBadRequest, "The model is not available for this user", nil))
 }
 
-// Captured OAuth keeps the existing neutral Messages bridge.
-func requireOpenAIMessagesNeutralIdentity(t *testing.T, req *http.Request) {
+// Requests without an inbound UA retain the pre-merge Messages CLI fallback.
+func requireOpenAIMessagesLegacyIdentity(t *testing.T, req *http.Request) {
 	t.Helper()
 	require.NotNil(t, req)
-	require.Empty(t, req.Header.Get("User-Agent"))
-	require.Empty(t, req.Header.Get("originator"))
-	require.Empty(t, req.Header.Get("version"))
-	require.Empty(t, req.Header.Get("OpenAI-Beta"))
+	require.Equal(t, "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color", req.Header.Get("User-Agent"))
+	require.Equal(t, "codex_cli_rs", req.Header.Get("originator"))
+	require.Equal(t, "0.144.1", req.Header.Get("version"))
+	require.Equal(t, "responses=experimental", req.Header.Get("OpenAI-Beta"))
 }
