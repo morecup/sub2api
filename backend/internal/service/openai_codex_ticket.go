@@ -26,11 +26,12 @@ const (
 	openAICodexTicketExtraKeyPrefix  = "codex_turn_ticket:"
 	openAICodexAstraMinVersion       = "0.153.4"
 	openAICodexTicketStatePrefix     = "gAAAAA"
+	openAICodexTicketDefaultLength   = 292
 	openAICodexTicketDefaultModel    = "gpt-6-astra"
 	openAICodexTicketDefaultSolModel = "gpt-5.6-sol"
 )
 
-// ErrOpenAICodexTicketUnavailable 表示该号该模型没有可用的 292 门票，
+// ErrOpenAICodexTicketUnavailable 表示该号该模型没有可用的门票，
 // 且 fail_closed 禁止裸打业务请求。
 var ErrOpenAICodexTicketUnavailable = errors.New("codex turn-state ticket unavailable")
 
@@ -66,7 +67,7 @@ func (s *OpenAIGatewayService) openAICodexTicketConfig() config.OpenAICodexTicke
 		cfg = s.cfg.Gateway.OpenAICodexTicket
 	}
 	if cfg.TargetLength <= 0 {
-		cfg.TargetLength = 292
+		cfg.TargetLength = openAICodexTicketDefaultLength
 	}
 	if cfg.TTLSeconds <= 0 {
 		cfg.TTLSeconds = 3600
@@ -118,7 +119,7 @@ func OpenAICodexTicketStatuses(account *Account, cfg config.OpenAICodexTicketCon
 		models = []string{openAICodexTicketDefaultModel, openAICodexTicketDefaultSolModel}
 	}
 	if targetLen <= 0 {
-		targetLen = 292
+		targetLen = openAICodexTicketDefaultLength
 	}
 	out := make([]OpenAICodexTicketStatus, 0, len(models))
 	for _, model := range models {
@@ -176,12 +177,21 @@ func (s *OpenAIGatewayService) openAICodexTicketHarvestProxyURLContext(ctx conte
 	return strings.TrimSpace(s.openAICodexTicketConfig().HarvestProxyURL)
 }
 
+// The default and existing target_length: 292 configurations accept both known
+// lengths. Preserve exact matching for explicitly configured custom lengths.
+func matchesOpenAICodexTicketLength(length, targetLen int) bool {
+	if targetLen <= 0 {
+		targetLen = openAICodexTicketDefaultLength
+	}
+	return length == targetLen || (targetLen == openAICodexTicketDefaultLength && length == 332)
+}
+
 func (t *openAICodexTicket) valid(now time.Time, targetLen int) bool {
 	if t == nil {
 		return false
 	}
 	state := strings.TrimSpace(t.State)
-	if len(state) != targetLen || t.Length != targetLen || !strings.HasPrefix(state, openAICodexTicketStatePrefix) {
+	if !matchesOpenAICodexTicketLength(len(state), targetLen) || t.Length != len(state) || !strings.HasPrefix(state, openAICodexTicketStatePrefix) {
 		return false
 	}
 	if t.ExpiresAt.IsZero() || !now.Before(t.ExpiresAt) {
@@ -206,7 +216,7 @@ func (s *OpenAIGatewayService) lookupOpenAICodexTicket(account *Account, model s
 		return nil
 	}
 	key := openAICodexTicketKey(account.ID, model)
-	targetLen := 292
+	targetLen := openAICodexTicketDefaultLength
 	if s != nil {
 		targetLen = s.openAICodexTicketConfig().TargetLength
 	}
@@ -525,7 +535,7 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTickets(ctx context.Context) {
 	}
 }
 
-// probeOnceOpenAICodexTicket 走打票代理打一发。命中合格 292（HTTP 200、长度==target、
+// probeOnceOpenAICodexTicket 走打票代理打一发。命中合格门票（HTTP 200、长度符合配置，默认 292/332、
 // gAAAAA 前缀）就落库；否则记 Info miss，交给下个周期重试。同一 key 并发去重，避免上一发还没
 // 回来又叠一发。
 func (s *OpenAIGatewayService) probeOnceOpenAICodexTicket(ctx context.Context, account *Account, model string) {
@@ -553,7 +563,7 @@ func (s *OpenAIGatewayService) probeOnceOpenAICodexTicket(ctx context.Context, a
 				zap.String("reason", "error"), zap.Error(perr))
 			return nil, nil
 		}
-		if status != http.StatusOK || state == "" || len(state) != cfg.TargetLength || !strings.HasPrefix(state, openAICodexTicketStatePrefix) {
+		if status != http.StatusOK || state == "" || !matchesOpenAICodexTicketLength(len(state), cfg.TargetLength) || !strings.HasPrefix(state, openAICodexTicketStatePrefix) {
 			logger.L().Info("openai_codex_ticket probe miss",
 				zap.Int64("account_id", account.ID), zap.String("model", model),
 				zap.Int("http", status), zap.Int("len", len(state)))

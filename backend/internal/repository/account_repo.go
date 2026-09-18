@@ -57,7 +57,7 @@ var schedulerNeutralExtraKeyPrefixes = []string{
 	"codex_5h_",
 	"codex_7d_",
 	"codex_reset_credit_",
-	// 292 门票是纯运行态凭据：它不在 filterSchedulerExtra 的投影白名单里，
+	// Codex 门票是纯运行态凭据：它不在 filterSchedulerExtra 的投影白名单里，
 	// 因此 bucket 重建事件永远搬不动门票状态，续期时开事务+发 outbox 是白干。
 	// 归为观测型后仍会同步单账号快照（见 UpdateExtra），不丢任何新鲜度。
 	"codex_turn_ticket:",
