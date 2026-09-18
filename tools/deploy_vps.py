@@ -138,8 +138,10 @@ def build_backend(version: str | None, label: str) -> Path:
         [
             go,
             "build",
+            # Go 1.27's x/net/http2 wrapper cannot honor HeaderOrder.
+            # http2legacy keeps the fork encoder Codex/Grok fingerprints need.
             "-tags",
-            "embed",
+            "embed,http2legacy",
             "-ldflags",
             ldflags,
             "-trimpath",
