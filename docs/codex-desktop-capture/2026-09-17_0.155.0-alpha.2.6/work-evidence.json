@@ -1,0 +1,1314 @@
+{
+  "generated_at": "2026-09-17T12:59:20.085869+00:00",
+  "window_start": "2026-09-17T12:50:14.379497+00:00",
+  "window_end": "2026-09-17T12:59:19.307204+00:00",
+  "model_endpoints": {
+    "GET /backend-api/codex/responses": 2
+  },
+  "model_requests": 26,
+  "samples": [
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": true,
+      "request_kind": "prewarm",
+      "thread_source": "user",
+      "workspace_kind": null,
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled"
+      ],
+      "workspace_count": 0,
+      "workspace_entry_fields": [],
+      "has_git_commit": false,
+      "has_changes": [],
+      "has_previous_response_id": false,
+      "input_types": {
+        "additional_tools": 1,
+        "message": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": false,
+      "input_types": {
+        "additional_tools": 1,
+        "message": 6
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-luna",
+      "prewarm": true,
+      "request_kind": "prewarm",
+      "thread_source": "thread_title",
+      "workspace_kind": null,
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "read-only",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled"
+      ],
+      "workspace_count": 0,
+      "workspace_entry_fields": [],
+      "has_git_commit": false,
+      "has_changes": [],
+      "has_previous_response_id": false,
+      "input_types": {
+        "additional_tools": 1,
+        "message": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-luna",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "thread_title",
+      "workspace_kind": null,
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "read-only",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": false,
+      "input_types": {
+        "additional_tools": 1,
+        "message": 4
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        false
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 0,
+      "workspace_entry_fields": [],
+      "has_git_commit": false,
+      "has_changes": [],
+      "has_previous_response_id": true,
+      "input_types": {
+        "message": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "compaction",
+      "thread_source": "user",
+      "workspace_kind": null,
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "compaction"
+      ],
+      "workspace_count": 0,
+      "workspace_entry_fields": [],
+      "has_git_commit": false,
+      "has_changes": [],
+      "has_previous_response_id": true,
+      "input_types": {
+        "compaction_trigger": 1
+      },
+      "compaction": {
+        "trigger": "manual",
+        "reason": "user_requested",
+        "implementation": "responses_compaction_v2",
+        "phase": "standalone_turn",
+        "strategy": "memento"
+      }
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 0,
+      "workspace_entry_fields": [],
+      "has_git_commit": false,
+      "has_changes": [],
+      "has_previous_response_id": false,
+      "input_types": {
+        "additional_tools": 1,
+        "message": 8,
+        "compaction": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    },
+    {
+      "transport": "WS",
+      "model": "gpt-5.6-sol",
+      "prewarm": false,
+      "request_kind": "turn",
+      "thread_source": "user",
+      "workspace_kind": "project",
+      "sandbox": "windows_elevated",
+      "sandbox_mode": "workspace-write",
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "workspace_kind"
+      ],
+      "workspace_count": 1,
+      "workspace_entry_fields": [
+        "has_changes",
+        "latest_git_commit_hash"
+      ],
+      "has_git_commit": true,
+      "has_changes": [
+        true
+      ],
+      "has_previous_response_id": true,
+      "input_types": {
+        "custom_tool_call_output": 1
+      },
+      "compaction": null
+    }
+  ],
+  "frame_types": {
+    "response.create": 26,
+    "codex.rate_limits": 26,
+    "codex.response.metadata": 26,
+    "response.created": 26,
+    "response.in_progress": 26,
+    "responsesapi.websocket_timing": 26,
+    "response.completed": 26,
+    "response.output_item.added": 43,
+    "response.output_item.done": 43,
+    "response.content_part.added": 10,
+    "response.output_text.delta": 768,
+    "response.output_text.done": 10,
+    "response.content_part.done": 10,
+    "response.custom_tool_call_input.delta": 2173,
+    "response.custom_tool_call_input.done": 19,
+    "response.compaction.compacting": 1
+  },
+  "completed_tool_calls": {
+    "exec": 19
+  },
+  "wrapper_target_occurrences": {
+    "exec_command": 14,
+    "mcp__codex_app__load_workspace_dependencies": 1,
+    "apply_patch": 4
+  },
+  "rust_work_metrics_during_supplement": {
+    "codex-app-server": [
+      "codex.apps.installed.connector_count",
+      "codex.apps.installed.duration_ms",
+      "codex.apps.installed.response_bytes",
+      "codex.apps.installed.tool_count",
+      "codex.apps.read.duration_ms",
+      "codex.apps.refresh.duration_ms",
+      "codex.apps.snapshot.age_ms",
+      "codex.feature.state",
+      "codex.hooks.run",
+      "codex.hooks.run.duration_ms",
+      "codex.mcp.call",
+      "codex.mcp.call.duration_ms",
+      "codex.mcp.call.error",
+      "codex.mcp.protocol_discovery",
+      "codex.mcp.protocol_discovery.duration_ms",
+      "codex.mcp.tools.cache_publish.duration_ms",
+      "codex.mcp.tools.cache_write.duration_ms",
+      "codex.mcp.tools.fetch_uncached.duration_ms",
+      "codex.mcp.tools.list.duration_ms",
+      "codex.plugins.loaded_cache.event",
+      "codex.plugins.loaded_cache.load.duration_ms",
+      "codex.plugins.loaded_cache.request",
+      "codex.plugins.loaded_cache.wait.duration_ms",
+      "codex.remote_models.fetch_update.duration_ms",
+      "codex.remote_models.load_cache.duration_ms",
+      "codex.responses_api_engine_iapi_tbt.duration_ms",
+      "codex.responses_api_inference_time.duration_ms",
+      "codex.responses_api_overhead.duration_ms",
+      "codex.rollout_compression.materialize",
+      "codex.shell_snapshot",
+      "codex.shell_snapshot.duration_ms",
+      "codex.skills.shadow_selection",
+      "codex.skills.shadow_selection.catalog_entries",
+      "codex.skills.shadow_selection.duration_ms",
+      "codex.skills.shadow_selection.query_terms",
+      "codex.skills.shadow_selection.reduction_bps",
+      "codex.skills.shadow_selection.selected_entries",
+      "codex.sqlite.logs.write.bytes",
+      "codex.sqlite.logs.write.count",
+      "codex.sqlite.logs.write.duration_ms",
+      "codex.sqlite.logs.write.entries",
+      "codex.sqlite.logs.write.max_entry_bytes",
+      "codex.startup.phase.duration_ms",
+      "codex.startup_prewarm.age_at_first_turn_ms",
+      "codex.startup_prewarm.duration_ms",
+      "codex.task.compact",
+      "codex.thread.skills.description_truncated_chars",
+      "codex.thread.skills.enabled_total",
+      "codex.thread.skills.kept_total",
+      "codex.thread.skills.truncated",
+      "codex.thread.started",
+      "codex.thread_history.sqlite_projection",
+      "codex.tool.unified_exec",
+      "codex.turn.e2e_duration_ms",
+      "codex.turn.memory",
+      "codex.turn.network_proxy",
+      "codex.turn.tool.call",
+      "codex.turn.ttfm.duration_ms",
+      "codex.turn.ttft.duration_ms",
+      "codex.turn.unified_exec.running_processes",
+      "codex.websocket.event",
+      "codex.websocket.event.duration_ms",
+      "codex.websocket.request",
+      "codex.websocket.request.duration_ms",
+      "codex.windows_sandbox.private_desktop"
+    ]
+  },
+  "initial_new_metric_sources": {
+    "codex.app_server.codex_home.size_bytes": [
+      "codex-app-server"
+    ],
+    "codex.hooks.run": [
+      "codex-app-server"
+    ],
+    "codex.hooks.run.duration_ms": [
+      "codex-app-server"
+    ],
+    "codex.plugins.loaded_cache.event": [
+      "codex-app-server"
+    ],
+    "codex.plugins.loaded_cache.load.duration_ms": [
+      "codex-app-server"
+    ],
+    "codex.plugins.loaded_cache.request": [
+      "codex-app-server"
+    ],
+    "codex.plugins.loaded_cache.wait.duration_ms": [
+      "codex-app-server"
+    ],
+    "codex.thread_history.sqlite_projection": [
+      "codex-app-server"
+    ],
+    "codex.windows_mxc.available": [
+      "codex-app-server"
+    ],
+    "codex.windows_sandbox.private_desktop": [
+      "codex-app-server"
+    ],
+    "codex.windows_system_config.namespace_squatting_probe": [
+      "codex-app-server"
+    ]
+  },
+  "notes": [
+    "Work-only refers to the UI scenarios in this time window. Background WebView telemetry may still exist.",
+    "Rust metrics are attributed using OTLP resource service.name; generic WebView endpoints are not treated as Work-specific.",
+    "User prompts, tool arguments, identifiers, workspace paths and git hashes are excluded."
+  ]
+}

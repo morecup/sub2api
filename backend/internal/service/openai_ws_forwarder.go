@@ -226,6 +226,9 @@ func (s *OpenAIGatewayService) getOpenAIWSConnPool() *openAIWSConnPool {
 	s.openaiWSPoolOnce.Do(func() {
 		if s.openaiWSPool == nil {
 			s.openaiWSPool = newOpenAIWSConnPool(s.cfg)
+			if d, ok := s.openaiWSPool.clientDialer.(*coderOpenAIWSClientDialer); ok {
+				d.telemetry = s.getCodexTelemetry()
+			}
 		}
 	})
 	return s.openaiWSPool
@@ -238,6 +241,9 @@ func (s *OpenAIGatewayService) getOpenAIWSPassthroughDialer() openAIWSClientDial
 	s.openaiWSPassthroughDialerOnce.Do(func() {
 		if s.openaiWSPassthroughDialer == nil {
 			s.openaiWSPassthroughDialer = newDefaultOpenAIWSClientDialer()
+			if d, ok := s.openaiWSPassthroughDialer.(*coderOpenAIWSClientDialer); ok {
+				d.telemetry = s.getCodexTelemetry()
+			}
 		}
 	})
 	return s.openaiWSPassthroughDialer

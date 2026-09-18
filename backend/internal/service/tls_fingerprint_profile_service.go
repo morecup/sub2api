@@ -195,11 +195,13 @@ func (s *TLSFingerprintProfileService) ResolveTLSProfile(account *Account) *tlsf
 
 // builtInProfileForAccount 返回账号所属平台的官方客户端内置画像。
 //
-// 未绑定自定义模板时按平台选择，避免用 Claude Code（Node.js）的 ClientHello
-// 去伪装 Grok Build CLI（Rust/rustls）这类完全不同的客户端。
+// 未绑定自定义模板时按平台选择，避免不同官方客户端共用错误的 ClientHello。
 func builtInProfileForAccount(account *Account) *tlsfingerprint.Profile {
 	if account != nil && account.IsGrok() {
 		return tlsfingerprint.GrokCLIProfile()
+	}
+	if account != nil && account.IsOpenAIOAuth() {
+		return tlsfingerprint.CodexDesktopProfile()
 	}
 	return tlsfingerprint.BuiltInDefaultProfile()
 }

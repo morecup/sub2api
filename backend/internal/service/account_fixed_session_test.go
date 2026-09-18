@@ -14,8 +14,9 @@ func TestNormalizeOpenAIFixedSessionExtra(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, true, extra[openAIFixedSessionIDEnabledKey])
-		_, err = uuid.Parse(extra[openAISessionIDKey].(string))
+		parsed, err := uuid.Parse(extra[openAISessionIDKey].(string))
 		require.NoError(t, err)
+		require.Equal(t, uuid.Version(7), parsed.Version())
 	})
 
 	t.Run("enabled preserves an existing UUID", func(t *testing.T) {

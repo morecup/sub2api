@@ -141,6 +141,7 @@ func isRetryableCodexModelsManifestTransportError(err error) bool {
 }
 
 type codexModelsManifestRequest struct {
+	clientProfile       CodexClientProfile
 	url                 string
 	headers             http.Header
 	proxyURL            string
@@ -255,7 +256,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		// OAuth 模型清单继续使用 morecup 固定的 Codex Desktop 画像，不能被
 		// 入站 client_version 改写；API Key 自定义上游则保留客户端版本。
 		// 实抓：query 中的 client_version 为三段式（0.145.0），不带 alpha 后缀。
-		clientVersion = codexDesktopClientVersion()
+		clientVersion, _, _ = strings.Cut(codexClientProfileForAccount(account).CodexVersion, "-")
 		authToken = strings.TrimSpace(credAccount.GetOpenAIAccessToken())
 		if authToken == "" && !credAccount.IsOpenAIAgentIdentity() {
 			return nil, infraerrors.New(http.StatusBadGateway, "OPENAI_CODEX_MODELS_TOKEN_MISSING", "account has no Codex backend access token")
@@ -314,8 +315,9 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 		headers.Set("User-Agent", codexCLIUserAgent)
 	} else {
 		headers.Set("Originator", codexDesktopOriginator)
-		headers.Set("Version", codexDesktopVersion)
-		headers.Set("User-Agent", codexDesktopUserAgent)
+		client := codexClientProfileForAccount(account)
+		headers.Set("Version", client.CodexVersion)
+		headers.Set("User-Agent", client.UserAgent())
 	}
 
 	proxyURL := ""
@@ -324,6 +326,7 @@ func (s *OpenAIGatewayService) FetchCodexModelsManifest(ctx context.Context, acc
 	}
 
 	request := codexModelsManifestRequest{
+		clientProfile:       codexClientProfileForAccount(account),
 		url:                 requestURL.String(),
 		headers:             headers,
 		proxyURL:            proxyURL,
@@ -474,6 +477,13 @@ func (s *OpenAIGatewayService) fetchCodexModelsManifestUpstream(ctx context.Cont
 		})
 		if clientErr != nil {
 			return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_CODEX_MODELS_PROXY_INVALID", "invalid proxy configuration: %v", clientErr)
+		}
+		if req.URL.Scheme == "https" && req.URL.Hostname() == "chatgpt.com" && req.URL.Path == "/backend-api/codex/models" && request.credentialAccount != nil && request.credentialAccount.IsOpenAIOAuth() {
+			started := time.Now()
+			defer func() {
+				s.getCodexTelemetry().recordDuration(codexTelemetryRoute{accountID: request.accountID, proxyURL: request.proxyURL, client: request.clientProfile},
+					"codex.remote_models.fetch_update.duration_ms", "other", "", float64(time.Since(started).Milliseconds()))
+			}()
 		}
 		resp, err = client.Do(req)
 	}

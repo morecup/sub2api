@@ -101,6 +101,9 @@ func createAccountRecord(ctx context.Context, client *dbent.Client, account *ser
 	if account == nil {
 		return service.ErrAccountNilInput
 	}
+	if err := service.InitializeCodexClientProfile(account); err != nil {
+		return err
+	}
 
 	builder := client.Account.Create().
 		SetName(account.Name).
@@ -583,7 +586,8 @@ func lockAndMergeAccountProbeExtra(ctx context.Context, client *dbent.Client, ac
 			extra -> 'upstream_billing_probe',
 			extra -> 'ollama_cloud_usage_session',
 			extra -> 'ollama_cloud_usage_auto_refresh',
-			extra -> 'ollama_cloud_usage_snapshot'
+			extra -> 'ollama_cloud_usage_snapshot',
+			extra -> 'openai_codex_client_profile'
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
 		FOR NO KEY UPDATE
@@ -608,6 +612,7 @@ func lockAndMergeAccountProbeExtra(ctx context.Context, client *dbent.Client, ac
 		currentOllamaSession         []byte
 		currentOllamaAutoRefresh     []byte
 		currentOllamaSnapshot        []byte
+		currentCodexClientProfile    []byte
 	)
 	if err := rows.Scan(
 		&identityUnchanged,
@@ -618,6 +623,7 @@ func lockAndMergeAccountProbeExtra(ctx context.Context, client *dbent.Client, ac
 		&currentOllamaSession,
 		&currentOllamaAutoRefresh,
 		&currentOllamaSnapshot,
+		&currentCodexClientProfile,
 	); err != nil {
 		return nil, err
 	}
@@ -626,6 +632,25 @@ func lockAndMergeAccountProbeExtra(ctx context.Context, client *dbent.Client, ac
 	}
 
 	extra := copyJSONMap(normalizeJSONMap(account.Extra))
+	if account.IsOpenAIOAuth() {
+		stored, exists, err := decodeAccountExtraJSON(currentCodexClientProfile)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			previous := *account
+			previous.Extra = map[string]any{service.CodexClientProfileExtraKey: stored}
+			if err := service.PreserveCodexClientProfileUpdate(&previous, extra); err != nil {
+				return nil, err
+			}
+		}
+		updated := *account
+		updated.Extra = extra
+		if err := service.EnsureCodexClientProfile(&updated); err != nil {
+			return nil, err
+		}
+		extra = updated.Extra
+	}
 	for _, key := range []string{
 		service.UpstreamBillingProbeEnabledExtraKey,
 		service.UpstreamBillingProbeExtraKey,

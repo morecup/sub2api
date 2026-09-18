@@ -257,6 +257,15 @@ gateway:
   # Default false keeps zstd enabled to match real Codex CLI's Content-Encoding.
   # 默认 false：保持启用 zstd，以匹配真实 Codex CLI 的 Content-Encoding。
   openai_codex_request_compression_disabled: false
+  # Work 0.155 OTLP: measured proxy events only; no prompt, file, path or account IDs.
+  # Omit this section for the captured official endpoint and bundled public client key.
+  # Local mode writes rotating JSONL only; off disables telemetry.
+  codex_telemetry:
+    mode: remote # remote (default) | local | off
+    local_path: data/codex-telemetry.jsonl
+    endpoint: https://ab.chatgpt.com/otlp/v1/metrics
+    # Optional override. Empty uses the bundled public key for the official collector only.
+    statsig_api_key: ""
   # Enable Codex image-generation bridge injection for /openai/v1/responses.
   # 是否为 Codex /responses 请求自动注入 image_generation 工具与桥接指令。
   #

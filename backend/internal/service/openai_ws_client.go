@@ -1,17 +1,22 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
 	coderws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -24,7 +29,34 @@ const (
 	openAIWSProxyTransportIdleConnTimeout     = 90 * time.Second
 	openAIWSProxyClientCacheMaxEntries        = 256
 	openAIWSProxyClientCacheIdleTTL           = 15 * time.Minute
+	openAIWSHandshakeHeaderLimitBytes         = 128 * 1024
+	codexDesktopWSCompressionOffer            = "permessage-deflate; client_max_window_bits"
 )
+
+// codexDesktopWSHeaderOrder is the HTTP/1.1 order emitted by Tungstenite in
+// the captured 0.151 Desktop handshake. The wire casing is intentional.
+var codexDesktopWSHeaderOrder = []string{
+	"Host",
+	"Connection",
+	"Upgrade",
+	"Sec-WebSocket-Version",
+	"Sec-WebSocket-Key",
+	"chatgpt-account-id",
+	"authorization",
+	"user-agent",
+	"originator",
+	"openai-beta",
+	"version",
+	"x-codex-beta-features",
+	"x-client-request-id",
+	"session-id",
+	"thread-id",
+	"x-codex-window-id",
+	"x-codex-turn-metadata",
+	"x-codex-routing-hint",
+	"x-oai-attestation",
+	"sec-websocket-extensions",
+}
 
 type OpenAIWSTransportMetricsSnapshot struct {
 	ProxyClientCacheHits   int64   `json:"proxy_client_cache_hits"`
@@ -48,8 +80,10 @@ type openAIWSIdlePingCapable interface {
 }
 
 // openAIWSClientDialer 抽象 WS 建连器。
+type openAIWSTLSProfile = tlsfingerprint.Profile
+
 type openAIWSClientDialer interface {
-	Dial(ctx context.Context, wsURL string, headers http.Header, proxyURL string) (openAIWSClientConn, int, http.Header, error)
+	Dial(ctx context.Context, wsURL string, headers http.Header, proxyURL string, profile *openAIWSTLSProfile, transportScope string) (openAIWSClientConn, int, http.Header, error)
 }
 
 type openAIWSTransportMetricsDialer interface {
@@ -63,6 +97,7 @@ func newDefaultOpenAIWSClientDialer() openAIWSClientDialer {
 }
 
 type coderOpenAIWSClientDialer struct {
+	telemetry    *codexTelemetryExporter
 	proxyMu      sync.Mutex
 	proxyClients map[string]*openAIWSProxyClientEntry
 	proxyHits    atomic.Int64
@@ -101,6 +136,8 @@ func (d *coderOpenAIWSClientDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	profile *tlsfingerprint.Profile,
+	transportScope string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	targetURL := strings.TrimSpace(wsURL)
 	if targetURL == "" {
@@ -111,7 +148,13 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		HTTPHeader:      cloneHeader(headers),
 		CompressionMode: coderws.CompressionContextTakeover,
 	}
-	if proxy := strings.TrimSpace(proxyURL); proxy != "" {
+	if profile != nil {
+		profiledClient, err := d.fingerprintedHTTPClient(proxyURL, profile, transportScope)
+		if err != nil {
+			return nil, 0, nil, err
+		}
+		opts.HTTPClient = profiledClient
+	} else if proxy := strings.TrimSpace(proxyURL); proxy != "" {
 		proxyClient, err := d.proxyHTTPClient(proxy)
 		if err != nil {
 			return nil, 0, nil, err
@@ -141,7 +184,256 @@ func (d *coderOpenAIWSClientDialer) Dial(
 	if resp != nil {
 		respHeaders = cloneHeader(resp.Header)
 	}
-	return &coderOpenAIWSClientConn{conn: conn}, 0, respHeaders, nil
+	clientConn := &coderOpenAIWSClientConn{conn: conn}
+	if target, err := url.Parse(targetURL); err == nil && d.telemetry != nil &&
+		target.Hostname() == "chatgpt.com" && target.Path == "/backend-api/codex/responses" &&
+		strings.HasPrefix(transportScope, "openai-account:") {
+		id, _ := strconv.ParseInt(strings.TrimPrefix(transportScope, "openai-account:"), 10, 64)
+		if id > 0 {
+			clientConn.telemetry = &codexTelemetryWS{exporter: d.telemetry, route: codexTelemetryRoute{accountID: id, proxyURL: proxyURL, profile: profile, client: codexClientProfileFromContext(ctx, id)}}
+			clientConn.telemetry.model.Store(strings.TrimPrefix(headers.Get("x-codex-routing-hint"), "model="))
+		}
+	}
+	return clientConn, 0, respHeaders, nil
+}
+
+func (d *coderOpenAIWSClientDialer) fingerprintedHTTPClient(proxy string, profile *tlsfingerprint.Profile, transportScope string) (*http.Client, error) {
+	if d == nil {
+		return nil, errors.New("openai ws dialer is nil")
+	}
+	if profile == nil {
+		return nil, errors.New("TLS fingerprint profile is nil")
+	}
+	normalizedProxy := strings.TrimSpace(proxy)
+	if normalizedProxy != "" {
+		if _, err := url.Parse(normalizedProxy); err != nil {
+			return nil, fmt.Errorf("invalid proxy url: %w", err)
+		}
+	}
+	normalizedScope := strings.TrimSpace(transportScope)
+	cacheKey := "fingerprint\x00" + normalizedScope + "\x00" + profile.CacheKey() + "\x00" + normalizedProxy
+	now := time.Now().UnixNano()
+
+	d.proxyMu.Lock()
+	defer d.proxyMu.Unlock()
+	if entry, ok := d.proxyClients[cacheKey]; ok && entry != nil && entry.client != nil {
+		entry.lastUsedUnixNano = now
+		d.proxyHits.Add(1)
+		return entry.client, nil
+	}
+	d.cleanupProxyClientsLocked(now)
+	client, err := newFingerprintedOpenAIWSHTTPClient(normalizedProxy, profile, normalizedScope)
+	if err != nil {
+		return nil, err
+	}
+	d.proxyClients[cacheKey] = &openAIWSProxyClientEntry{client: client, lastUsedUnixNano: now}
+	d.ensureProxyClientCapacityLocked()
+	d.proxyMisses.Add(1)
+	return client, nil
+}
+
+func newFingerprintedOpenAIWSHTTPClient(proxy string, profile *tlsfingerprint.Profile, transportScope string) (*http.Client, error) {
+	// Codex builds an explicit rustls ClientConfig for WebSockets and leaves
+	// alpn_protocols empty, so its ClientHello omits ALPN rather than offering
+	// http/1.1. HTTP Upgrade still speaks HTTP/1.1 without ALPN.
+	websocketProfile := profile.WithoutALPN()
+	if websocketProfile == nil {
+		return nil, errors.New("TLS fingerprint profile is nil")
+	}
+	if websocketProfile.ResumeSessions {
+		if transportScope == "" {
+			// A missing account scope must fail closed for linkability: preserve the
+			// ClientHello shape but do not offer tickets across anonymous callers.
+			clone := *websocketProfile
+			clone.ResumeSessions = false
+			clone.SessionCache = nil
+			websocketProfile = &clone
+		} else {
+			websocketProfile = websocketProfile.WithSessionCache(tlsfingerprint.NewVersionedLRUClientSessionCache(256))
+		}
+	}
+
+	transport := &http.Transport{
+		MaxIdleConns:        openAIWSProxyTransportMaxIdleConns,
+		MaxIdleConnsPerHost: openAIWSProxyTransportMaxIdleConnsPerHost,
+		IdleConnTimeout:     openAIWSProxyTransportIdleConnTimeout,
+		TLSHandshakeTimeout: 10 * time.Second,
+		ForceAttemptHTTP2:   false,
+		DisableCompression:  true,
+	}
+
+	var parsedProxy *url.URL
+	if proxy != "" {
+		var err error
+		parsedProxy, err = url.Parse(proxy)
+		if err != nil {
+			return nil, fmt.Errorf("invalid proxy url: %w", err)
+		}
+	}
+
+	switch {
+	case parsedProxy == nil:
+		transport.DialTLSContext = orderCodexWebSocketHandshake(tlsfingerprint.NewDialer(websocketProfile, nil).DialTLSContext)
+	case strings.EqualFold(parsedProxy.Scheme, "http"):
+		transport.DialTLSContext = orderCodexWebSocketHandshake(tlsfingerprint.NewHTTPProxyDialer(websocketProfile, parsedProxy).DialTLSContext)
+	case strings.EqualFold(parsedProxy.Scheme, "socks5"), strings.EqualFold(parsedProxy.Scheme, "socks5h"):
+		transport.DialTLSContext = orderCodexWebSocketHandshake(tlsfingerprint.NewSOCKS5ProxyDialer(websocketProfile, parsedProxy).DialTLSContext)
+	default:
+		// HTTPS and unknown proxy schemes keep routing through the configured
+		// proxy. The current uTLS CONNECT dialer cannot safely fingerprint the
+		// outer HTTPS hop, so retaining egress privacy takes precedence.
+		transport.Proxy = http.ProxyURL(parsedProxy)
+	}
+	return &http.Client{Transport: transport}, nil
+}
+
+func orderCodexWebSocketHandshake(dial tlsfingerprint.DialTLSFunc) tlsfingerprint.DialTLSFunc {
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := dial(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		return &codexWebSocketHandshakeConn{Conn: conn}, nil
+	}
+}
+
+// codexWebSocketHandshakeConn rewrites only the first HTTP/1.1 request header
+// on a freshly dialed WS connection. After the Upgrade request it becomes a
+// transparent net.Conn, so WebSocket frames are untouched.
+type codexWebSocketHandshakeConn struct {
+	net.Conn
+	mu          sync.Mutex
+	pending     []byte
+	passthrough bool
+}
+
+func (c *codexWebSocketHandshakeConn) Write(payload []byte) (int, error) {
+	if c == nil || c.Conn == nil {
+		return 0, net.ErrClosed
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.passthrough {
+		return c.Conn.Write(payload)
+	}
+
+	c.pending = append(c.pending, payload...)
+	headerEnd := bytes.Index(c.pending, []byte("\r\n\r\n"))
+	if headerEnd < 0 {
+		if len(c.pending) <= openAIWSHandshakeHeaderLimitBytes {
+			return len(payload), nil
+		}
+		buffered := c.pending
+		c.pending = nil
+		c.passthrough = true
+		if err := writeOpenAIWSAll(c.Conn, buffered); err != nil {
+			return 0, err
+		}
+		return len(payload), nil
+	}
+
+	headerEnd += len("\r\n\r\n")
+	header, ok := reorderCodexWebSocketHandshake(c.pending[:headerEnd])
+	if !ok {
+		header = append([]byte(nil), c.pending[:headerEnd]...)
+	}
+	out := make([]byte, 0, len(header)+len(c.pending)-headerEnd)
+	out = append(out, header...)
+	out = append(out, c.pending[headerEnd:]...)
+	c.pending = nil
+	c.passthrough = true
+	if err := writeOpenAIWSAll(c.Conn, out); err != nil {
+		return 0, err
+	}
+	return len(payload), nil
+}
+
+type codexWebSocketHeaderLine struct {
+	name  string
+	value string
+}
+
+func reorderCodexWebSocketHandshake(block []byte) ([]byte, bool) {
+	if !bytes.HasSuffix(block, []byte("\r\n\r\n")) {
+		return nil, false
+	}
+	lines := strings.Split(string(block[:len(block)-len("\r\n\r\n")]), "\r\n")
+	if len(lines) < 2 || !strings.HasPrefix(lines[0], "GET ") || !strings.HasSuffix(lines[0], " HTTP/1.1") {
+		return nil, false
+	}
+
+	grouped := make(map[string][]codexWebSocketHeaderLine, len(lines)-1)
+	for _, line := range lines[1:] {
+		separator := strings.IndexByte(line, ':')
+		if separator <= 0 {
+			return nil, false
+		}
+		name := strings.TrimSpace(line[:separator])
+		lowerName := strings.ToLower(name)
+		if lowerName == "" {
+			return nil, false
+		}
+		grouped[lowerName] = append(grouped[lowerName], codexWebSocketHeaderLine{
+			name:  name,
+			value: strings.TrimSpace(line[separator+1:]),
+		})
+	}
+
+	var ordered strings.Builder
+	ordered.Grow(len(block) + len("; client_max_window_bits"))
+	ordered.WriteString(lines[0])
+	ordered.WriteString("\r\n")
+	emit := func(lowerName, wireName string) {
+		fields := grouped[lowerName]
+		for _, field := range fields {
+			value := field.value
+			if lowerName == "sec-websocket-extensions" && strings.EqualFold(value, "permessage-deflate") {
+				value = codexDesktopWSCompressionOffer
+			}
+			ordered.WriteString(wireName)
+			ordered.WriteString(": ")
+			ordered.WriteString(value)
+			ordered.WriteString("\r\n")
+		}
+		delete(grouped, lowerName)
+	}
+
+	const extensionHeader = "sec-websocket-extensions"
+	for _, wireName := range codexDesktopWSHeaderOrder {
+		lowerName := strings.ToLower(wireName)
+		if lowerName != extensionHeader {
+			emit(lowerName, wireName)
+		}
+	}
+	// Preserve forward compatibility: unrecognized headers remain on the wire
+	// in deterministic order, immediately before Tungstenite's extension offer.
+	tail := make([]string, 0, len(grouped))
+	for lowerName := range grouped {
+		if lowerName != extensionHeader {
+			tail = append(tail, lowerName)
+		}
+	}
+	sort.Strings(tail)
+	for _, lowerName := range tail {
+		emit(lowerName, grouped[lowerName][0].name)
+	}
+	emit(extensionHeader, "sec-websocket-extensions")
+	ordered.WriteString("\r\n")
+	return []byte(ordered.String()), true
+}
+
+func writeOpenAIWSAll(conn net.Conn, payload []byte) error {
+	for len(payload) > 0 {
+		written, err := conn.Write(payload)
+		if err != nil {
+			return err
+		}
+		if written <= 0 {
+			return io.ErrNoProgress
+		}
+		payload = payload[written:]
+	}
+	return nil
 }
 
 func (d *coderOpenAIWSClientDialer) proxyHTTPClient(proxy string) (*http.Client, error) {
@@ -267,7 +559,8 @@ func (d *coderOpenAIWSClientDialer) SnapshotTransportMetrics() OpenAIWSTransport
 }
 
 type coderOpenAIWSClientConn struct {
-	conn *coderws.Conn
+	conn      *coderws.Conn
+	telemetry *codexTelemetryWS
 }
 
 var _ openaiwsv2.FrameConn = (*coderOpenAIWSClientConn)(nil)
@@ -279,7 +572,11 @@ func (c *coderOpenAIWSClientConn) WriteJSON(ctx context.Context, value any) erro
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return wsjson.Write(ctx, c.conn, value)
+	start := time.Now()
+	observation := c.telemetry.prepareWrite(value)
+	err := wsjson.Write(ctx, c.conn, value)
+	c.telemetry.written(observation, time.Since(start), err)
+	return err
 }
 
 func (c *coderOpenAIWSClientConn) ReadMessage(ctx context.Context) ([]byte, error) {
@@ -290,7 +587,11 @@ func (c *coderOpenAIWSClientConn) ReadMessage(ctx context.Context) ([]byte, erro
 		ctx = context.Background()
 	}
 
+	start := time.Now()
 	msgType, payload, err := c.conn.Read(ctx)
+	if msgType == coderws.MessageText || err != nil {
+		c.telemetry.received(payload, time.Since(start), err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +610,11 @@ func (c *coderOpenAIWSClientConn) ReadFrame(ctx context.Context) (coderws.Messag
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	start := time.Now()
 	msgType, payload, err := c.conn.Read(ctx)
+	if msgType == coderws.MessageText || err != nil {
+		c.telemetry.received(payload, time.Since(start), err)
+	}
 	if err != nil {
 		return coderws.MessageText, nil, err
 	}
@@ -323,7 +628,16 @@ func (c *coderOpenAIWSClientConn) WriteFrame(ctx context.Context, msgType coderw
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return c.conn.Write(ctx, msgType, payload)
+	start := time.Now()
+	var observation *codexTelemetryWSRequest
+	if msgType == coderws.MessageText {
+		observation = c.telemetry.prepareWrite(payload)
+	}
+	err := c.conn.Write(ctx, msgType, payload)
+	if msgType == coderws.MessageText {
+		c.telemetry.written(observation, time.Since(start), err)
+	}
+	return err
 }
 
 func (c *coderOpenAIWSClientConn) Ping(ctx context.Context) error {

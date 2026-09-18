@@ -27,12 +27,12 @@ var ErrSparkShadowResetNotSupported = infraerrors.New(http.StatusConflict, "SPAR
 
 // Endpoints used by the OpenAI/ChatGPT/Codex quota query and reset feature.
 const (
-	chatGPTUsageURL             = "https://chatgpt.com/backend-api/wham/usage"
-	chatGPTRateLimitCreditsURL  = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
-	chatGPTRateLimitResetURL    = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
-	openaiQuotaUpstreamTimeout  = 20 * time.Second
-	// Keep aligned with codexDesktopAPILanguage / webview accept-language (US profile).
-	openaiQuotaCodexLanguageTag = "en-US"
+	chatGPTUsageURL            = "https://chatgpt.com/backend-api/wham/usage"
+	chatGPTRateLimitCreditsURL = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits"
+	chatGPTRateLimitResetURL   = "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits/consume"
+	openaiQuotaUpstreamTimeout = 20 * time.Second
+	// Keep aligned with codexDesktopAPILanguage / captured WebView locale.
+	openaiQuotaCodexLanguageTag = "zh-CN"
 )
 
 // OpenAIRateLimitWindow describes a single rate-limit window returned by
@@ -300,7 +300,7 @@ func (s *OpenAIQuotaService) QueryUsage(ctx context.Context, accountID int64) (*
 		return nil, err
 	}
 
-	client, err := s.desktopClient(proxyURL)
+	client, err := s.desktopClient(accountID, chatGPTAccountID, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
@@ -427,7 +427,7 @@ func (s *OpenAIQuotaService) ResetCredit(ctx context.Context, accountID int64) (
 		return nil, infraerrors.Newf(http.StatusInternalServerError, "OPENAI_QUOTA_REDEEM_ID_FAILED", "failed to generate redeem id: %v", err)
 	}
 
-	client, err := s.desktopClient(proxyURL)
+	client, err := s.desktopClient(accountID, chatGPTAccountID, proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "OPENAI_QUOTA_CLIENT_ERROR", "failed to build upstream client: %v", err)
 	}
@@ -546,6 +546,9 @@ func (s *OpenAIQuotaService) prepareUpstreamCall(ctx context.Context, accountID 
 				proxyURL = proxy.URL()
 			}
 		}
+		if strings.TrimSpace(proxyURL) == "" {
+			return "", "", "", false, infraerrors.New(http.StatusBadGateway, "OPENAI_QUOTA_PROXY_UNAVAILABLE", "configured OpenAI proxy is unavailable")
+		}
 	}
 
 	return accessToken, chatGPTAccountID, proxyURL, fedRAMP, nil
@@ -647,8 +650,14 @@ func buildCodexCommonHeaders(accessToken, chatGPTAccountID string, fedRAMP bool)
 // desktopClient obtains one per-proxy Desktop profile. Caching the cloned client
 // retains the profile's transport connection pool while keeping it isolated from
 // other ChatGPT callers that use req/v3's generic browser headers.
-func (s *OpenAIQuotaService) desktopClient(proxyURL string) (*req.Client, error) {
-	key := strings.TrimSpace(proxyURL)
+func (s *OpenAIQuotaService) desktopClient(accountID int64, chatGPTAccountID, proxyURL string) (*req.Client, error) {
+	// req.Client owns a mutable CookieJar. Sharing by proxy alone mixes
+	// same-host cookies for unrelated accounts using the same egress.
+	key := struct {
+		accountID        int64
+		chatGPTAccountID string
+		proxyURL         string
+	}{accountID, strings.TrimSpace(chatGPTAccountID), strings.TrimSpace(proxyURL)}
 	if cached, ok := s.desktopClientCache.Load(key); ok {
 		if client, ok := cached.(*req.Client); ok && client != nil {
 			return client, nil

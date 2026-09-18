@@ -732,9 +732,16 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		turnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 		turnMetadata = strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))
 	}
+	turnMetadata = openAIWSFrameTurnMetadata(firstClientMessage, turnMetadata)
 	headers, _, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, turnMetadata, promptCacheKey, gjson.GetBytes(firstClientMessage, "model").String())
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
+	}
+	if account.IsOpenAIOAuth() {
+		firstClientMessage, err = syncCodexWSFrameMetadata(firstClientMessage, headers, turnMetadata)
+		if err != nil {
+			return fmt.Errorf("synchronize first websocket turn metadata: %w", err)
+		}
 	}
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {
@@ -756,7 +763,14 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			return fmt.Errorf("refresh ws authentication headers: %w", err)
 		}
 		dialCtx, cancelDial := context.WithTimeout(ctx, s.openAIWSDialTimeout())
-		upstreamConn, statusCode, handshakeHeaders, err = dialer.Dial(dialCtx, wsURL, headers, proxyURL)
+		upstreamConn, statusCode, handshakeHeaders, err = dialer.Dial(
+			withCodexClientProfile(dialCtx, account),
+			wsURL,
+			headers,
+			proxyURL,
+			s.resolveUpstreamTLSProfile(account),
+			openAIWSTransportScope(account),
+		)
 		cancelDial()
 		if err == nil {
 			break
@@ -930,6 +944,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			//     覆盖（Store(nil)），因为 OpenAI 上游对该帧实际不传
 			//     service_tier 时按 default 处理，billing 应如实反映。
 			if policyErr == nil && blocked == nil && isResponseCreate {
+				if account.IsOpenAIOAuth() {
+					out, policyErr = syncCodexWSFrameMetadata(out, headers, "")
+					if policyErr != nil {
+						return out, nil, policyErr
+					}
+				}
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				acceptedTurn = true
 			}

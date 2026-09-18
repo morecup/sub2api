@@ -1,0 +1,193 @@
+{
+  "generated_at": "2026-09-17T14:28:04.036991+00:00",
+  "baseline_metric_count": 68,
+  "current_metric_count": 81,
+  "newly_observed_count": 15,
+  "not_observed_this_session": [
+    "codex.db.backfill",
+    "codex.db.backfill.duration_ms"
+  ],
+  "newly_observed": [
+    {
+      "name": "codex.app_server.codex_home.size_bytes",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.hooks.run",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.hooks.run.duration_ms",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.mcp.call",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.mcp.call.duration_ms",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.mcp.call.error",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.plugins.loaded_cache.event",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.plugins.loaded_cache.load.duration_ms",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.plugins.loaded_cache.request",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.plugins.loaded_cache.wait.duration_ms",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.rollout.size_bytes",
+      "old_binary_contains_literal": true,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.thread_history.sqlite_projection",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.windows_mxc.available",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.windows_sandbox.private_desktop",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    },
+    {
+      "name": "codex.windows_system_config.namespace_squatting_probe",
+      "old_binary_contains_literal": false,
+      "new_binary_contains_literal": true,
+      "sources": [
+        {
+          "service": "codex-app-server",
+          "version": "0.155.0-alpha.2.6",
+          "language": "rust"
+        }
+      ]
+    }
+  ],
+  "note": "Observed-name differences are workload dependent; binary literal presence is supporting evidence, not proof of runtime behavior or complete telemetry coverage."
+}

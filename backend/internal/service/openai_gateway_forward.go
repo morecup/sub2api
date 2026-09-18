@@ -20,6 +20,7 @@ import (
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
 	clearGrokResponsesClientToolMapping(c)
+	setOpsOpenAIInputToolSummary(c, body)
 	startTime := time.Now()
 	// 固定渠道映射后的请求级 canonical body；账号 normalize/strip 不得改写跨 failover hint。
 	canonicalImageIntentBody := body
@@ -410,7 +411,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 			markDecodedModified()
 		}
 		// 先补 installation 标识；buildUpstreamRequest 生成最终 turn metadata 后再同步完整 body 身份字段。
-		if !isCompactRequest && applyCodexClientMetadata(decoded, codexInstallationIDForAccount(account.ID, "")) {
+		if !isCompactRequest && applyCodexClientMetadata(decoded, codexClientProfileForAccount(account).InstallationID) {
 			markDecodedModified()
 		}
 		if codexResult.NormalizedModel != "" {
@@ -1113,26 +1114,20 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 				if req.Header.Get("version") == "" {
 					req.Header.Set("version", codexDesktopVersion)
 				}
-				sessionID := fixedSessionID
-				if sessionID == "" {
-					sessionID = isolateOpenAISessionIDForAccount(account.ID, apiKeyID, resolveOpenAICompactSessionID(c))
-				}
+				sessionID := resolveOpenAITaskSessionID(account.ID, apiKeyID, resolveOpenAICompactSessionID(c), fixedSessionID)
 				req.Header.Set("session_id", sessionID)
 			} else {
 				req.Header.Set("accept", "text/event-stream")
 			}
 			if promptCacheKey != "" {
-				isolated := fixedSessionID
-				if isolated == "" {
-					isolated = isolateOpenAISessionIDForAccount(account.ID, apiKeyID, promptCacheKey)
-				}
+				isolated := resolveOpenAITaskSessionID(account.ID, apiKeyID, promptCacheKey, fixedSessionID)
 				req.Header.Set("session_id", isolated)
 				if clientConversationID != "" {
 					req.Header.Set("conversation_id", isolated)
 				}
 			}
 			if fixedSessionID != "" && req.Header.Get("session_id") == "" {
-				req.Header.Set("session_id", fixedSessionID)
+				req.Header.Set("session_id", resolveCodexSessionUUID(account.ID, apiKeyID, "", fixedSessionID))
 			}
 		} else {
 			// 保持 Codex Desktop HTTP 画像与 zstd 压缩行为。
@@ -1144,7 +1139,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			// 合成路径：responses-lite 头仅对出站 lite 模型发送（对齐上游按模型条件发送）。
 			responsesLite := isCodexResponsesLiteModel(gjson.GetBytes(body, "model").String())
 			actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
-			applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite, actualModel)
+			req.Header.Set(openAIWSTurnMetadataHeader, openAIWSFrameTurnMetadata(body, req.Header.Get(openAIWSTurnMetadataHeader)))
+			applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite, actualModel)
 			applyCodexDesktopOptionalCookie(req.Header, account)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 			if err != nil {

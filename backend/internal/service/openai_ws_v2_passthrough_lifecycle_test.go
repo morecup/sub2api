@@ -99,7 +99,7 @@ type stagedPassthroughDialer struct {
 	conn openAIWSClientConn
 }
 
-func (d *stagedPassthroughDialer) Dial(context.Context, string, http.Header, string) (openAIWSClientConn, int, http.Header, error) {
+func (d *stagedPassthroughDialer) Dial(context.Context, string, http.Header, string, *openAIWSTLSProfile, string) (openAIWSClientConn, int, http.Header, error) {
 	return d.conn, http.StatusSwitchingProtocols, http.Header{}, nil
 }
 

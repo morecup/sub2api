@@ -42,10 +42,14 @@ type Profile struct {
 	EnableGREASE        bool
 	SignatureAlgorithms []uint16 // Empty uses defaultSignatureAlgorithms
 	ALPNProtocols       []string // Empty uses ["http/1.1"]
-	SupportedVersions   []uint16 // Empty uses [TLS1.3, TLS1.2]
-	KeyShareGroups      []uint16 // Empty uses [X25519]
-	PSKModes            []uint16 // Empty uses [psk_dhe_ke]
-	Extensions          []uint16 // Extension type IDs in order; empty uses the built-in Claude Code main-request order
+	// OmitALPN removes the ALPN extension entirely. This is distinct from an
+	// HTTP/1.1-only offer and is used by rustls WebSocket clients whose explicit
+	// ClientConfig leaves alpn_protocols empty.
+	OmitALPN          bool
+	SupportedVersions []uint16 // Empty uses [TLS1.3, TLS1.2]
+	KeyShareGroups    []uint16 // Empty uses [X25519]
+	PSKModes          []uint16 // Empty uses [psk_dhe_ke]
+	Extensions        []uint16 // Extension type IDs in order; empty uses the built-in Claude Code main-request order
 	// ExtensionOrder selects the per-connection ordering strategy applied to
 	// Extensions. Empty keeps the listed order.
 	ExtensionOrder ExtensionOrderMode
@@ -53,9 +57,13 @@ type Profile struct {
 	// only consulted when the profile negotiates h2; nil keeps the local
 	// HTTP/2 stack's own preamble.
 	HTTP2 *HTTP2Profile
-	// UseGrokHTTP2Transport opts this profile into the repository-local
-	// Grok-specific HTTP/2 transport fork. It is intentionally explicit:
+	// UseOrderedHTTP2Transport opts this profile into the repository-local
+	// HTTP/2 transport fork that can preserve captured request-header order.
+	// It is intentionally explicit:
 	// advertising h2 alone must not move a profile off the standard path.
+	UseOrderedHTTP2Transport bool
+	// UseGrokHTTP2Transport is the legacy name kept for stored/custom callers.
+	// New built-in profiles should set UseOrderedHTTP2Transport.
 	UseGrokHTTP2Transport bool
 	// Pool describes the emulated client's connection pool and dial timeouts.
 	// nil keeps the local pool configuration.
@@ -73,6 +81,9 @@ type Profile struct {
 	// nil with ResumeSessions set means no resumption, since there is nowhere to
 	// keep a ticket.
 	SessionCache utls.ClientSessionCache
+	// DisableAutomaticCompression prevents Go's HTTP transports from injecting
+	// an Accept-Encoding header that the emulated client did not send.
+	DisableAutomaticCompression bool
 }
 
 // PoolProfile describes the connection reuse behavior of the emulated client.
@@ -118,6 +129,9 @@ func (p *Profile) ConnectTimeout() time.Duration {
 
 // EffectiveALPNProtocols returns the ALPN list this profile puts on the wire.
 func (p *Profile) EffectiveALPNProtocols() []string {
+	if p != nil && p.OmitALPN {
+		return nil
+	}
 	if p != nil && len(p.ALPNProtocols) > 0 {
 		return p.ALPNProtocols
 	}
@@ -134,10 +148,15 @@ func (p *Profile) AdvertisesHTTP2() bool {
 	return false
 }
 
-// RequiresGrokHTTP2Transport reports whether this profile must use the
-// repository-local Grok HTTP/2 transport fork.
+// RequiresOrderedHTTP2Transport reports whether this profile needs the
+// repository-local header-order-capable HTTP/2 transport.
+func (p *Profile) RequiresOrderedHTTP2Transport() bool {
+	return p != nil && (p.UseOrderedHTTP2Transport || p.UseGrokHTTP2Transport)
+}
+
+// RequiresGrokHTTP2Transport is retained for compatibility with older callers.
 func (p *Profile) RequiresGrokHTTP2Transport() bool {
-	return p != nil && p.UseGrokHTTP2Transport
+	return p.RequiresOrderedHTTP2Transport()
 }
 
 // WithALPNProtocols returns a shallow copy of the profile that advertises only
@@ -150,7 +169,21 @@ func (p *Profile) WithALPNProtocols(protocols ...string) *Profile {
 		return nil
 	}
 	clone := *p
+	clone.OmitALPN = false
 	clone.ALPNProtocols = protocols
+	return &clone
+}
+
+// WithoutALPN returns a shallow copy that sends no ALPN extension. An empty
+// ALPNProtocols slice alone cannot express this because profiles historically
+// interpret it as the HTTP/1.1 default.
+func (p *Profile) WithoutALPN() *Profile {
+	if p == nil {
+		return nil
+	}
+	clone := *p
+	clone.OmitALPN = true
+	clone.ALPNProtocols = nil
 	return &clone
 }
 
@@ -595,7 +628,9 @@ func buildClientHelloSpecFromProfile(profile *Profile) *utls.ClientHelloSpec {
 		case 13: // signature_algorithms
 			extensions = append(extensions, &utls.SignatureAlgorithmsExtension{SupportedSignatureAlgorithms: signatureAlgorithms})
 		case 16: // alpn
-			extensions = append(extensions, &utls.ALPNExtension{AlpnProtocols: alpnProtocols})
+			if len(alpnProtocols) > 0 {
+				extensions = append(extensions, &utls.ALPNExtension{AlpnProtocols: alpnProtocols})
+			}
 		case 18: // signed_certificate_timestamp
 			extensions = append(extensions, &utls.SCTExtension{})
 		case 21: // padding

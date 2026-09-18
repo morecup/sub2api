@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 )
 
 // codexInstallationIDForAccount：按账号确定性派生 installation_id，
-// 不同账号互不相同的稳定 UUID，缺失种子时回退实抓固定值。
+// 不同账号互不相同的稳定 UUIDv4 外形，缺失种子时回退实抓固定值。
 func TestCodexInstallationIDForAccount(t *testing.T) {
 	// 不同账号 ID 派生出不同 installation_id。
 	id1 := codexInstallationIDForAccount(1, "")
@@ -26,7 +27,7 @@ func TestCodexInstallationIDForAccount(t *testing.T) {
 	require.Equal(t, id1, codexInstallationIDForAccount(1, ""))
 	parsed, err := uuid.Parse(id1)
 	require.NoError(t, err)
-	require.Equal(t, uuid.Version(5), parsed.Version())
+	require.Equal(t, uuid.Version(4), parsed.Version())
 
 	// accountID=0 且 chatgptAccountID 非空时用 chatgpt 种子。
 	idChatgpt := codexInstallationIDForAccount(0, "chatgpt-acc")
@@ -45,7 +46,7 @@ func TestCodexInstallationIDForAccount(t *testing.T) {
 }
 
 // 手动压缩（request_kind=compaction）入站 metadata：出站 x-codex-turn-metadata 保留
-// compaction 画像（0.151.0-alpha.7.1 实抓），无 workspaces，body 经 sync 后与头部一致。
+// compaction 画像（0.155.0-alpha.2.6 实抓），无 workspaces，body 经 sync 后与头部一致。
 func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	inboundCompaction := `{"trigger":"manual","reason":"user_requested","implementation":"responses_compaction_v2","phase":"standalone_turn","strategy":"memento"}`
 	inboundMeta := `{"installation_id":"inbound-should-be-overwritten","session_id":"inbound-should-be-overwritten","request_kind":"compaction","compaction":` + inboundCompaction + `,"workspaces":{"/foo/bar":{}}}`
@@ -68,7 +69,7 @@ func TestApplyCodexOAuthMimicHeadersCompactionMetadata(t *testing.T) {
 	require.Equal(t, "danger-full-access", gjson.Get(meta, "sandbox_mode").String())
 	require.Zero(t, gjson.Get(meta, "window_number").Int())
 	require.NotEmpty(t, gjson.Get(meta, "context_window_id").String())
-	require.False(t, gjson.Get(meta, "root_turn_id").Exists())
+	require.Equal(t, gjson.Get(meta, "turn_id").String(), gjson.Get(meta, "root_turn_id").String())
 	require.False(t, gjson.Get(meta, "turn_trigger").Exists())
 	require.Greater(t, gjson.Get(meta, "turn_started_at_unix_ms").Int(), int64(0))
 	// accountID=7：installation_id 按账号派生（而非回退固定值）。
@@ -130,18 +131,26 @@ func TestApplyCodexWSRequestClientMetadataLiteInPayloadOnly(t *testing.T) {
 	require.NotEmpty(t, nonLiteMetadata["x-codex-ws-stream-request-start-ms"])
 }
 
-func TestApplyCodexOAuthMimicHeadersFixedSessionID(t *testing.T) {
+func TestApplyCodexOAuthMimicHeadersFixedSessionNamespace(t *testing.T) {
 	fixedSessionID := "019ff4d1-0567-7630-ba3d-e564a4a519ac"
-	for _, seed := range []string{"client-session-a", "client-session-b"} {
+	sessions := make(map[string]string)
+	for _, seed := range []string{"client-session-a", "client-session-b", "client-session-a"} {
 		req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(`{"model":"gpt-5.6-sol"}`))
 		applyCodexOAuthMimicHeaders(req, 7, 42, seed, fixedSessionID, codexDesktopOriginator, false, true)
 
-		require.Equal(t, fixedSessionID, req.Header.Get("session-id"))
-		require.Equal(t, fixedSessionID, req.Header.Get("thread-id"))
-		require.Equal(t, fixedSessionID, req.Header.Get("x-client-request-id"))
-		require.Equal(t, fixedSessionID+":0", req.Header.Get("x-codex-window-id"))
-		require.Equal(t, fixedSessionID, gjson.Get(req.Header.Get("x-codex-turn-metadata"), "session_id").String())
+		sessionID := req.Header.Get("session-id")
+		require.NotEmpty(t, sessionID)
+		require.NotEqual(t, fixedSessionID, sessionID)
+		if previous := sessions[seed]; previous != "" {
+			require.Equal(t, previous, sessionID)
+		}
+		sessions[seed] = sessionID
+		require.Equal(t, sessionID, req.Header.Get("thread-id"))
+		require.Equal(t, sessionID, req.Header.Get("x-client-request-id"))
+		require.Equal(t, sessionID+":0", req.Header.Get("x-codex-window-id"))
+		require.Equal(t, sessionID, gjson.Get(req.Header.Get("x-codex-turn-metadata"), "session_id").String())
 	}
+	require.NotEqual(t, sessions["client-session-a"], sessions["client-session-b"])
 }
 
 // 入站 compaction metadata 缺省 compaction 对象时回退实抓默认画像。
@@ -169,7 +178,7 @@ func TestBuildCodexCompactionMetadataDefaultProfile(t *testing.T) {
 	require.False(t, isCompaction)
 }
 
-// codexOAIAttestationForAccount：app_session_id 按账号派生（UUIDv5，进程盐参与），
+// codexOAIAttestationForAccount：app_session_id 按账号在进程内随机生成 UUIDv4，
 // 同账号进程内恒定、跨账号不同、无种子回退进程级全局值。
 func TestCodexOAIAttestationForAccount(t *testing.T) {
 	att1 := codexOAIAttestationForAccount(1, "")
@@ -187,7 +196,8 @@ func TestCodexOAIAttestationForAccount(t *testing.T) {
 	// 无种子回退进程级全局值。
 	require.Equal(t, codexOAIAttestation, codexOAIAttestationForAccount(0, ""))
 
-	// 结构：JSON 外壳 v=1, s=0, t="v1."+base64url(CBOR)；CBOR 内含派生的 app_session_id。
+	// 结构：JSON 外壳 v=1, s=0, t="v1."+base64url(CBOR)；CBOR 内含
+	// 同一设备画像的 app_session_id、语言、时区和屏幕信号。
 	type attHeader struct {
 		V int    `json:"v"`
 		S int    `json:"s"`
@@ -200,7 +210,15 @@ func TestCodexOAIAttestationForAccount(t *testing.T) {
 	require.True(t, strings.HasPrefix(h.T, "v1."))
 	payload, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(h.T, "v1."))
 	require.NoError(t, err)
-	wantSessionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-app-session:"+codexProcessSalt+":account:1")).String()
-	require.Contains(t, string(payload), wantSessionID)
-	require.NotContains(t, string(payload), uuid.NewSHA1(uuid.NameSpaceURL, []byte("sub2api:codex-app-session:"+codexProcessSalt+":account:2")).String())
+	profile1 := codexDeviceProfileForAccount(1, "")
+	profile2 := codexDeviceProfileForAccount(2, "")
+	appSessionID, err := uuid.Parse(profile1.AppSessionID)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(4), appSessionID.Version())
+	require.Contains(t, string(payload), profile1.AppSessionID)
+	require.NotContains(t, string(payload), profile2.AppSessionID)
+	require.Contains(t, string(payload), "zh-CN")
+	require.Contains(t, string(payload), "Asia/Shanghai")
+	require.True(t, bytes.Contains(payload, []byte{0x19, 0x13, 0x10}))
+	require.True(t, bytes.Contains(payload, []byte{0xfb, 0x3f, 0xf0, 0, 0, 0, 0, 0, 0}))
 }

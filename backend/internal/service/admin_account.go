@@ -103,6 +103,8 @@ func cloneAccountJSONMap(value map[string]any) (map[string]any, error) {
 }
 
 var duplicateAccountDiscardedExtraKeys = map[string]struct{}{
+	CodexClientProfileExtraKey: {},
+	"openai_device_id":         {},
 	// A retry identity belongs to the operation that created one copy, not to later copies.
 	duplicateAccountOperationIDExtraKey: {},
 	// External sync identity belongs to one local account only.
@@ -459,7 +461,7 @@ func normalizeOpenAIFixedSessionExtra(platform, accountType string, extra map[st
 
 	fixedSessionID := strings.TrimSpace(fmt.Sprintf("%v", normalized[openAISessionIDKey]))
 	if fixedSessionID == "" || fixedSessionID == "<nil>" {
-		fixedSessionID = uuid.NewString()
+		fixedSessionID = newCodexUUIDV7()
 	} else {
 		parsed, err := uuid.Parse(fixedSessionID)
 		if err != nil {
@@ -624,6 +626,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		account.Extra[UpstreamBillingProbeEnabledExtraKey] = true
 	}
 	// 预计算固定时间重置的下次重置时间
+	if err := EnsureCodexClientProfile(account); err != nil {
+		return nil, err
+	}
 	if account.Extra != nil {
 		if err := ValidateQuotaResetConfig(account.Extra); err != nil {
 			return nil, err
@@ -768,6 +773,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		normalizedExtra, err = normalizeOpenAIFixedSessionUpdateExtra(account, input, normalizedExtra)
 		if err != nil {
+			return nil, err
+		}
+		if err := PreserveCodexClientProfileUpdate(account, normalizedExtra); err != nil {
 			return nil, err
 		}
 		effectiveType := account.Type
@@ -994,6 +1002,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 
+	if err := EnsureCodexClientProfile(account); err != nil {
+		return nil, err
+	}
 	probeEnabledAppliedAtomically := false
 	if requestedProbeEnabledUpdate != nil && isUpstreamBillingProbeAccount(account) {
 		if updater, ok := s.accountRepo.(accountProbeEnabledAtomicUpdater); ok {
@@ -1142,6 +1153,9 @@ func (s *adminServiceImpl) validateStandbyAccountConfiguration(ctx context.Conte
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键
 // （如 model_rate_limits / passive_usage_* 等）。
 func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, updates map[string]any) error {
+	if _, exists := updates[CodexClientProfileExtraKey]; exists {
+		return infraerrors.BadRequest("OPENAI_CODEX_CLIENT_PROFILE_UPDATE_REQUIRES_ACCOUNT", "edit the client environment through the account update endpoint")
+	}
 	delete(updates, OllamaCloudUsageSessionExtraKey)
 	delete(updates, OllamaCloudUsageAutoRefreshExtraKey)
 	delete(updates, OllamaCloudUsageSnapshotExtraKey)
@@ -1163,6 +1177,9 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 // BulkUpdateAccounts updates multiple accounts in one request.
 // It merges credentials/extra keys instead of overwriting the whole object.
 func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUpdateAccountsInput) (*BulkUpdateAccountsResult, error) {
+	if _, exists := input.Extra[CodexClientProfileExtraKey]; exists {
+		return nil, infraerrors.BadRequest("OPENAI_CODEX_CLIENT_PROFILE_BULK_UPDATE_UNSUPPORTED", "client profiles must remain independent for each account")
+	}
 	// Managed probe/session state may only enter through dedicated typed endpoints.
 	delete(input.Extra, UpstreamBillingProbeEnabledExtraKey)
 	delete(input.Extra, UpstreamBillingProbeExtraKey)

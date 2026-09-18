@@ -11,10 +11,10 @@ import (
 )
 
 func TestCodexDesktopLatestVersionProfile(t *testing.T) {
-	require.Equal(t, "0.151.0-alpha.7.1", codexDesktopVersion)
-	require.Equal(t, "Codex Desktop/0.151.0-alpha.7.1 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.825.41651)", codexDesktopUserAgent)
-	require.Equal(t, "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36", codexDesktopWebviewUserAgent)
-	require.Contains(t, codexDesktopWebviewBaggage, "sentry-release=codex%4026.825.41651")
+	require.Equal(t, "0.155.0-alpha.2.6", codexDesktopVersion)
+	require.Equal(t, "Codex Desktop/0.155.0-alpha.2.6 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.911.61220)", codexDesktopUserAgent)
+	require.Equal(t, "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36", codexDesktopWebviewUserAgent)
+	require.Contains(t, codexDesktopWebviewBaggage, "sentry-release=codex%4026.911.61220")
 }
 
 func TestCodexDesktopResetCreditRequestsUseLatestWebviewProfile(t *testing.T) {

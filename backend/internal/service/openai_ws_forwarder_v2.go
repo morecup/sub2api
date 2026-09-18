@@ -84,6 +84,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		turnState = strings.TrimSpace(c.GetHeader(openAIWSTurnStateHeader))
 		turnMetadata = strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))
 	}
+	turnMetadata = openAIWSFrameTurnMetadata(payloadAsJSONBytes(payload), turnMetadata)
 	setOpenAIWSTurnMetadata(payload, turnMetadata)
 	payloadEventType := openAIWSPayloadString(payload, "type")
 	if payloadEventType == "" {
@@ -143,13 +144,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	if account != nil && account.Type == AccountTypeOAuth {
 		sessionID := strings.TrimSpace(wsHeaders.Get("session-id"))
 		windowID := strings.TrimSpace(wsHeaders.Get("x-codex-window-id"))
-		workspaces := extractCodexWorkspaces(turnMetadata)
-		if workspaces == nil {
-			workspaces = extractCodexWorkspaces(wsHeaders.Get(openAIWSTurnMetadataHeader))
-		}
 		if sessionID != "" && windowID != "" {
-			installationID := codexInstallationIDForAccount(account.ID, "")
-			turnMetadata = buildCodexTurnMetadata(sessionID, windowID, workspaces, installationID, turnMetadata)
+			installationID := codexClientProfileForAccount(account).InstallationID
+			generate, hasGenerate := payload["generate"].(bool)
+			turnMetadata = codexRequestTurnMetadata(sessionID, windowID, installationID, turnMetadata, hasGenerate && !generate)
 			setOpenAIWSTurnMetadata(payload, turnMetadata)
 			applyCodexClientMetadata(payload, installationID, turnMetadata)
 			payloadBytes = -1
@@ -191,9 +189,11 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	defer acquireCancel()
 
 	lease, err := s.getOpenAIWSConnPool().Acquire(acquireCtx, openAIWSAcquireRequest{
-		Account: account,
-		WSURL:   wsURL,
-		Headers: wsHeaders,
+		Account:        account,
+		WSURL:          wsURL,
+		Headers:        wsHeaders,
+		TLSProfile:     s.resolveUpstreamTLSProfile(account),
+		TransportScope: openAIWSTransportScope(account),
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},

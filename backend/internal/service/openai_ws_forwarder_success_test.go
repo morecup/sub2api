@@ -1756,6 +1756,8 @@ type openAIWSCaptureDialer struct {
 	lastHeaders http.Header
 	handshake   http.Header
 	dialCount   int
+	lastProfile *openAIWSTLSProfile
+	lastScope   string
 }
 
 func (d *openAIWSCaptureDialer) Dial(
@@ -1763,12 +1765,16 @@ func (d *openAIWSCaptureDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	profile *openAIWSTLSProfile,
+	transportScope string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
 	_ = proxyURL
 	d.mu.Lock()
 	d.lastHeaders = cloneHeader(headers)
+	d.lastProfile = profile
+	d.lastScope = transportScope
 	d.dialCount++
 	respHeaders := cloneHeader(d.handshake)
 	d.mu.Unlock()

@@ -76,6 +76,32 @@ func (s *OpenAIGatewayService) performOpenAIWSGeneratePrewarm(
 		prewarmPayload[k] = v
 	}
 	prewarmPayload["generate"] = false
+	if account.IsOpenAIOAuth() {
+		// The payload copy is shallow. Clone metadata before changing the
+		// prewarm frame so the subsequent real turn keeps its turn/root IDs.
+		metadata := openAIWSFrameTurnMetadata(payloadAsJSONBytes(payload), "")
+		var identity struct {
+			SessionID      string `json:"session_id"`
+			WindowID       string `json:"window_id"`
+			InstallationID string `json:"installation_id"`
+		}
+		if json.Unmarshal([]byte(metadata), &identity) == nil && identity.SessionID != "" {
+			clientMetadata := make(map[string]any)
+			switch existing := payload["client_metadata"].(type) {
+			case map[string]any:
+				for key, value := range existing {
+					clientMetadata[key] = value
+				}
+			case map[string]string:
+				for key, value := range existing {
+					clientMetadata[key] = value
+				}
+			}
+			prewarmPayload["client_metadata"] = clientMetadata
+			metadata = buildCodexWSPrewarmMetadata(identity.SessionID, identity.WindowID, identity.InstallationID, metadata)
+			applyCodexClientMetadata(prewarmPayload, identity.InstallationID, metadata)
+		}
+	}
 	prewarmPayloadJSON := payloadAsJSONBytes(prewarmPayload)
 
 	if err := lease.WriteJSONWithContextTimeout(ctx, prewarmPayload, s.openAIWSWriteTimeout()); err != nil {

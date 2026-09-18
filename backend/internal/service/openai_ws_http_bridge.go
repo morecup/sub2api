@@ -258,6 +258,10 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			SetOpsUpstreamRetryMetadata(c, attempt, retryPhase)
 		}
 		resp, err = s.doUpstreamRequest(requestForAttempt, proxyURL, account)
+		if attempt == 1 && codexTelemetryHTTPModelRequest(requestForAttempt, account) && (account.ProxyID == nil || strings.TrimSpace(proxyURL) != "") {
+			s.getCodexTelemetry().recordHTTPFallback(codexTelemetryRouteForAccount(account, proxyURL, s.resolveUpstreamTLSProfile(account)),
+				strings.TrimPrefix(requestForAttempt.Header.Get("x-codex-routing-hint"), "model="))
+		}
 		if err != nil {
 			if turn == 1 {
 				return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)

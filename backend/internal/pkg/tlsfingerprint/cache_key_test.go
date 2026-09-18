@@ -12,7 +12,7 @@ func TestProfileCacheKeyIncludesGrokHTTP2ObservableConfiguration(t *testing.T) {
 		{
 			name: "transport capability",
 			mutate: func(profile *Profile) {
-				profile.UseGrokHTTP2Transport = false
+				profile.UseOrderedHTTP2Transport = false
 			},
 		},
 		{
@@ -47,14 +47,28 @@ func TestProfileCacheKeyIncludesGrokHTTP2ObservableConfiguration(t *testing.T) {
 
 func cacheKeyHTTP2Profile() *Profile {
 	return &Profile{
-		Name:                  "cache-key-http2-profile",
-		ALPNProtocols:         []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
-		UseGrokHTTP2Transport: true,
+		Name:                     "cache-key-http2-profile",
+		ALPNProtocols:            []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
+		UseOrderedHTTP2Transport: true,
 		HTTP2: &HTTP2Profile{
 			Name:               "cache-key-http2-preamble",
 			PseudoHeaderOrder:  []string{":method", ":scheme", ":authority", ":path"},
 			RegularHeaderOrder: []string{"authorization", "accept", "content-type"},
 		},
+	}
+}
+
+func TestProfileCacheKeySeparatesALPNAndAutomaticCompressionModes(t *testing.T) {
+	base := CodexDesktopProfile()
+	withoutALPN := base.WithoutALPN()
+	if base.CacheKey() == withoutALPN.CacheKey() {
+		t.Fatal("omitting ALPN must produce a distinct transport cache key")
+	}
+
+	withAutomaticCompression := *base
+	withAutomaticCompression.DisableAutomaticCompression = false
+	if base.CacheKey() == withAutomaticCompression.CacheKey() {
+		t.Fatal("automatic compression mode must produce a distinct transport cache key")
 	}
 }
 

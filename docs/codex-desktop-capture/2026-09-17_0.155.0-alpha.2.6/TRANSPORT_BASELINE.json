@@ -1,0 +1,279 @@
+{
+  "captured_at": "2026-09-18",
+  "codex_version": "0.155.0-alpha.2.6",
+  "runtime_directory_version": "26.911.7940.0",
+  "binary_sha256": "be793ab45adbcbd9fa716df04cb6bc68eb9e353c6e6af20886af45c11abc2413",
+  "scope": "Isolated copied binary with an empty CODEX_HOME, dummy custom-provider auth and loopback TLS fixture; external proxy forwarding disabled. HTTP fixture completed; WS fixture rejected upgrade with 400 after TLS observation. No official account requests.",
+  "http": [
+    {
+      "client_hello": {
+        "cipher_suites": [
+          4866,
+          4865,
+          4867,
+          49196,
+          49195,
+          52393,
+          49200,
+          49199,
+          52392,
+          255
+        ],
+        "extension_order": [
+          45,
+          35,
+          43,
+          5,
+          23,
+          51,
+          13,
+          10,
+          16,
+          11,
+          0
+        ],
+        "extension_values": {
+          "45": [
+            1
+          ],
+          "43": [
+            772,
+            771
+          ],
+          "51": [
+            {
+              "group": 4588,
+              "length": 1216
+            },
+            {
+              "group": 29,
+              "length": 32
+            }
+          ],
+          "13": [
+            1283,
+            1027,
+            1539,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "10": [
+            4588,
+            29,
+            23,
+            24
+          ],
+          "16": [
+            "h2",
+            "http/1.1"
+          ],
+          "11": [
+            0
+          ]
+        }
+      },
+      "h2_settings": [
+        [
+          [
+            2,
+            0
+          ],
+          [
+            4,
+            2097152
+          ],
+          [
+            5,
+            16384
+          ],
+          [
+            6,
+            16384
+          ]
+        ]
+      ],
+      "connection_window_updates": [
+        5177345
+      ],
+      "request_header_names": [
+        [
+          ":method",
+          ":scheme",
+          ":authority",
+          ":path",
+          "x-codex-beta-features",
+          "x-codex-window-id",
+          "x-codex-turn-metadata",
+          "x-client-request-id",
+          "session-id",
+          "thread-id",
+          "accept",
+          "content-type",
+          "authorization",
+          "originator",
+          "user-agent",
+          "content-length"
+        ]
+      ],
+      "negotiated_alpn": "h2"
+    }
+  ],
+  "websocket": [
+    {
+      "client_hello": {
+        "cipher_suites": [
+          4866,
+          4865,
+          4867,
+          49196,
+          49195,
+          52393,
+          49200,
+          49199,
+          52392,
+          255
+        ],
+        "extension_order": [
+          43,
+          23,
+          51,
+          35,
+          0,
+          13,
+          10,
+          45,
+          5,
+          11
+        ],
+        "extension_values": {
+          "43": [
+            772,
+            771
+          ],
+          "51": [
+            {
+              "group": 4588,
+              "length": 1216
+            },
+            {
+              "group": 29,
+              "length": 32
+            }
+          ],
+          "13": [
+            1283,
+            1027,
+            1539,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "10": [
+            4588,
+            29,
+            23,
+            24
+          ],
+          "45": [
+            1
+          ],
+          "11": [
+            0
+          ]
+        }
+      },
+      "h2_settings": [],
+      "connection_window_updates": [],
+      "request_header_names": [],
+      "negotiated_alpn": null,
+      "http1_present": true
+    },
+    {
+      "client_hello": {
+        "cipher_suites": [
+          4866,
+          4865,
+          4867,
+          49196,
+          49195,
+          52393,
+          49200,
+          49199,
+          52392,
+          255
+        ],
+        "extension_order": [
+          23,
+          5,
+          13,
+          43,
+          51,
+          45,
+          0,
+          10,
+          35,
+          11
+        ],
+        "extension_values": {
+          "13": [
+            1283,
+            1027,
+            1539,
+            2055,
+            2054,
+            2053,
+            2052,
+            1537,
+            1281,
+            1025
+          ],
+          "43": [
+            772,
+            771
+          ],
+          "51": [
+            {
+              "group": 4588,
+              "length": 1216
+            },
+            {
+              "group": 29,
+              "length": 32
+            }
+          ],
+          "45": [
+            1
+          ],
+          "10": [
+            4588,
+            29,
+            23,
+            24
+          ],
+          "11": [
+            0
+          ]
+        }
+      },
+      "h2_settings": [],
+      "connection_window_updates": [],
+      "request_header_names": [],
+      "negotiated_alpn": null,
+      "http1_present": true
+    }
+  ],
+  "notes": [
+    "Extension order is a per-connection sample, not a fixed order.",
+    "Custom-provider headers omit OAuth/Desktop-specific values; retain the separate application-capture header baseline.",
+    "This verifies fresh TLS handshakes and H2 preamble, not long-running official connections."
+  ]
+}

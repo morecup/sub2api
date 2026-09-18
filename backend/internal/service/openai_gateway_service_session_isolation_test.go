@@ -2,7 +2,9 @@ package service
 
 import (
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,10 +74,69 @@ func TestIsolateOpenAISessionIDForAccount(t *testing.T) {
 
 // generateCodexSessionUUID：同 seed 不同账号派生不同 UUID，同输入幂等。
 func TestGenerateCodexSessionUUIDAccountIsolation(t *testing.T) {
+	before := time.Now().Add(-time.Second).UnixMilli()
 	a := generateCodexSessionUUID(1, 0, "seed-1")
 	b := generateCodexSessionUUID(2, 0, "seed-1")
 	require.NotEqual(t, a, b, "同一 seed 在不同上游账号下应派生不同 session UUID")
 	require.Equal(t, a, generateCodexSessionUUID(1, 0, "seed-1"), "同输入应幂等")
 	// accountID=0 时与原 (apiKeyID, seed) 行为一致。
 	require.Equal(t, a, generateCodexSessionUUID(0, 0, "a1:seed-1"))
+	parsed, err := uuid.Parse(a)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), parsed.Version())
+	require.GreaterOrEqual(t, codexUUIDV7Timestamp(parsed), before)
+	require.LessOrEqual(t, codexUUIDV7Timestamp(parsed), time.Now().Add(time.Second).UnixMilli())
+}
+
+func TestGenerateCodexSessionUUIDPreservesPlausibleV7Timestamp(t *testing.T) {
+	const source = "01a052d7-b018-7630-ad5b-f23494429b7a"
+	sourceUUID, err := uuid.Parse(source)
+	require.NoError(t, err)
+
+	a := generateCodexSessionUUID(1, 0, source)
+	b := generateCodexSessionUUID(2, 0, source)
+	require.NotEqual(t, a, b)
+	for _, generated := range []string{a, b} {
+		parsed, parseErr := uuid.Parse(generated)
+		require.NoError(t, parseErr)
+		require.Equal(t, uuid.Version(7), parsed.Version())
+		require.Equal(t, sourceUUID[:6], parsed[:6])
+	}
+}
+
+func TestResolveCodexSessionUUIDRejectsNonV7FixedShape(t *testing.T) {
+	const fixedV4 = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
+	generated := resolveCodexSessionUUID(7, 42, "ignored", fixedV4)
+	parsed, err := uuid.Parse(generated)
+	require.NoError(t, err)
+	require.Equal(t, uuid.Version(7), parsed.Version())
+	require.NotEqual(t, fixedV4, generated)
+	require.Equal(t, generated, resolveCodexSessionUUID(7, 42, "ignored", fixedV4))
+	require.NotEqual(t, generated, resolveCodexSessionUUID(7, 42, "other", fixedV4), "fixed namespace must isolate tasks")
+	require.NotEqual(t, generated, resolveCodexSessionUUID(7, 99, "ignored", fixedV4), "fixed namespace must isolate API keys")
+	require.NotEqual(t, generated, resolveCodexSessionUUID(8, 42, "other", fixedV4), "legacy fixed IDs must remain account-isolated")
+}
+
+func TestCodexSessionUUIDCacheExpiresAndEvictsLRU(t *testing.T) {
+	cache := &codexSessionUUIDCache{
+		entries:    make(map[string]codexSessionUUIDCacheEntry),
+		ttl:        time.Minute,
+		maxEntries: 2,
+	}
+	now := time.Unix(1_800_000_000, 0)
+	a := cache.getOrCreate("a", now)
+	_ = cache.getOrCreate("b", now.Add(time.Second))
+	require.Equal(t, a, cache.getOrCreate("a", now.Add(2*time.Second)))
+	_ = cache.getOrCreate("c", now.Add(3*time.Second))
+
+	cache.mu.Lock()
+	_, hasA := cache.entries["a"]
+	_, hasB := cache.entries["b"]
+	_, hasC := cache.entries["c"]
+	cache.mu.Unlock()
+	require.True(t, hasA)
+	require.False(t, hasB, "least recently used entry should be evicted first")
+	require.True(t, hasC)
+
+	require.NotEqual(t, a, cache.getOrCreate("a", now.Add(2*time.Minute)), "expired seed should receive a fresh v7")
 }

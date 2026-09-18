@@ -77,6 +77,9 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	promptCacheKey string,
 	routingModel ...string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
+	if account != nil && account.IsOpenAIOAuth() && account.ProxyID != nil && (account.Proxy == nil || strings.TrimSpace(account.Proxy.URL()) == "") {
+		return nil, openAIWSSessionHeaderResolution{}, fmt.Errorf("configured OpenAI proxy is unavailable")
+	}
 	headers := make(http.Header)
 	if account == nil || !account.IsOpenAIAgentIdentity() {
 		headers.Set("authorization", "Bearer "+token)
@@ -151,7 +154,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 		if len(routingModel) > 0 {
 			model = routingModel[0]
 		}
-		applyCodexOAuthWSMimicHeaders(headers, account.ID, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata, model)
+		applyCodexOAuthWSMimicHeadersForAccount(headers, account, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata, model)
 		// 终态收口：保证 Desktop originator 与最终 UA 配套。
 		enforceCodexIdentityHeaders(headers)
 	}

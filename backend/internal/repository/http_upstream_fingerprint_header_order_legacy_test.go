@@ -123,7 +123,7 @@ func TestNewFingerprintHTTP2Transport_GrokProfilePassesHeaderOrderIntoForkEncodi
 	require.Equal(t, profile.HTTP2.RegularHeaderOrder, fork.HeaderOrder.Regular)
 }
 
-func TestBuildUpstreamTransportWithTLSFingerprint_GrokProfileCreatesForkOnlyOnGrokCapability(t *testing.T) {
+func TestBuildUpstreamTransportWithTLSFingerprint_OrderedProfilesUseFork(t *testing.T) {
 	tests := []struct {
 		name       string
 		profile    *tlsfingerprint.Profile
@@ -134,13 +134,19 @@ func TestBuildUpstreamTransportWithTLSFingerprint_GrokProfileCreatesForkOnlyOnGr
 			name:       "real grok profile",
 			profile:    tlsfingerprint.GrokCLIProfile(),
 			wantPkg:    "github.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2",
-			wantReason: "the Grok profile should be the only built-in profile on the fork path",
+			wantReason: "the Grok profile needs captured header ordering",
+		},
+		{
+			name:       "real codex desktop profile",
+			profile:    tlsfingerprint.CodexDesktopProfile(),
+			wantPkg:    "github.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2",
+			wantReason: "the Codex profile needs captured header ordering",
 		},
 		{
 			name:       "synthetic non grok profile",
 			profile:    syntheticHTTP2Profile("Synthetic h2 impostor"),
 			wantPkg:    "golang.org/x/net/http2",
-			wantReason: "advertising h2 alone must not be enough to enter the Grok-specific fork path",
+			wantReason: "advertising h2 alone must not enter the ordered transport path",
 		},
 	}
 

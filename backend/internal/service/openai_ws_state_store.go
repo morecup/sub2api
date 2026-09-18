@@ -110,6 +110,11 @@ func (s *defaultOpenAIWSStateStore) BindResponseAccount(ctx context.Context, gro
 		return nil
 	}
 	cacheKey := openAIWSResponseAccountCacheKey(id)
+	// A completed response can cancel its downstream request before this
+	// bookkeeping write. Persist the mapping with a bounded independent lifetime.
+	if ctx != nil {
+		ctx = context.WithoutCancel(ctx)
+	}
 	cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
 	defer cancel()
 	return s.cache.SetSessionAccountID(cacheCtx, groupID, cacheKey, accountID, ttl)

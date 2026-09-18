@@ -21,19 +21,28 @@ func TestIsCodexResponsesLiteModel(t *testing.T) {
 		{"gpt-5.6-sol", true},
 		{"gpt-5.6-terra", true},
 		{"gpt-5.6-luna", true},
+		{"gpt-6-astra", true},
+		{"gpt-6-future", true},
+		{"gpt-6-astra-x", true},
+		{"gpt-6-astra-high", true},
 		{"gpt-5.5", false},
 		{"gpt-5.4", false},
 		{"gpt-5.4-mini", false},
 		{"gpt-5.2", false},
 		{"codex-auto-review", false},
-		// 大小写/空白归一后仍精确匹配。
+		// 大小写/空白归一后匹配。
 		{" GPT-5.6-TERRA ", true},
 		{"gpt-5.6-Luna", true},
+		{" GPT-6-ASTRA ", true},
+		{" GPT-6-FUTURE ", true},
 		{"GPT-5.5", false},
-		// 不做前缀模糊匹配。
+		// 其他模型不做前缀模糊匹配。
 		{"gpt-5.6", false},
 		{"gpt-5.6-terra-x", false},
 		{"gpt-5.6-terra-high", false},
+		{"gpt-6", false},
+		{"gpt-60-astra", false},
+		{"gpt-6.1-astra", false},
 		{"", false},
 		{"   ", false},
 	}
@@ -85,6 +94,57 @@ func TestApplyCodexOAuthTransform_ResponsesLiteSink(t *testing.T) {
 	require.Equal(t, []any{map[string]any{"type": "input_text", "text": "test instructions"}}, sunk["content"])
 
 	require.Equal(t, "user", input[2].(map[string]any)["role"])
+}
+
+func TestCodexResponsesLiteAstra(t *testing.T) {
+	const model = "gpt-6-astra"
+	for _, testCase := range []struct {
+		name      string
+		isCompact bool
+	}{
+		{name: "turn"},
+		{name: "compact", isCompact: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			reqBody := map[string]any{
+				"model":        model,
+				"instructions": "astra instructions",
+				"tools":        []any{map[string]any{"type": "function", "name": "shell"}},
+				"input":        []any{map[string]any{"type": "message", "role": "user", "content": "hello"}},
+				"reasoning":    map[string]any{"effort": "high"},
+			}
+
+			applyCodexOAuthTransform(reqBody, false, testCase.isCompact)
+
+			require.Equal(t, model, reqBody["model"])
+			require.NotContains(t, reqBody, "instructions")
+			require.NotContains(t, reqBody, "tools")
+			require.Equal(t, false, reqBody["parallel_tool_calls"])
+			require.Equal(t, "all_turns", reqBody["reasoning"].(map[string]any)["context"])
+			require.Equal(t, "high", reqBody["reasoning"].(map[string]any)["effort"])
+			input := reqBody["input"].([]any)
+			require.Len(t, input, 3)
+			carrier := input[0].(map[string]any)
+			require.Equal(t, "additional_tools", carrier["type"])
+			require.Equal(t, "developer", carrier["role"])
+			require.Equal(t, "shell", carrier["tools"].([]any)[0].(map[string]any)["name"])
+			instructions := input[1].(map[string]any)
+			require.Equal(t, "developer", instructions["role"])
+			require.Equal(t, "astra instructions", instructions["content"].([]any)[0].(map[string]any)["text"])
+			require.Equal(t, "user", input[2].(map[string]any)["role"])
+
+			req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", nil)
+			applyCodexOAuthMimicHeaders(req, 1, 0, "seed", "", codexDesktopOriginator, testCase.isCompact, isCodexResponsesLiteModel(model), model)
+			require.Equal(t, "true", req.Header.Get(responsesLiteHeaderKey))
+			require.Equal(t, "model="+model, req.Header.Get("x-codex-routing-hint"))
+		})
+	}
+
+	t.Run("websocket metadata", func(t *testing.T) {
+		reqBody := map[string]any{"model": model, "type": "response.create"}
+		require.True(t, applyCodexWSRequestClientMetadata(reqBody, model))
+		require.Equal(t, "true", reqBody["client_metadata"].(map[string]any)[responsesLiteWSMetadataKey])
+	})
 }
 
 func TestApplyCodexOAuthTransform_ResponsesLiteSinkStripsImageDetails(t *testing.T) {

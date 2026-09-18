@@ -76,6 +76,7 @@ func TestOpenAI429FastPath_RateLimitExceededWithoutResetSkipsRuntimeBlock(t *tes
 		false,
 	)
 	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, failoverErr.ImmediateSameAccountRetry)
 	require.True(t, failoverErr.SuppressAccountScheduleFailure)
 	require.Equal(t, openAI429RetryWithoutCooldownReason, failoverErr.Reason)
 }
@@ -116,6 +117,7 @@ func TestOpenAI429FastPath_RateLimitExceededBypassesTempRuleAndRetries(t *testin
 
 	require.NotNil(t, failoverErr)
 	require.True(t, failoverErr.RetryableOnSameAccount)
+	require.True(t, failoverErr.ImmediateSameAccountRetry)
 	require.True(t, failoverErr.SuppressAccountScheduleFailure)
 	require.Equal(t, openAI429RetryWithoutCooldownReason, failoverErr.Reason)
 	require.Zero(t, repo.tempCalls)

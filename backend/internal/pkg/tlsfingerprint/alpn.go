@@ -90,8 +90,14 @@ func (p *Profile) CacheKey() string {
 
 	writeString(p.Name)
 	writeString(string(p.ExtensionOrder))
-	writeString("use-grok-http2-transport")
-	writeString(strconv.FormatBool(p.UseGrokHTTP2Transport))
+	if p.OmitALPN {
+		writeString("omit-alpn")
+	}
+	if p.DisableAutomaticCompression {
+		writeString("disable-automatic-compression")
+	}
+	writeString("use-ordered-http2-transport")
+	writeString(strconv.FormatBool(p.RequiresOrderedHTTP2Transport()))
 	if p.EnableGREASE {
 		writeString("grease")
 	}

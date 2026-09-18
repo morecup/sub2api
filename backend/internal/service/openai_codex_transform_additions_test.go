@@ -78,11 +78,18 @@ func TestApplyCodexClientMetadata(t *testing.T) {
 }
 
 func TestBuildCodexOAIAttestationMatchesDesktopWindowsEnvelope(t *testing.T) {
-	// Golden envelope for the fixed US locale profile
-	// (en-US + America/New_York + current screen signals).
+	// Golden envelope for the captured zh-CN / Asia/Shanghai device profile.
 	const appSessionID = "eeb98e1c-5890-479a-a8db-3516fa5338e6"
-	const captured = `{"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFmnAAEBgWVlbi1VUwJlZW4tVVMDcEFtZXJpY2EvTmV3X1lvcmsEGQevBfs_-AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}`
-	require.Equal(t, captured, buildCodexOAIAttestation(appSessionID))
+	const captured = `{"v":1,"s":0,"t":"v1.o2plcnJvcl9jb2RlAWlidW5kbGVfaWRwY29tLm9wZW5haS5jb2RleGFmWFanAAEBgWV6aC1DTgJlemgtQ04DbUFzaWEvU2hhbmdoYWkEGRMQBfs_8AAAAAAAAAZ4JGVlYjk4ZTFjLTU4OTAtNDc5YS1hOGRiLTM1MTZmYTUzMzhlNg"}`
+	profile := &codexDeviceProfile{
+		AppSessionID:  appSessionID,
+		Languages:     []string{codexAttestationLanguage},
+		Locale:        codexAttestationLanguage,
+		Timezone:      codexAttestationTimezone,
+		ScreenSizeSum: codexAttestationScreenSizeSum,
+		ScreenScale:   codexAttestationScreenScale,
+	}
+	require.Equal(t, captured, buildCodexOAIAttestation(profile))
 }
 
 func TestSyncCodexOAuthMimicRequestBodyPreservesCompactBody(t *testing.T) {

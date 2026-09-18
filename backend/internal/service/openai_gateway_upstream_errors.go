@@ -281,6 +281,7 @@ func newOpenAIUpstreamFailoverError(
 	}
 	if isOpenAI429RetryWithoutCooldown(statusCode, responseHeaders, responseBody) {
 		failoverErr.RetryableOnSameAccount = true
+		failoverErr.ImmediateSameAccountRetry = true
 		failoverErr.SuppressAccountScheduleFailure = true
 		failoverErr.Reason = openAI429RetryWithoutCooldownReason
 	}

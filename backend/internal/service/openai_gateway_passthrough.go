@@ -74,7 +74,7 @@ func (s *OpenAIGatewayService) forwardOpenAIPassthrough(
 			return nil, fmt.Errorf("openai passthrough rejected before upstream: %s", rejectReason)
 		}
 
-		normalizedBody, normalized, err := normalizeOpenAIPassthroughOAuthBody(body, isOpenAIResponsesCompactPath(c), codexInstallationIDForAccount(account.ID, ""))
+		normalizedBody, normalized, err := normalizeOpenAIPassthroughOAuthBody(body, isOpenAIResponsesCompactPath(c), codexClientProfileForAccount(account).InstallationID)
 		if err != nil {
 			return nil, err
 		}
@@ -439,7 +439,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		// 实际出站模型另用于 routing hint。
 		responsesLite := isOpenAIResponsesLiteHeader(req.Header.Get(responsesLiteHeader))
 		actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
-		applyCodexOAuthMimicHeaders(req, account.ID, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite, actualModel)
+		req.Header.Set(openAIWSTurnMetadataHeader, openAIWSFrameTurnMetadata(body, req.Header.Get(openAIWSTurnMetadataHeader)))
+		applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite, actualModel)
 		applyCodexDesktopOptionalCookie(req.Header, account)
 		body, err = syncCodexOAuthMimicRequestBody(req, body, isCompact)
 		if err != nil {

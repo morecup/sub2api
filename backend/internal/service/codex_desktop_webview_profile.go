@@ -8,23 +8,23 @@ import (
 )
 
 const (
-	// Stable wire values captured from Codex Desktop 26.825.41651's Owl
-	// WebView (Chrome 151). Session cookies are intentionally not synthesized.
+	// Stable wire values captured on 2026-09-17 from Codex Desktop's Owl
+	// WebView (Chrome 153). Session cookies are intentionally not synthesized.
 	// Sentry values are static per release on every webview request (trace ids
 	// are zeroed, no session correlation), so they are part of the wire profile.
-	codexDesktopWebviewUserAgent      = "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+	codexDesktopWebviewUserAgent      = "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
 	codexDesktopWebviewAcceptEncoding = "gzip, deflate, br, zstd"
-	// US English webview locale; keep in lockstep with oai-language / attestation.
-	codexDesktopWebviewAcceptLanguage = "en-US,en;q=0.9"
+	// Captured WebView locale; keep in lockstep with oai-language / attestation.
+	codexDesktopWebviewAcceptLanguage = "zh-CN,zh;q=0.9"
 	codexDesktopWebviewPriority       = "u=4, i"
 	codexDesktopWebviewSecFetchSite   = "none"
 	codexDesktopWebviewSecFetchMode   = "no-cors"
 	codexDesktopWebviewSecFetchDest   = "empty"
 	// codexDesktopWebviewSentryTrace / codexDesktopWebviewBaggage: captured
-	// 2026-08-30 from 26.825.41651 webview requests (single unique value each
+	// 2026-09-17 from 26.911.61220 webview requests (single unique value each
 	// across the whole capture). sentry-release tracks the desktop app build.
 	codexDesktopWebviewSentryTrace = "00000000000000000000000000000000-0000000000000000"
-	codexDesktopWebviewBaggage     = "sentry-environment=prod,sentry-release=codex%4026.825.41651,sentry-public_key=6719eaa18601933a26ac21499dcaba2f,sentry-trace_id=00000000000000000000000000000000,sentry-org_id=33249,sentry-sampled=false"
+	codexDesktopWebviewBaggage     = "sentry-environment=prod,sentry-release=codex%40" + codexDesktopAppVersion + ",sentry-public_key=6719eaa18601933a26ac21499dcaba2f,sentry-trace_id=00000000000000000000000000000000,sentry-org_id=33249,sentry-sampled=false"
 )
 
 func buildCodexDesktopWebviewHeaders(accessToken, chatGPTAccountID, language string, fedRAMP bool) map[string]string {
@@ -71,6 +71,13 @@ func applyCodexDesktopOptionalCookie(headers http.Header, account *Account) {
 func applyCodexDesktopSessionHeaders(headers map[string]string, account *Account) {
 	if headers == nil || account == nil {
 		return
+	}
+	if account.IsOpenAIOAuth() {
+		client := codexClientProfileForAccount(account)
+		headers["user-agent"] = client.WebviewUserAgent()
+		headers["accept-language"] = client.AcceptLanguage()
+		headers["oai-language"] = client.Locale
+		headers["baggage"] = strings.Replace(codexDesktopWebviewBaggage, "codex%40"+codexDesktopAppVersion, "codex%40"+client.AppVersion, 1)
 	}
 	if cookie := codexDesktopOptionalCookie(account); cookie != "" {
 		headers["cookie"] = cookie

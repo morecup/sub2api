@@ -15,17 +15,19 @@ const (
 )
 
 type OpenAIUpstreamRequestSnapshot struct {
-	BodySHA256           string `json:"body_sha256,omitempty"`
-	BodyBytes            int    `json:"body_bytes,omitempty"`
-	Model                string `json:"model,omitempty"`
-	Stream               bool   `json:"stream"`
-	InputItems           int    `json:"input_items"`
-	ToolsCount           int    `json:"tools_count"`
-	HasToolFrame         bool   `json:"has_tool_frame"`
-	HasPreviousResponse  bool   `json:"has_previous_response_id"`
-	HasPromptCacheKey    bool   `json:"has_prompt_cache_key"`
-	RequestPreview       string `json:"request_preview,omitempty"`
-	RequestPreviewCutoff bool   `json:"request_preview_cutoff,omitempty"`
+	ToolLinks             *OpenAIToolLinkSummary `json:"tool_links,omitempty"`
+	PreTransformToolLinks *OpenAIToolLinkSummary `json:"pre_transform_tool_links,omitempty"`
+	BodySHA256            string                 `json:"body_sha256,omitempty"`
+	BodyBytes             int                    `json:"body_bytes,omitempty"`
+	Model                 string                 `json:"model,omitempty"`
+	Stream                bool                   `json:"stream"`
+	InputItems            int                    `json:"input_items"`
+	ToolsCount            int                    `json:"tools_count"`
+	HasToolFrame          bool                   `json:"has_tool_frame"`
+	HasPreviousResponse   bool                   `json:"has_previous_response_id"`
+	HasPromptCacheKey     bool                   `json:"has_prompt_cache_key"`
+	RequestPreview        string                 `json:"request_preview,omitempty"`
+	RequestPreviewCutoff  bool                   `json:"request_preview_cutoff,omitempty"`
 }
 
 func setOpsOpenAIUpstreamRequestBody(c *gin.Context, body []byte) {
@@ -73,6 +75,9 @@ func currentOpsOpenAIUpstreamRequestSnapshot(c *gin.Context) *OpenAIUpstreamRequ
 	if snapshot == nil {
 		return nil
 	}
+	if value, ok := c.Get(opsOpenAIInputToolSummaryKey); ok {
+		snapshot.PreTransformToolLinks, _ = value.(*OpenAIToolLinkSummary)
+	}
 	c.Set(OpsUpstreamRequestSnapshotKey, snapshot)
 	copy := *snapshot
 	return &copy
@@ -84,6 +89,7 @@ func buildOpenAIUpstreamRequestSnapshot(body []byte) *OpenAIUpstreamRequestSnaps
 	}
 	sum := sha256.Sum256(body)
 	snapshot := &OpenAIUpstreamRequestSnapshot{
+		ToolLinks:           summarizeOpenAIToolLinks(body),
 		BodySHA256:          hex.EncodeToString(sum[:]),
 		BodyBytes:           len(body),
 		Model:               strings.TrimSpace(gjson.GetBytes(body, "model").String()),

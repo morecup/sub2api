@@ -49,7 +49,7 @@ func fingerprintDialer(profile *tlsfingerprint.Profile, proxyURL *url.URL) (dial
 
 // newFingerprintHTTP1Transport builds the HTTP/1.1 half of a fingerprinted
 // transport pair.
-func newFingerprintHTTP1Transport(settings poolSettings, dial tlsfingerprint.DialTLSFunc) *http.Transport {
+func newFingerprintHTTP1Transport(settings poolSettings, dial tlsfingerprint.DialTLSFunc, disableCompression bool) *http.Transport {
 	return &http.Transport{
 		MaxIdleConns:          settings.maxIdleConns,
 		MaxIdleConnsPerHost:   settings.maxIdleConnsPerHost,
@@ -59,8 +59,9 @@ func newFingerprintHTTP1Transport(settings poolSettings, dial tlsfingerprint.Dia
 		// net/http cannot upgrade a uTLS connection to HTTP/2 (it only
 		// recognizes *tls.Conn), so HTTP/2 is driven by the paired
 		// http2.Transport instead.
-		ForceAttemptHTTP2: false,
-		DialTLSContext:    dial,
+		ForceAttemptHTTP2:  false,
+		DialTLSContext:     dial,
+		DisableCompression: disableCompression,
 	}
 }
 
@@ -83,12 +84,13 @@ func newFingerprintHTTP2Transport(settings poolSettings, profile *tlsfingerprint
 	carrier := &http.Transport{
 		IdleConnTimeout:       settings.idleConnTimeout,
 		ResponseHeaderTimeout: settings.responseHeaderTimeout,
+		DisableCompression:    profile.DisableAutomaticCompression,
 	}
 	profile.HTTP2.ConfigureTransports(carrier, nil)
 
-	if profile.RequiresGrokHTTP2Transport() {
+	if profile.RequiresOrderedHTTP2Transport() {
 		if profileRequestsOrderedHeaders(profile.HTTP2) && !grokHTTP2HeaderOrderSupported() {
-			return nil, errors.New("grok ordered HTTP/2 fingerprint unsupported on go1.27 wrapper path; build with http2legacy to retain HeaderOrder support")
+			return nil, errors.New("ordered HTTP/2 fingerprint unsupported on go1.27 wrapper path; build with http2legacy to retain HeaderOrder support")
 		}
 		transport, err := grokhttp2.ConfigureTransports(carrier)
 		if err != nil {
@@ -199,7 +201,7 @@ func buildUpstreamTransportWithTLSFingerprint(settings poolSettings, proxyURL *u
 		if !supported {
 			return buildUnfingerprintedFallbackTransport(settings, proxyURL)
 		}
-		return newFingerprintHTTP1Transport(settings, dial), nil
+		return newFingerprintHTTP1Transport(settings, dial, profile.DisableAutomaticCompression), nil
 	}
 
 	h2Dial, supported := fingerprintDialer(profile, proxyURL)
@@ -210,7 +212,7 @@ func buildUpstreamTransportWithTLSFingerprint(settings poolSettings, proxyURL *u
 	// advertises http/1.1 alone.
 	h1Profile := profile.WithALPNProtocols(tlsfingerprint.ALPNProtocolHTTP1)
 	h1Dial, _ := fingerprintDialer(h1Profile, proxyURL)
-	h1 := newFingerprintHTTP1Transport(settings, h1Dial)
+	h1 := newFingerprintHTTP1Transport(settings, h1Dial, profile.DisableAutomaticCompression)
 
 	h2, err := newFingerprintHTTP2Transport(settings, profile, h2Dial)
 	if err != nil {

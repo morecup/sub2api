@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -69,6 +70,8 @@ type openAIWSAcquireRequest struct {
 	// lastAcquire or delayed prewarm state.
 	HeadersFactory  func(context.Context, http.Header) (http.Header, error)
 	ProxyURL        string
+	TLSProfile      *tlsfingerprint.Profile
+	TransportScope  string
 	PreferredConnID string
 	// ForceNewConn: 强制本次获取新连接（避免复用导致连接内续链状态互相污染）。
 	ForceNewConn bool
@@ -1653,7 +1656,7 @@ func (p *openAIWSConnPool) dialConn(ctx context.Context, req openAIWSAcquireRequ
 			return nil, err
 		}
 	}
-	conn, status, handshakeHeaders, err := p.clientDialer.Dial(ctx, req.WSURL, headers, req.ProxyURL)
+	conn, status, handshakeHeaders, err := p.clientDialer.Dial(withCodexClientProfile(ctx, req.Account), req.WSURL, headers, req.ProxyURL, req.TLSProfile, req.TransportScope)
 	if err != nil {
 		var handshakeErr *openAIWSHandshakeError
 		var responseBody []byte
@@ -1843,6 +1846,7 @@ func cloneOpenAIWSAcquireRequest(req openAIWSAcquireRequest) openAIWSAcquireRequ
 	copied.Headers = cloneHeader(req.Headers)
 	copied.WSURL = stringsTrim(req.WSURL)
 	copied.ProxyURL = stringsTrim(req.ProxyURL)
+	copied.TransportScope = stringsTrim(req.TransportScope)
 	copied.PreferredConnID = stringsTrim(req.PreferredConnID)
 	return copied
 }

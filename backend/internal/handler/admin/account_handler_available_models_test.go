@@ -243,6 +243,36 @@ func TestAccountHandlerGetAvailableModels_OpenAIAPIKeyDefaultsToConcreteGPT56Sol
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	require.NotEmpty(t, resp.Data)
 	require.Equal(t, "gpt-5.6-sol", resp.Data[0].ID)
+	var ids []string
+	for _, model := range resp.Data {
+		ids = append(ids, model.ID)
+	}
+	require.Contains(t, ids, "gpt-6-astra")
+}
+
+func TestAccountHandlerGetAvailableModels_OpenAIOAuthIncludesGPT6Astra(t *testing.T) {
+	svc := &availableModelsAdminService{
+		stubAdminService: newStubAdminService(),
+		account:          service.Account{ID: 46, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive},
+	}
+	router := setupAvailableModelsRouter(svc)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/admin/accounts/46/models", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp struct {
+		Data []struct {
+			ID          string `json:"id"`
+			DisplayName string `json:"display_name"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	for _, model := range resp.Data {
+		if model.ID == "gpt-6-astra" {
+			require.Equal(t, "GPT-6 Astra", model.DisplayName)
+			return
+		}
+	}
+	t.Fatal("GPT-6 Astra is missing from the account test model list")
 }
 
 func TestAccountHandlerGetAvailableModels_OpenAISparkShadowReturnsMappingModels(t *testing.T) {

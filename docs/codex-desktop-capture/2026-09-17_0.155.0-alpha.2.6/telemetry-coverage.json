@@ -1,0 +1,589 @@
+{
+  "capture_metric_count": 81,
+  "implemented_metric_count": 14,
+  "implemented_observed_count": 12,
+  "implemented_documented_not_observed_count": 2,
+  "metrics": [
+    {
+      "name": "codex.api_request",
+      "state": "implemented",
+      "observed_in_capture": false,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.api_request.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": false,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.app_server.codex_home.size_bytes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.installed.connector_count",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.installed.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.installed.response_bytes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.installed.tool_count",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.read.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.refresh.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.apps.snapshot.age_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.cloud_config_bundle.fetch.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.cloud_config_bundle.load",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.external_agent_config.detect",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.feature.state",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.hooks.run",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.hooks.run.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.call",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.call.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.call.error",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.protocol_discovery",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.protocol_discovery.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.tools.cache_publish.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.tools.cache_write.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.tools.fetch_uncached.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.mcp.tools.list.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.loaded_cache.event",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.loaded_cache.load.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.loaded_cache.request",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.loaded_cache.wait.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.startup_sync",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.plugins.startup_sync.final",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.process.start",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.remote_models.fetch_update.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.remote_models.load_cache.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "no_corresponding_oauth_models_cache_operation"
+    },
+    {
+      "name": "codex.responses_api_engine_iapi_tbt.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.responses_api_inference_time.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.responses_api_overhead.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.rollout.size_bytes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.rollout_compression.materialize",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.shell_snapshot",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.shell_snapshot.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection.catalog_entries",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection.query_terms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection.reduction_bps",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.skills.shadow_selection.selected_entries",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.init.count",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.init.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.logs.write.bytes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.logs.write.count",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.logs.write.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.logs.write.entries",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sqlite.logs.write.max_entry_bytes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.sse_event",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.sse_event.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.startup.phase.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.startup_prewarm.age_at_first_turn_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_prewarm_creation_and_consumption_timestamps_missing"
+    },
+    {
+      "name": "codex.startup_prewarm.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_prewarm_creation_and_consumption_timestamps_missing"
+    },
+    {
+      "name": "codex.task.compact",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.thread.skills.description_truncated_chars",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.thread.skills.enabled_total",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.thread.skills.kept_total",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.thread.skills.truncated",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.thread.started",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.thread_history.sqlite_projection",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.tool.unified_exec",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.transport.fallback_to_http",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": true,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.turn.e2e_duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.memory",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.network_proxy",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.tool.call",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.ttfm.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.ttft.duration_ms",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.turn.unified_exec.running_processes",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "complete_client_turn_or_local_tool_state_missing"
+    },
+    {
+      "name": "codex.websocket.event",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.websocket.event.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.websocket.request",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.websocket.request.duration_ms",
+      "state": "implemented",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "actual_proxy_event"
+    },
+    {
+      "name": "codex.windows_mxc.available",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.windows_sandbox.private_desktop",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.windows_sandbox.wfp_setup_success",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    },
+    {
+      "name": "codex.windows_system_config.namespace_squatting_probe",
+      "state": "not_emitted",
+      "observed_in_capture": true,
+      "added_in_this_change": false,
+      "reason": "client_runtime_feature_or_local_execution_not_observable"
+    }
+  ]
+}

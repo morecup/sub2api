@@ -51,9 +51,11 @@ var (
 		SupportsPromptCaching:           true,
 		SupportsServiceTier:             true,
 	}
-	openAIGPT56SolFallbackPricing   = newOpenAIGPT56FallbackPricing(5e-6, 30e-6, 6.25e-6, 0.5e-6)
-	openAIGPT56TerraFallbackPricing = newOpenAIGPT56FallbackPricing(2.5e-6, 15e-6, 3.125e-6, 0.25e-6)
-	openAIGPT56LunaFallbackPricing  = newOpenAIGPT56FallbackPricing(1e-6, 6e-6, 1.25e-6, 0.1e-6)
+	// https://developers.openai.com/api/docs/models/gpt-6-astra (2026-09-17).
+	openAIGPT6AstraFallbackPricing  = newOpenAICachedFallbackPricing(10e-6, 50e-6, 12.5e-6, 1e-6)
+	openAIGPT56SolFallbackPricing   = newOpenAICachedFallbackPricing(5e-6, 30e-6, 6.25e-6, 0.5e-6)
+	openAIGPT56TerraFallbackPricing = newOpenAICachedFallbackPricing(2.5e-6, 15e-6, 3.125e-6, 0.25e-6)
+	openAIGPT56LunaFallbackPricing  = newOpenAICachedFallbackPricing(1e-6, 6e-6, 1.25e-6, 0.1e-6)
 	openAIGPT54MiniFallbackPricing  = &LiteLLMModelPricing{
 		InputCostPerToken:       7.5e-07,
 		OutputCostPerToken:      4.5e-06,
@@ -72,7 +74,7 @@ var (
 	}
 )
 
-func newOpenAIGPT56FallbackPricing(input, output, cacheCreation, cacheRead float64) *LiteLLMModelPricing {
+func newOpenAICachedFallbackPricing(input, output, cacheCreation, cacheRead float64) *LiteLLMModelPricing {
 	return &LiteLLMModelPricing{
 		InputCostPerToken:                   input,
 		InputCostPerTokenPriority:           input * 2,
@@ -983,6 +985,17 @@ func (s *PricingService) matchByModelFamily(model string) *LiteLLMModelPricing {
 // 5. gpt-5.6* / gpt-5.5* / gpt-5.4* -> 官方静态兜底价
 // 6. 最终回退到 DefaultTestModel (gpt-5.1-codex)
 func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
+	// Resolve Astra before generic GPT family fallback, which can otherwise
+	// incorrectly use gpt-6 or the default test model's unrelated price.
+	if model == "gpt-6" || strings.HasPrefix(model, "gpt-6-") {
+		if normalizeKnownOpenAICodexModel(model) != "gpt-6-astra" {
+			return nil
+		}
+		if pricing, ok := s.pricingData["gpt-6-astra"]; ok {
+			return pricing
+		}
+		return openAIGPT6AstraFallbackPricing
+	}
 	if strings.HasPrefix(model, "gpt-5.3-codex-spark") {
 		if pricing, ok := s.pricingData["gpt-5.1-codex"]; ok {
 			logger.LegacyPrintf("service.pricing", "[Pricing][SparkBilling] %s -> %s billing", model, "gpt-5.1-codex")

@@ -1,0 +1,759 @@
+{
+  "source": "2026-09-17 Work 0.155.0-alpha.2.6, numeric fields only; no request/response IDs, account IDs or content",
+  "samples": [
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 545.892276,
+      "engine_service_total_ms": 828.849997,
+      "engine_iapi_tbt_across_engine_calls_ms": 10.374999999999998
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 366.9972489999999,
+      "engine_service_total_ms": 685.348131,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.184210526315791
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 598.078722,
+      "engine_service_total_ms": 1086.680347,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.545454545454547
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 534.8670090000003,
+      "engine_service_total_ms": 772.7072070000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.494736842105263
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 797.5168699999999,
+      "engine_service_total_ms": 1326.681989,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.033613445378151
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1030.7870489999968,
+      "engine_service_total_ms": 1754.5502539999968,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.084615384615383
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 383.67192700000004,
+      "engine_service_total_ms": 738.0683750000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.4615384615384635
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 403.6816969999999,
+      "engine_service_total_ms": 948.7613439999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 15.000000000000007
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 519.0720290000008,
+      "engine_service_total_ms": 2399.073346000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 10.477792732166892
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 534.6584719999998,
+      "engine_service_total_ms": 1004.8838209999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.24
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 353.2120159999995,
+      "engine_service_total_ms": 646.6348089999994,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.241379310344827
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 868.6869829999998,
+      "engine_service_total_ms": 1326.826118,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.666666666666666
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 393.59421599999996,
+      "engine_service_total_ms": 667.7784409999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.953488372093023
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 415.7954969999996,
+      "engine_service_total_ms": 1188.4045849999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.293706293706293
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 635.0461210000003,
+      "engine_service_total_ms": 1769.6468850000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.2075471698113205
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 815.1624739999988,
+      "engine_service_total_ms": 2397.662659999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.172757475083056
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1027.6470160000008,
+      "engine_service_total_ms": 2975.7653310000005,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.329411764705883
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1239.3987969999998,
+      "engine_service_total_ms": 3511.153046,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.2997946611909645
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1461.2024800000017,
+      "engine_service_total_ms": 4107.3874540000015,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.149914821124361
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1665.3336729999937,
+      "engine_service_total_ms": 4652.810980999994,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.063307493540052
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1860.1627069999977,
+      "engine_service_total_ms": 5224.103377999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.028026905829597
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2129.4479189999947,
+      "engine_service_total_ms": 5805.948552999995,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.2079295154185035
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2325.8416899999975,
+      "engine_service_total_ms": 6334.133776999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.165985282093215
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2579.279226999999,
+      "engine_service_total_ms": 7190.442394,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.217391304347826
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 397.85740499999974,
+      "engine_service_total_ms": 751.3105319999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.015625
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 634.6904109999996,
+      "engine_service_total_ms": 1359.5368879999996,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.186602870813397
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 937.6727029999984,
+      "engine_service_total_ms": 2242.5113119999983,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.638513513513512
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1186.3180019999982,
+      "engine_service_total_ms": 3563.5466579999984,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.233731739707835
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1435.6168029999953,
+      "engine_service_total_ms": 5791.785873999996,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.028776978417266
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1700.4747629999983,
+      "engine_service_total_ms": 6663.325248999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.762512266928361
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 334.67220199999974,
+      "engine_service_total_ms": 1231.1668779999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.838870431893688
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 530.6405489999997,
+      "engine_service_total_ms": 903.4197769999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.1923076923076925
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 876.1113420000001,
+      "engine_service_total_ms": 1666.3078620000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.451612903225805
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1351.6183760000004,
+      "engine_service_total_ms": 2581.0275340000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.802980132450331
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1681.712954999999,
+      "engine_service_total_ms": 3564.489655999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.667958656330749
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2117.630054000001,
+      "engine_service_total_ms": 4353.099221,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.8893756845564065
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 416.9256819999999,
+      "engine_service_total_ms": 1234.2331239999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.71428571428571
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 299.5706789999999,
+      "engine_service_total_ms": 690.479082,
+      "engine_iapi_tbt_across_engine_calls_ms": 14.694444444444443
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 341.9524690000003,
+      "engine_service_total_ms": 1343.5101730000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.731958762886597
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1105.8209469999993,
+      "engine_service_total_ms": 3292.552588999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.811688311688311
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1300.3156839999992,
+      "engine_service_total_ms": 5271.207823999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.1198347107438
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1584.236216000003,
+      "engine_service_total_ms": 6890.544121000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.9508547008547
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1807.7172629999986,
+      "engine_service_total_ms": 7562.426069999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.99249530956848
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2013.99352,
+      "engine_service_total_ms": 8559.186349,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.247440273037544
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 333.7973749999983,
+      "engine_service_total_ms": 3843.480719999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 15.797043010752688
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 359.38664300000005,
+      "engine_service_total_ms": 1313.896594,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.366666666666665
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 590.8102420000005,
+      "engine_service_total_ms": 2416.3475520000006,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.677083333333332
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 860.285071999997,
+      "engine_service_total_ms": 4331.352835999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.828793774319065
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1088.7419599999994,
+      "engine_service_total_ms": 6633.962603,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.116541353383457
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 412.7268129999999,
+      "engine_service_total_ms": 1105.267011,
+      "engine_iapi_tbt_across_engine_calls_ms": 21.55555555555555
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 427.8824260000001,
+      "engine_service_total_ms": 1652.950951,
+      "engine_iapi_tbt_across_engine_calls_ms": 21.14285714285716
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 439.3488120000003,
+      "engine_service_total_ms": 2258.5779380000004,
+      "engine_iapi_tbt_across_engine_calls_ms": 14.399999999999999
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 297.3648380000004,
+      "engine_service_total_ms": 832.3874470000004,
+      "engine_iapi_tbt_across_engine_calls_ms": 15.251231527093596
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 509.17011699999966,
+      "engine_service_total_ms": 1492.9278219999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 14.67716535433071
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 724.3756139999987,
+      "engine_service_total_ms": 2239.9685359999985,
+      "engine_iapi_tbt_across_engine_calls_ms": 14.762152777777779
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 936.2107469999992,
+      "engine_service_total_ms": 2854.047775999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.943526170798899
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1136.8181179999974,
+      "engine_service_total_ms": 3541.1131199999973,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.562052505966589
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1351.936389999999,
+      "engine_service_total_ms": 4486.573447999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.442069741282344
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 277.2882019999997,
+      "engine_service_total_ms": 690.9112809999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.881101376720899
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 353.4634699999997,
+      "engine_service_total_ms": 1550.2590789999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 13.437037037037037
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 567.6165869999995,
+      "engine_service_total_ms": 2129.2286239999994,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.238297872340429
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 787.2138170000007,
+      "engine_service_total_ms": 2759.7014370000006,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.641176470588237
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 978.4614940000001,
+      "engine_service_total_ms": 3391.458464,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.742120343839542
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 440.098062,
+      "engine_service_total_ms": 1492.767536,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.222222222222232
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 363.9956369999999,
+      "engine_service_total_ms": 1426.190497,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.71428571428572
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 416.3646529999995,
+      "engine_service_total_ms": 6587.685673,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.906250000000007
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 476.2108269999999,
+      "engine_service_total_ms": 983.4765239999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.801526717557254
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 717.6339510000007,
+      "engine_service_total_ms": 2190.0821540000006,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.019379844961241
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 951.5968260000009,
+      "engine_service_total_ms": 3123.9399790000007,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.655092592592593
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1225.989904,
+      "engine_service_total_ms": 3830.446815,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.53271028037383
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1439.688588000001,
+      "engine_service_total_ms": 4971.367372000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.597845601436266
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 820.2900919999993,
+      "engine_service_total_ms": 1471.6733449999992,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.022727272727272
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 444.47172500000033,
+      "engine_service_total_ms": 894.6119820000004,
+      "engine_iapi_tbt_across_engine_calls_ms": 10.767605633802818
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 697.8987809999999,
+      "engine_service_total_ms": 2253.990216,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.475836431226767
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 928.8929159999989,
+      "engine_service_total_ms": 2958.597033999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.806451612903228
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1267.729679,
+      "engine_service_total_ms": 3924.9364410000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.900262467191604
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 426.578564,
+      "engine_service_total_ms": 1005.13175,
+      "engine_iapi_tbt_across_engine_calls_ms": 12.444444444444438
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 445.613943,
+      "engine_service_total_ms": 879.548264,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.500000000000002
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 342.6343159999999,
+      "engine_service_total_ms": 1088.0400089999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 14.642857142857142
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 323.56919000000016,
+      "engine_service_total_ms": 2149.478704,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.404145077720207
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 525.6169620000001,
+      "engine_service_total_ms": 2811.562661,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.972477064220183
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 730.4532610000006,
+      "engine_service_total_ms": 3868.8999840000006,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.436873747494991
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 924.1086980000018,
+      "engine_service_total_ms": 4507.882881000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.128333333333334
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1138.9920710000006,
+      "engine_service_total_ms": 5224.73958,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.133858267716535
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 309.89098699999977,
+      "engine_service_total_ms": 784.9540249999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.753351206434315
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 470.27118700000005,
+      "engine_service_total_ms": 947.122343,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.105769230769231
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 780.406148,
+      "engine_service_total_ms": 1684.2729180000001,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.581818181818182
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1021.6940319999994,
+      "engine_service_total_ms": 2325.7208799999994,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.551236749116608
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1312.5175940000001,
+      "engine_service_total_ms": 1815.2312500000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 11.375000000000004
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 867.6290590000001,
+      "engine_service_total_ms": 1579.789808,
+      "engine_iapi_tbt_across_engine_calls_ms": 6.125000000000005
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 345.54451100000017,
+      "engine_service_total_ms": 1597.6395350000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 9.968749999999998
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 834.7219839999998,
+      "engine_service_total_ms": 1242.3166929999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.703703703703704
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1366.1427029999995,
+      "engine_service_total_ms": 2100.9684909999996,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.576923076923077
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1975.822234999996,
+      "engine_service_total_ms": 3271.986960999996,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.728187919463087
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2833.180309999996,
+      "engine_service_total_ms": 4540.649627999996,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.380494505494505
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 3524.114107999998,
+      "engine_service_total_ms": 5565.798736999997,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.418872266973533
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 4085.5929289999985,
+      "engine_service_total_ms": 6499.917080999998,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.34698275862069
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 526.147762999999,
+      "engine_service_total_ms": 1536.369495999999,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.397560975609757
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 688.2387400000007,
+      "engine_service_total_ms": 1711.0104380000007,
+      "engine_iapi_tbt_across_engine_calls_ms": 8.004366812227074
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1117.0207740000005,
+      "engine_service_total_ms": 2763.9825890000006,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.9892761394101885
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1580.5466160000014,
+      "engine_service_total_ms": 3564.4322090000014,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.941060903732811
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 1972.490377000002,
+      "engine_service_total_ms": 4335.433639000003,
+      "engine_iapi_tbt_across_engine_calls_ms": 7.98073217726397
+    },
+    {
+      "responses_duration_excl_engine_and_client_tool_time_ms": 2686.8628000000003,
+      "engine_service_total_ms": 3128.5170120000002,
+      "engine_iapi_tbt_across_engine_calls_ms": 10.200000000000001
+    }
+  ],
+  "expected": {
+    "codex.responses_api_overhead.duration_ms": {
+      "count": 103,
+      "sum": 101325.0,
+      "min": 277.0,
+      "max": 4086.0,
+      "bounds": [
+        0.0,
+        5.0,
+        10.0,
+        25.0,
+        50.0,
+        75.0,
+        100.0,
+        250.0,
+        500.0,
+        750.0,
+        1000.0,
+        1250.0,
+        1500.0,
+        1750.0,
+        2000.0,
+        2250.0,
+        2500.0,
+        3000.0,
+        3500.0,
+        4000.0,
+        4500.0,
+        5000.0,
+        6000.0,
+        7000.0,
+        7500.0,
+        8000.0,
+        9000.0,
+        10000.0,
+        12000.0,
+        15000.0,
+        20000.0,
+        30000.0,
+        60000.0,
+        120000.0
+      ],
+      "buckets": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        31,
+        18,
+        16,
+        11,
+        9,
+        5,
+        4,
+        3,
+        1,
+        3,
+        0,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "codex.responses_api_inference_time.duration_ms": {
+      "count": 103,
+      "sum": 287026.0,
+      "min": 647.0,
+      "max": 8559.0,
+      "bounds": [
+        0.0,
+        5.0,
+        10.0,
+        25.0,
+        50.0,
+        75.0,
+        100.0,
+        250.0,
+        500.0,
+        750.0,
+        1000.0,
+        1250.0,
+        1500.0,
+        1750.0,
+        2000.0,
+        2250.0,
+        2500.0,
+        3000.0,
+        3500.0,
+        4000.0,
+        4500.0,
+        5000.0,
+        6000.0,
+        7000.0,
+        7500.0,
+        8000.0,
+        9000.0,
+        10000.0,
+        12000.0,
+        15000.0,
+        20000.0,
+        30000.0,
+        60000.0,
+        120000.0
+      ],
+      "buckets": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        11,
+        9,
+        9,
+        8,
+        3,
+        6,
+        6,
+        7,
+        5,
+        9,
+        5,
+        4,
+        6,
+        6,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "codex.responses_api_engine_iapi_tbt.duration_ms": {
+      "count": 103,
+      "sum": 1016.5428831624572,
+      "min": 6.015625,
+      "max": 21.55555555555555,
+      "bounds": [
+        0.0,
+        5.0,
+        10.0,
+        25.0,
+        50.0,
+        75.0,
+        100.0,
+        250.0,
+        500.0,
+        750.0,
+        1000.0,
+        1250.0,
+        1500.0,
+        1750.0,
+        2000.0,
+        2250.0,
+        2500.0,
+        3000.0,
+        3500.0,
+        4000.0,
+        4500.0,
+        5000.0,
+        6000.0,
+        7000.0,
+        7500.0,
+        8000.0,
+        9000.0,
+        10000.0,
+        12000.0,
+        15000.0,
+        20000.0,
+        30000.0,
+        60000.0,
+        120000.0
+      ],
+      "buckets": [
+        0,
+        0,
+        62,
+        41,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    }
+  }
+}

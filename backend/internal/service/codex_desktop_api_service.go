@@ -45,10 +45,10 @@ func codexDesktopAPIWebviewHeaders(account *Account, accessToken, chatgptAccount
 const (
 	codexDesktopAPIBaseURL     = "https://chatgpt.com/backend-api"
 	codexDesktopAPIReferralKey = "codex_referral_persistent_invite"
-	// oai-language 跟随应用 UI 语言。当前固定为美区英文画像，
-	// 与 webview profile 的 accept-language (en-US,en;q=0.9)
+	// oai-language 跟随实抓应用 UI 语言，
+	// 与 webview profile 的 accept-language (zh-CN,zh;q=0.9)
 	// 以及 attestation locale 保持一致。
-	codexDesktopAPILanguage = "en-US"
+	codexDesktopAPILanguage = "zh-CN"
 )
 
 // InviteEligibility represents the eligibility response for referral invite.
@@ -83,15 +83,21 @@ type ConsumeCreditResult struct {
 	Raw     any  `json:"raw,omitempty"`
 }
 
-func (s *CodexDesktopAPIService) resolveProxyURL(ctx context.Context, account *Account) string {
+func (s *CodexDesktopAPIService) resolveProxyURL(ctx context.Context, account *Account) (string, error) {
 	if account.ProxyID == nil {
-		return ""
+		return "", nil
+	}
+	if s.proxyRepo == nil {
+		return "", infraerrors.New(http.StatusBadGateway, "CODEX_DESKTOP_PROXY_UNAVAILABLE", "configured proxy cannot be resolved")
 	}
 	proxy, err := s.proxyRepo.GetByID(ctx, *account.ProxyID)
 	if err != nil || proxy == nil {
-		return ""
+		return "", infraerrors.New(http.StatusBadGateway, "CODEX_DESKTOP_PROXY_UNAVAILABLE", "configured proxy cannot be resolved")
 	}
-	return proxy.URL()
+	if strings.TrimSpace(proxy.URL()) == "" {
+		return "", infraerrors.New(http.StatusBadGateway, "CODEX_DESKTOP_PROXY_UNAVAILABLE", "configured proxy URL is empty")
+	}
+	return proxy.URL(), nil
 }
 
 func (s *CodexDesktopAPIService) extractAccountAuth(account *Account) (accessToken, chatgptAccountID string, err error) {
@@ -112,7 +118,10 @@ func (s *CodexDesktopAPIService) GetInviteEligibility(ctx context.Context, accou
 	if err != nil {
 		return nil, err
 	}
-	proxyURL := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
@@ -153,7 +162,10 @@ func (s *CodexDesktopAPIService) InviteFriends(ctx context.Context, account *Acc
 	if len(emails) == 0 {
 		return nil, infraerrors.New(http.StatusBadRequest, "CODEX_DESKTOP_NO_EMAILS", "at least one email is required")
 	}
-	proxyURL := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
@@ -196,7 +208,10 @@ func (s *CodexDesktopAPIService) GetRateLimitResetCredits(ctx context.Context, a
 	if err != nil {
 		return nil, err
 	}
-	proxyURL := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
@@ -241,7 +256,10 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 			return nil, infraerrors.Newf(http.StatusInternalServerError, "CODEX_DESKTOP_REDEEM_ID_FAILED", "failed to generate redeem id: %v", err)
 		}
 	}
-	proxyURL := s.resolveProxyURL(ctx, account)
+	proxyURL, err := s.resolveProxyURL(ctx, account)
+	if err != nil {
+		return nil, err
+	}
 
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {

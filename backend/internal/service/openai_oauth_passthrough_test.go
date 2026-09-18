@@ -167,7 +167,7 @@ func TestOpenAIBuildUpstreamRequestOAuthCodexMimicHeadersAndZstd(t *testing.T) {
 	require.Equal(t, sessionID+":0", req.Header.Get("X-Codex-Window-Id"))
 	require.Equal(t, codexDesktopVersion, req.Header.Get("Version"))
 	// 实抓基准：HTTP POST 恒定发送 x-codex-beta-features=remote_compaction_v2。
-	require.Equal(t, "remote_compaction_v2", req.Header.Get("X-Codex-Beta-Features"))
+	require.Equal(t, codexBetaFeaturesValue, req.Header.Get("X-Codex-Beta-Features"))
 	require.Equal(t, "model=gpt-5.5", req.Header.Get("X-Codex-Routing-Hint"))
 	// responses-lite 头按出站模型条件发送：gpt-5.5 非 lite，不发送；
 	// 0.144 的 timing-metrics 头已移除。
@@ -581,7 +581,7 @@ func TestOpenAIGatewayService_OAuthPassthrough_StreamKeepsToolNameAndBodyNormali
 	require.Empty(t, upstream.lastReq.Header.Get("Accept-Encoding"))
 	require.Empty(t, upstream.lastReq.Header.Get("Proxy-Authorization"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Test"))
-	require.Equal(t, "remote_compaction_v2", upstream.lastReq.Header.Get("x-codex-beta-features"))
+	require.Equal(t, codexBetaFeaturesValue, upstream.lastReq.Header.Get("x-codex-beta-features"))
 
 	// 3) required OAuth headers are present
 	require.Equal(t, "chatgpt.com", upstream.lastReq.Host)

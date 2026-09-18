@@ -65,6 +65,12 @@ func normalizeKnownOpenAICodexModel(model string) string {
 	}
 
 	switch {
+	case strings.HasPrefix(normalized, "gpt-6-astra-"):
+		suffix := strings.TrimPrefix(strings.TrimSuffix(normalized, "-openai-compact"), "gpt-6-astra-")
+		if suffix == "max" || suffix == "ultra" || isKnownCodexModelSuffix(suffix) {
+			return "gpt-6-astra"
+		}
+		return ""
 	case strings.Contains(normalized, "gpt-5.6-sol"):
 		return "gpt-5.6-sol"
 	case strings.Contains(normalized, "gpt-5.6-terra"):

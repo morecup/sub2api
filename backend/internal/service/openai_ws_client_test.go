@@ -2,7 +2,10 @@ package service
 
 import (
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,6 +112,156 @@ func TestCoderOpenAIWSClientDialer_ProxyTransportTLSHandshakeTimeout(t *testing.
 	require.True(t, ok)
 	require.NotNil(t, transport)
 	require.Equal(t, 10*time.Second, transport.TLSHandshakeTimeout)
+}
+
+func TestCoderOpenAIWSClientDialer_FingerprintedClientsAreScopedAndHTTP1Only(t *testing.T) {
+	dialer := newDefaultOpenAIWSClientDialer()
+	impl, ok := dialer.(*coderOpenAIWSClientDialer)
+	require.True(t, ok)
+	profile := builtInProfileForAccount(&Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.NotNil(t, profile)
+
+	first, err := impl.fingerprintedHTTPClient("", profile, "openai-account:1")
+	require.NoError(t, err)
+	again, err := impl.fingerprintedHTTPClient("", profile, "openai-account:1")
+	require.NoError(t, err)
+	otherAccount, err := impl.fingerprintedHTTPClient("", profile, "openai-account:2")
+	require.NoError(t, err)
+	require.Same(t, first, again)
+	require.NotSame(t, first, otherAccount, "TLS ticket stores must not cross account scopes")
+
+	transport, ok := first.Transport.(*http.Transport)
+	require.True(t, ok)
+	require.False(t, transport.ForceAttemptHTTP2)
+	require.True(t, transport.DisableCompression)
+	require.NotNil(t, transport.DialTLSContext)
+	require.Nil(t, transport.Proxy)
+}
+
+func TestReorderCodexWebSocketHandshakeMatchesCapturedWireShape(t *testing.T) {
+	// This input follows net/http's special-header + sorted-map shape. The
+	// rewriter must produce Tungstenite's captured order and compression offer.
+	raw := strings.Join([]string{
+		"GET /backend-api/codex/responses HTTP/1.1",
+		"Host: chatgpt.com",
+		"User-Agent: Codex Desktop/test",
+		"Authorization: Bearer redacted",
+		"Connection: Upgrade",
+		"Sec-WebSocket-Extensions: permessage-deflate",
+		"Sec-WebSocket-Key: redacted-key",
+		"Sec-WebSocket-Version: 13",
+		"Upgrade: websocket",
+		"",
+		"",
+	}, "\r\n")
+
+	reordered, ok := reorderCodexWebSocketHandshake([]byte(raw))
+	require.True(t, ok)
+	lines := strings.Split(strings.TrimSuffix(string(reordered), "\r\n\r\n"), "\r\n")
+	var names []string
+	for _, line := range lines[1:] {
+		name, _, found := strings.Cut(line, ":")
+		require.True(t, found)
+		names = append(names, name)
+	}
+	require.Equal(t, []string{
+		"Host",
+		"Connection",
+		"Upgrade",
+		"Sec-WebSocket-Version",
+		"Sec-WebSocket-Key",
+		"authorization",
+		"user-agent",
+		"sec-websocket-extensions",
+	}, names)
+	require.Contains(t, string(reordered), "sec-websocket-extensions: "+codexDesktopWSCompressionOffer+"\r\n")
+}
+
+func TestCodexWebSocketHandshakeConnReordersFragmentedWriteAndThenPassesThrough(t *testing.T) {
+	rawHeader := strings.Join([]string{
+		"GET /backend-api/codex/responses HTTP/1.1",
+		"Host: chatgpt.com",
+		"User-Agent: Codex Desktop/test",
+		"Authorization: Bearer redacted",
+		"Connection: Upgrade",
+		"Sec-WebSocket-Extensions: permessage-deflate",
+		"Sec-WebSocket-Key: redacted-key",
+		"Sec-WebSocket-Version: 13",
+		"Upgrade: websocket",
+		"",
+		"",
+	}, "\r\n")
+	reordered, ok := reorderCodexWebSocketHandshake([]byte(rawHeader))
+	require.True(t, ok)
+
+	firstFrame := []byte{0x81, 0x02, 'o', 'k'}
+	secondFrame := []byte{0x89, 0x00}
+	firstCut := len(rawHeader) / 3
+	secondCut := 2 * len(rawHeader) / 3
+	fragments := [][]byte{
+		[]byte(rawHeader[:firstCut]),
+		[]byte(rawHeader[firstCut:secondCut]),
+		append([]byte(rawHeader[secondCut:]), firstFrame...),
+		secondFrame,
+	}
+
+	clientConn, serverConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = clientConn.Close()
+		_ = serverConn.Close()
+	})
+	require.NoError(t, serverConn.SetDeadline(time.Now().Add(5*time.Second)))
+	wrapped := &codexWebSocketHandshakeConn{Conn: clientConn}
+
+	writeErr := make(chan error, 1)
+	go func() {
+		for i, fragment := range fragments {
+			written, err := wrapped.Write(fragment)
+			if err != nil {
+				writeErr <- fmt.Errorf("fragment %d: %w", i, err)
+				return
+			}
+			if written != len(fragment) {
+				writeErr <- fmt.Errorf("fragment %d: wrote %d of %d bytes", i, written, len(fragment))
+				return
+			}
+		}
+		writeErr <- nil
+	}()
+
+	want := make([]byte, 0, len(reordered)+len(firstFrame)+len(secondFrame))
+	want = append(want, reordered...)
+	want = append(want, firstFrame...)
+	want = append(want, secondFrame...)
+	got := make([]byte, len(want))
+	_, err := io.ReadFull(serverConn, got)
+	require.NoError(t, err)
+	require.Equal(t, want, got)
+	require.NoError(t, <-writeErr)
+}
+
+func TestCoderOpenAIWSClientDialer_FingerprintedProxyRouting(t *testing.T) {
+	profile := builtInProfileForAccount(&Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	tests := []struct {
+		name           string
+		proxy          string
+		wantCustomTLS  bool
+		wantPlainProxy bool
+	}{
+		{name: "http connect", proxy: "http://127.0.0.1:8080", wantCustomTLS: true},
+		{name: "socks5", proxy: "socks5://127.0.0.1:1080", wantCustomTLS: true},
+		{name: "https safe fallback", proxy: "https://127.0.0.1:8443", wantPlainProxy: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client, err := newFingerprintedOpenAIWSHTTPClient(tt.proxy, profile, "openai-account:1")
+			require.NoError(t, err)
+			transport, ok := client.Transport.(*http.Transport)
+			require.True(t, ok)
+			require.Equal(t, tt.wantCustomTLS, transport.DialTLSContext != nil)
+			require.Equal(t, tt.wantPlainProxy, transport.Proxy != nil)
+		})
+	}
 }
 
 func TestCoderOpenAIWSClientConn_DoesNotSupportIdlePingWithoutReader(t *testing.T) {

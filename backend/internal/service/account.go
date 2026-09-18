@@ -1439,7 +1439,13 @@ func (a *Account) GetOpenAIDeviceID() string {
 	if !a.IsOpenAIOAuth() {
 		return ""
 	}
-	return strings.TrimSpace(a.GetExtraString("openai_device_id"))
+	if p, err := parseCodexClientProfile(a.Extra[CodexClientProfileExtraKey]); err == nil {
+		return p.DeviceID
+	}
+	if deviceID := strings.TrimSpace(a.GetExtraString("openai_device_id")); deviceID != "" {
+		return deviceID
+	}
+	return codexClientProfileForAccount(a).DeviceID
 }
 
 func (a *Account) GetOpenAISessionID() string {
@@ -1991,14 +1997,17 @@ func (a *Account) IsAnthropicOAuthOrSetupToken() bool {
 
 // SupportsTLSFingerprint 判断账号所属平台是否有可模拟的官方客户端 TLS 指纹。
 //
-// Anthropic OAuth/SetupToken 走 Claude Code（Node.js）画像；Grok 走官方
-// Grok Build CLI（Rust/rustls + reqwest）画像。其余平台暂无实抓画像，保持
-// Go 默认握手。
+// Anthropic OAuth/SetupToken 走 Claude Code（Node.js）画像；OpenAI OAuth
+// 走 Codex Desktop（Rust/rustls + reqwest）画像；Grok 走官方 Grok Build
+// CLI 画像。OpenAI API Key 不冒充 Desktop 登录态，保持 Go 默认握手。
 func (a *Account) SupportsTLSFingerprint() bool {
 	if a == nil {
 		return false
 	}
 	if a.IsAnthropicOAuthOrSetupToken() {
+		return true
+	}
+	if a.IsOpenAIOAuth() {
 		return true
 	}
 	return a.IsGrok() && (a.Type == AccountTypeOAuth || a.Type == AccountTypeAPIKey)

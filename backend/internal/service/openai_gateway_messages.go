@@ -309,8 +309,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	// Override session_id with a deterministic UUID derived from the isolated
 	// session key, ensuring different API keys produce different upstream sessions.
 	if account.Platform != PlatformGrok && promptCacheKey != "" {
-		isolatedSessionID := account.GetOpenAIFixedSessionID()
-		if isolatedSessionID == "" {
+		isolatedSessionID := ""
+		if fixed := account.GetOpenAIFixedSessionID(); fixed != "" {
+			isolatedSessionID = resolveCodexSessionUUID(account.ID, apiKeyID, promptCacheKey, fixed)
+		} else {
 			isolatedSessionID = generateSessionUUID(isolateOpenAISessionIDForAccount(account.ID, apiKeyID, promptCacheKey))
 		}
 		upstreamReq.Header.Set("session_id", isolatedSessionID)

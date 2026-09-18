@@ -11,6 +11,7 @@ import (
 )
 
 var codexModelMap = map[string]string{
+	"gpt-6-astra": "gpt-6-astra",
 	// gpt-5.6-sol-wm is a server-gated ChatGPT/Codex route rather than a
 	// public API model. Preserve the exact slug for OAuth accounts so the
 	// upstream can make the entitlement decision instead of silently routing
@@ -303,7 +304,9 @@ func applyCodexOAuthTransformWithOptions(reqBody map[string]any, opts codexOAuth
 		}
 		input = filterCodexInputWithOptions(input, codexInputFilterOptions{
 			PreserveReferences: needsToolContinuation,
-			PreserveCallIDs:    opts.PreserveToolCallIDs,
+			// Server-stored context contains the original call IDs. Rewriting
+			// only an incremental output would break its link to that context.
+			PreserveCallIDs: opts.PreserveToolCallIDs || hasNonEmptyString(reqBody["previous_response_id"]),
 		})
 		reqBody["input"] = input
 		result.Modified = true

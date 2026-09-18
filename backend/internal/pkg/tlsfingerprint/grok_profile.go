@@ -158,8 +158,8 @@ func GrokCLIProfile() *Profile {
 		SignatureAlgorithms: grokCLISignatureAlgorithms,
 		// reqwest offers both protocols unless the caller forces one
 		// (HttpVersionPref::All).
-		ALPNProtocols:         []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
-		UseGrokHTTP2Transport: true,
+		ALPNProtocols:            []string{ALPNProtocolHTTP2, ALPNProtocolHTTP1},
+		UseOrderedHTTP2Transport: true,
 		// rustls offers TLS 1.3 then TLS 1.2.
 		SupportedVersions: []uint16{0x0304, 0x0303},
 		// rustls sends a single key share for its preferred group.

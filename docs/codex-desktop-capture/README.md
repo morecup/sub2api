@@ -11,11 +11,13 @@ sub2api 伪装层（`backend/internal/service/openai_codex_mimic.go`）的对齐
 | `2026-07-21_0.145.0-alpha.27/` | 26.715.8383.0 | 0.145.0-alpha.27 | 2026-07-21/22 | 第二轮抓包，含 0.144→0.145 diff 与风控记录 |
 | `2026-07-22_0.145.0-alpha.27/` | 26.715.8383.0 | 0.145.0-alpha.27 | 2026-07-22 | 补充抓包：`/wham/rate-limit-reset-credits` GET（实抓）与 consume（手工构造） |
 | `2026-08-30_0.151.0-alpha.7.1/` | 26.825.41651 | 0.151.0-alpha.7.1 | 2026-08-30 | WS、HTTP 回退、Lite/非 Lite、附件与 compaction；仅提交脱敏结论 |
+| `2026-09-17_0.155.0-alpha.2.6/` | 26.911.61220 | 0.155.0-alpha.2.6 | 2026-09-17 | [Work 模型矩阵](2026-09-17_0.155.0-alpha.2.6/MATRIX.md)、[本地项目专项](2026-09-17_0.155.0-alpha.2.6/WORK.md)：读写执行、压缩与停止恢复、Rust 遥测 |
 
-## 抓包方法（两轮相同）
+## 抓包方法
 
-1. mitmproxy 拦截 `/backend-api/codex/responses` 的 WebSocket 升级请求，返回 426，
-   迫使客户端回退到 HTTP POST SSE（工具：`tmp/codex_capture/`）。
+1. 默认直接记录原生 WebSocket。需要测试 HTTP 回退时，mitmproxy 对
+   `/backend-api/codex/responses` 的 WebSocket 升级请求临时返回 426；结束后撤去拦截。
+   早期轮次主要使用强制 HTTP 回退方式（工具：`tmp/codex_capture/`）。
 2. 关键点：codex.exe 的 WS 客户端**不走系统代理**（直连），但遵守
    `HTTP_PROXY`/`HTTPS_PROXY` 环境变量。有 TUN 类代理时直连会绕过抓包，
    需关 TUN 并设置上述环境变量指向 mitmproxy。
@@ -24,6 +26,9 @@ sub2api 伪装层（`backend/internal/service/openai_codex_mimic.go`）的对齐
 
 ## 跨版本要点
 
+- 0.155 手动 compaction 的 WS/HTTP metadata 增加 `root_turn_id`。
+- 0.155 扩展采样后比旧样本多观察到 15 个 OTLP 指标名，其中 9 个在旧程序中未检出同名字符串，另外 6 个旧程序已有；详见新版归档。
+- 0.155 普通 ChatGPT 走 `/backend-api/f/conversation`，Work/Codex 继续走 `/backend-api/codex/responses`。
 - 0.151 新增 `x-codex-routing-hint: model=<实际模型>`。
 - 0.151 普通 turn 恢复完整 `s=0 + token` attestation；0.145 的 `s=1` 已过时。
 - 0.151 WS 的 Lite 标记位于 `response.create.client_metadata`，握手不发送 Lite 头。

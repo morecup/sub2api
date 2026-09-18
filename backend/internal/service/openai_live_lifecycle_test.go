@@ -92,6 +92,8 @@ func (d *liveTestDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	_ string,
+	_ *openAIWSTLSProfile,
+	_ string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	d.url = wsURL
 	d.headers = headers.Clone()

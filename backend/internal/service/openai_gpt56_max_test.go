@@ -273,7 +273,7 @@ func TestOpenAIGatewayServiceForwardOAuthRemoteCompactV2PreservesResponsesWire(t
 	require.Equal(t, "compaction_trigger", gjson.GetBytes(upstream.lastBody, "input.#(type==\"compaction_trigger\").type").String())
 	require.Equal(t, "max", gjson.GetBytes(upstream.lastBody, "reasoning.effort").String())
 	require.Equal(t, "all_turns", gjson.GetBytes(upstream.lastBody, "reasoning.context").String())
-	require.Equal(t, "remote_compaction_v2", upstream.lastReq.Header.Get("x-codex-beta-features"))
+	require.Equal(t, codexBetaFeaturesValue, upstream.lastReq.Header.Get("x-codex-beta-features"))
 	require.Contains(t, rec.Body.String(), `"type":"compaction"`)
 	require.Contains(t, rec.Body.String(), `"encrypted_content":"summary"`)
 	require.NotNil(t, result.ReasoningEffort)

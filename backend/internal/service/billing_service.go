@@ -121,7 +121,11 @@ const (
 )
 
 func normalizeBillingServiceTier(serviceTier string) string {
-	return strings.ToLower(strings.TrimSpace(serviceTier))
+	normalized := strings.ToLower(strings.TrimSpace(serviceTier))
+	if normalized == "fast" {
+		return "priority"
+	}
+	return normalized
 }
 
 func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bool {
@@ -132,7 +136,7 @@ func usePriorityServiceTierPricing(serviceTier string, pricing *ModelPricing) bo
 		pricing.CacheCreationPricePerTokenPriority > 0 || pricing.CacheReadPricePerTokenPriority > 0
 }
 
-func newOpenAIGPT56ModelPricing(input, output, cacheCreation, cacheRead float64) *ModelPricing {
+func newOpenAICachedModelPricing(input, output, cacheCreation, cacheRead float64) *ModelPricing {
 	return &ModelPricing{
 		InputPricePerToken:                 input,
 		InputPricePerTokenPriority:         input * 2,
@@ -325,10 +329,12 @@ func (s *BillingService) initFallbackPricing() {
 	s.fallbackPrices["gpt-5.5-pro"] = s.fallbackPrices["gpt-5.4"]
 
 	// GPT-5.6 三档官方定价；裸 gpt-5.6 是 Sol 的官方别名。
-	s.fallbackPrices["gpt-5.6-sol"] = newOpenAIGPT56ModelPricing(5e-6, 30e-6, 6.25e-6, 0.5e-6)
-	s.fallbackPrices["gpt-5.6-terra"] = newOpenAIGPT56ModelPricing(2.5e-6, 15e-6, 3.125e-6, 0.25e-6)
-	s.fallbackPrices["gpt-5.6-luna"] = newOpenAIGPT56ModelPricing(1e-6, 6e-6, 1.25e-6, 0.1e-6)
+	s.fallbackPrices["gpt-5.6-sol"] = newOpenAICachedModelPricing(5e-6, 30e-6, 6.25e-6, 0.5e-6)
+	s.fallbackPrices["gpt-5.6-terra"] = newOpenAICachedModelPricing(2.5e-6, 15e-6, 3.125e-6, 0.25e-6)
+	s.fallbackPrices["gpt-5.6-luna"] = newOpenAICachedModelPricing(1e-6, 6e-6, 1.25e-6, 0.1e-6)
 	s.fallbackPrices["gpt-5.6"] = s.fallbackPrices["gpt-5.6-sol"]
+	// GPT-6 Astra official Standard/Fast rates, verified 2026-09-17.
+	s.fallbackPrices["gpt-6-astra"] = newOpenAICachedModelPricing(10e-6, 50e-6, 12.5e-6, 1e-6)
 
 	s.fallbackPrices["gpt-5.4-mini"] = &ModelPricing{
 		InputPricePerToken:     7.5e-7,
@@ -766,6 +772,8 @@ func (s *BillingService) getFallbackPricing(model string) *ModelPricing {
 	// OpenAI（GPT-5 / Codex 族）：仅匹配已知型号，避免未知 OpenAI 型号误计价。
 	if normalized := normalizeKnownOpenAICodexModel(modelLower); normalized != "" {
 		switch normalized {
+		case "gpt-6-astra":
+			return s.fallbackPrices["gpt-6-astra"]
 		case "gpt-5.6-sol-wm":
 			// WM 是服务端门控的 sol 子路由，价格与普通 sol 一致。
 			return s.fallbackPrices["gpt-5.6-sol"]
@@ -1216,23 +1224,23 @@ func (s *BillingService) applyModelSpecificPricingPolicy(model string, pricing *
 		return nil
 	}
 	normalized := normalizeKnownOpenAICodexModel(model)
-	isGPT56 := isOpenAIGPT56Model(normalized)
+	usesCacheWritePricing := isOpenAIGPT56Model(normalized) || normalized == "gpt-6-astra"
 	usesLegacyLongContextPricing := usesOpenAILegacyLongContextPricing(normalized)
 	usesGrokLongContextPricing := isGrokLongContextPricingModel(model)
-	usesLongContextPricing := isGPT56 || usesLegacyLongContextPricing || usesGrokLongContextPricing
+	usesLongContextPricing := usesCacheWritePricing || usesLegacyLongContextPricing || usesGrokLongContextPricing
 	if !usesLongContextPricing {
 		return pricing
 	}
 	needsLongContextPolicy := usesLongContextPricing &&
 		(pricing.LongContextInputThreshold <= 0 || pricing.LongContextInputMultiplier <= 0 || pricing.LongContextOutputMultiplier <= 0 ||
 			(usesGrokLongContextPricing && !pricing.LongContextThresholdInclusive))
-	needsCacheCreationPolicy := isGPT56 && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
+	needsCacheCreationPolicy := usesCacheWritePricing && !pricing.CacheCreationPriceExplicit && (pricing.CacheCreationPricePerToken <= 0 ||
 		(pricing.InputPricePerTokenPriority > 0 && pricing.CacheCreationPricePerTokenPriority <= 0))
 	if !needsLongContextPolicy && !needsCacheCreationPolicy {
 		return pricing
 	}
 	cloned := *pricing
-	if isGPT56 && !cloned.CacheCreationPriceExplicit {
+	if usesCacheWritePricing && !cloned.CacheCreationPriceExplicit {
 		if cloned.CacheCreationPricePerToken <= 0 {
 			cloned.CacheCreationPricePerToken = cloned.InputPricePerToken * 1.25
 		}

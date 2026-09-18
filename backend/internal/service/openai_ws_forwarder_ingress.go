@@ -230,7 +230,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				nil,
 			)
 		}
-		if turnMetadata := strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)); turnMetadata != "" {
+		if turnMetadata := openAIWSFrameTurnMetadata(normalized, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))); turnMetadata != "" {
 			next, setErr := applyPayloadMutation(normalized, "client_metadata."+openAIWSTurnMetadataHeader, turnMetadata)
 			if setErr != nil {
 				return openAIWSClientPayload{}, NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "invalid websocket request payload", setErr)
@@ -583,14 +583,16 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 	}
 
-	wsHeaders, _, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), firstPayload.promptCacheKey, gjson.GetBytes(firstPayload.payloadRaw, "model").String())
+	wsHeaders, _, buildHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, openAIWSFrameTurnMetadata(firstPayload.payloadRaw, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))), firstPayload.promptCacheKey, gjson.GetBytes(firstPayload.payloadRaw, "model").String())
 	if buildHdrErr != nil {
 		return fmt.Errorf("build ws headers: %w", buildHdrErr)
 	}
 	baseAcquireReq := openAIWSAcquireRequest{
-		Account: account,
-		WSURL:   wsURL,
-		Headers: wsHeaders,
+		Account:        account,
+		WSURL:          wsURL,
+		Headers:        wsHeaders,
+		TLSProfile:     s.resolveUpstreamTLSProfile(account),
+		TransportScope: openAIWSTransportScope(account),
 		HeadersFactory: func(factoryCtx context.Context, headers http.Header) (http.Header, error) {
 			return s.refreshOpenAIAgentIdentityHeaders(factoryCtx, account, headers)
 		},
@@ -756,6 +758,13 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
+		if account.IsOpenAIOAuth() {
+			updated, err := syncCodexWSFrameMetadata(payload, baseAcquireReq.Headers, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)))
+			if err != nil {
+				return nil, fmt.Errorf("synchronize websocket turn metadata: %w", err)
+			}
+			payload, payloadBytes = updated, len(updated)
+		}
 		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",
@@ -1598,7 +1607,7 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 		if nextPayload.promptCacheKey != "" {
 			// ingress 会话在整个客户端 WS 生命周期内复用同一上游连接；
 			// prompt_cache_key 对握手头的更新仅在未来需要重新建连时生效。
-			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader)), nextPayload.promptCacheKey, gjson.GetBytes(nextPayload.payloadRaw, "model").String())
+			updatedHeaders, _, updHdrErr := s.buildOpenAIWSHeaders(ctx, c, account, token, wsDecision, isCodexCLI, turnState, openAIWSFrameTurnMetadata(nextPayload.payloadRaw, strings.TrimSpace(c.GetHeader(openAIWSTurnMetadataHeader))), nextPayload.promptCacheKey, gjson.GetBytes(nextPayload.payloadRaw, "model").String())
 			if updHdrErr != nil {
 				logOpenAIWSModeInfo("ingress_ws_update_headers_failed account_id=%d err=%v", account.ID, updHdrErr)
 			} else {

@@ -66,10 +66,18 @@ func TestAccountTLSFingerprintDefaultsEnabledForAnthropicOAuth(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "openai oauth unsupported",
+			name: "openai oauth defaults enabled",
 			account: &Account{
 				Platform: PlatformOpenAI,
 				Type:     AccountTypeOAuth,
+			},
+			want: true,
+		},
+		{
+			name: "openai api key unsupported",
+			account: &Account{
+				Platform: PlatformOpenAI,
+				Type:     AccountTypeAPIKey,
 			},
 			want: false,
 		},
@@ -150,7 +158,12 @@ func TestResolveTLSProfileUsesGrokCLIProfileForGrokAccounts(t *testing.T) {
 	require.Equal(t, tlsfingerprint.BuiltInDefaultProfileName, anthropic.Name)
 	require.False(t, anthropic.AdvertisesHTTP2())
 
-	require.Nil(t, svc.ResolveTLSProfile(&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth}))
+	codex := svc.ResolveTLSProfile(&Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth})
+	require.NotNil(t, codex)
+	require.Equal(t, tlsfingerprint.CodexDesktopProfileName, codex.Name)
+	require.True(t, codex.AdvertisesHTTP2())
+	require.True(t, codex.RequiresOrderedHTTP2Transport())
+	require.Nil(t, svc.ResolveTLSProfile(&Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}))
 	require.Nil(t, svc.ResolveTLSProfile(&Account{
 		Platform: PlatformGrok,
 		Type:     AccountTypeOAuth,

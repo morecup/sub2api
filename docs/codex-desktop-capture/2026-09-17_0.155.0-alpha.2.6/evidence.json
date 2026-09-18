@@ -1,0 +1,347 @@
+{
+  "generated_at": "2026-09-17T12:42:32.718047+00:00",
+  "versions": {
+    "store_package": "26.911.7940.0",
+    "app": "26.911.61220",
+    "codex": "0.155.0-alpha.2.6",
+    "chromium": "153.0.0.0",
+    "baseline_app": "26.825.41651",
+    "baseline_codex": "0.151.0-alpha.7.1"
+  },
+  "counts": {
+    "codex_requests": 21,
+    "codex_models": {
+      "gpt-5.6-sol": 13,
+      "gpt-5.6-luna": 3,
+      "gpt-5.6-terra": 4,
+      "gpt-5.5": 1
+    },
+    "ws_response_create": 14,
+    "ws_response_completed": 14,
+    "synthetic_426": 2,
+    "http_posts": 7,
+    "chat_posts": 1,
+    "current_metric_names": 77,
+    "baseline_metric_names": 68
+  },
+  "request_key_additions": [
+    "access_programs"
+  ],
+  "manual_compaction_metadata": {
+    "current": {
+      "WS": [
+        "agent_name",
+        "auto_review_enabled",
+        "compaction",
+        "context_window_id",
+        "installation_id",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "request_kind",
+        "root_turn_id",
+        "sandbox",
+        "sandbox_mode",
+        "session_id",
+        "thread_id",
+        "thread_source",
+        "turn_id",
+        "turn_started_at_unix_ms",
+        "window_id",
+        "window_number"
+      ],
+      "HTTP": [
+        "agent_name",
+        "auto_review_enabled",
+        "compaction",
+        "context_window_id",
+        "installation_id",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "request_kind",
+        "root_turn_id",
+        "sandbox",
+        "sandbox_mode",
+        "session_id",
+        "thread_id",
+        "thread_source",
+        "turn_id",
+        "turn_started_at_unix_ms",
+        "window_id",
+        "window_number"
+      ]
+    },
+    "baseline": {
+      "WS": [
+        "agent_name",
+        "auto_review_enabled",
+        "compaction",
+        "context_window_id",
+        "installation_id",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "request_kind",
+        "sandbox",
+        "sandbox_mode",
+        "session_id",
+        "thread_id",
+        "thread_source",
+        "turn_id",
+        "turn_started_at_unix_ms",
+        "window_id",
+        "window_number"
+      ],
+      "HTTP": [
+        "agent_name",
+        "auto_review_enabled",
+        "compaction",
+        "context_window_id",
+        "installation_id",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "request_kind",
+        "sandbox",
+        "sandbox_mode",
+        "session_id",
+        "thread_id",
+        "thread_source",
+        "turn_id",
+        "turn_started_at_unix_ms",
+        "window_id",
+        "window_number"
+      ]
+    }
+  },
+  "new_observed_metrics": {
+    "codex.app_server.codex_home.size_bytes": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    },
+    "codex.hooks.run": {
+      "old_binary_occurrences": 2,
+      "new_binary_occurrences": 2
+    },
+    "codex.hooks.run.duration_ms": {
+      "old_binary_occurrences": 1,
+      "new_binary_occurrences": 1
+    },
+    "codex.plugins.loaded_cache.event": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    },
+    "codex.plugins.loaded_cache.load.duration_ms": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 12
+    },
+    "codex.plugins.loaded_cache.request": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    },
+    "codex.plugins.loaded_cache.wait.duration_ms": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 12
+    },
+    "codex.thread_history.sqlite_projection": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 2
+    },
+    "codex.windows_mxc.available": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    },
+    "codex.windows_sandbox.private_desktop": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    },
+    "codex.windows_system_config.namespace_squatting_probe": {
+      "old_binary_occurrences": 0,
+      "new_binary_occurrences": 1
+    }
+  },
+  "telemetry": {
+    "ab.chatgpt.com/otlp/v1/metrics": {
+      "requests": 27,
+      "statuses": {
+        "202": 27
+      },
+      "baseline_endpoint_observed": true
+    },
+    "ab.chatgpt.com/v1/initialize": {
+      "requests": 4,
+      "statuses": {
+        "204": 3,
+        "200": 1
+      },
+      "baseline_endpoint_observed": true
+    },
+    "chat.openai.com/ces/v1/telemetry/intake": {
+      "requests": 69,
+      "statuses": {
+        "202": 69
+      },
+      "baseline_endpoint_observed": true
+    },
+    "chatgpt.com/ces/statsc/flush": {
+      "requests": 3,
+      "statuses": {
+        "200": 3
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/i": {
+      "requests": 1,
+      "statuses": {
+        "200": 1
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/m": {
+      "requests": 1,
+      "statuses": {
+        "200": 1
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/p": {
+      "requests": 1,
+      "statuses": {
+        "200": 1
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/projects/oai/settings": {
+      "requests": 1,
+      "statuses": {
+        "200": 1
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/rgstr": {
+      "requests": 50,
+      "statuses": {
+        "202": 50
+      },
+      "baseline_endpoint_observed": true
+    },
+    "chatgpt.com/ces/v1/t": {
+      "requests": 2,
+      "statuses": {
+        "200": 2
+      },
+      "baseline_endpoint_observed": false
+    },
+    "chatgpt.com/ces/v1/telemetry/intake": {
+      "requests": 4,
+      "statuses": {
+        "202": 4
+      },
+      "baseline_endpoint_observed": false
+    },
+    "o33249.ingest.us.sentry.io/api/<id>/envelope/": {
+      "requests": 2,
+      "statuses": {
+        "200": 1,
+        "429": 1
+      },
+      "baseline_endpoint_observed": false
+    }
+  },
+  "codex_http_outcomes": [
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": false,
+      "stream_bytes": 230594,
+      "text_delta_count": 7,
+      "has_response_completed": true,
+      "has_chat_done": false,
+      "client_cancel": false
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": false,
+      "stream_bytes": 65996,
+      "text_delta_count": 23,
+      "has_response_completed": true,
+      "has_chat_done": false,
+      "client_cancel": false
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": false,
+      "stream_bytes": 230792,
+      "text_delta_count": 0,
+      "has_response_completed": true,
+      "has_chat_done": false,
+      "client_cancel": false
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": false,
+      "stream_bytes": 0,
+      "text_delta_count": 0,
+      "has_response_completed": false,
+      "has_chat_done": false,
+      "client_cancel": true
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": true,
+      "stream_bytes": 231405,
+      "text_delta_count": 7,
+      "has_response_completed": true,
+      "has_chat_done": false,
+      "client_cancel": false
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": true,
+      "stream_bytes": 438206,
+      "text_delta_count": 1095,
+      "has_response_completed": false,
+      "has_chat_done": false,
+      "client_cancel": true
+    },
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": false,
+      "streamed": true,
+      "stream_bytes": 232011,
+      "text_delta_count": 6,
+      "has_response_completed": true,
+      "has_chat_done": false,
+      "client_cancel": true
+    }
+  ],
+  "chat_http_outcomes": [
+    {
+      "status": 200,
+      "http_version": "HTTP/2.0",
+      "has_response_content_type": true,
+      "streamed": true,
+      "stream_bytes": 14053,
+      "text_delta_count": 0,
+      "has_response_completed": false,
+      "has_chat_done": true,
+      "client_cancel": true
+    }
+  ],
+  "notes": [
+    "Counters are a snapshot of one local session, including login and idle activity.",
+    "A newly observed endpoint or metric is not by itself evidence of a newly introduced feature.",
+    "Binary occurrence checks compare exact metric strings, not complete implementation semantics.",
+    "The first HTTP samples preceded the missing-Content-Type streaming fix; do not use their timing.",
+    "Model counts include prewarm, title generation, tool continuations and compaction."
+  ]
+}

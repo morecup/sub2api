@@ -1589,6 +1589,8 @@ func (d *openAIWSFakeDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	_ *openAIWSTLSProfile,
+	_ string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
@@ -1660,6 +1662,8 @@ func (d *openAIWSCountingDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	_ *openAIWSTLSProfile,
+	_ string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
@@ -1682,6 +1686,8 @@ func (d *openAIWSAlwaysFailDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	_ *openAIWSTLSProfile,
+	_ string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
@@ -1839,6 +1845,8 @@ func (d *openAIWSNilConnDialer) Dial(
 	wsURL string,
 	headers http.Header,
 	proxyURL string,
+	_ *openAIWSTLSProfile,
+	_ string,
 ) (openAIWSClientConn, int, http.Header, error) {
 	_ = ctx
 	_ = wsURL
@@ -1862,6 +1870,31 @@ func TestOpenAIWSConnPool_DialConnNilConnection(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "nil connection")
+}
+
+func TestOpenAIWSConnPool_PassesTLSProfileAndAccountScopeToDialer(t *testing.T) {
+	cfg := &config.Config{}
+	pool := newOpenAIWSConnPool(cfg)
+	capture := &openAIWSCaptureDialer{conn: &openAIWSCaptureConn{}}
+	pool.setClientDialerForTest(capture)
+	account := &Account{ID: 91, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+	profile := builtInProfileForAccount(account)
+
+	lease, err := pool.Acquire(context.Background(), openAIWSAcquireRequest{
+		Account:        account,
+		WSURL:          "wss://example.com/v1/responses",
+		TLSProfile:     profile,
+		TransportScope: openAIWSTransportScope(account),
+	})
+	require.NoError(t, err)
+	defer lease.Release()
+
+	capture.mu.Lock()
+	gotProfile := capture.lastProfile
+	gotScope := capture.lastScope
+	capture.mu.Unlock()
+	require.Same(t, profile, gotProfile)
+	require.Equal(t, "openai-account:91", gotScope)
 }
 
 func TestOpenAIWSConnPool_SnapshotTransportMetrics(t *testing.T) {

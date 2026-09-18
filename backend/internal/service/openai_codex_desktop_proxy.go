@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 const codexDesktopBackendAPIBaseURL = "https://chatgpt.com/backend-api"
@@ -120,6 +122,32 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 		req.Header.Set("content-type", "application/json")
 	}
 	account.ApplyHeaderOverrides(req.Header)
+	if account.IsOpenAIOAuth() {
+		client := codexClientProfileForAccount(account)
+		if strings.Contains(req.Header.Get("user-agent"), "Mozilla/") {
+			req.Header.Set("user-agent", client.WebviewUserAgent())
+		} else {
+			req.Header.Set("user-agent", client.UserAgent())
+		}
+		// Only replace fields this endpoint already uses; do not invent headers.
+		for key, value := range map[string]string{
+			"version": client.CodexVersion, "x-codex-installation-id": client.InstallationID,
+			"oai-did": client.DeviceID, "oai-language": client.Locale, "accept-language": client.AcceptLanguage(),
+		} {
+			if req.Header.Get(key) != "" {
+				req.Header.Set(key, value)
+			}
+		}
+		if req.Header.Get("x-oai-attestation") != "" {
+			req.Header.Set("x-oai-attestation", codexAccountDeviceProfile(account).Attestation)
+		}
+		if metadata := req.Header.Get("x-codex-turn-metadata"); gjson.Valid(metadata) && gjson.Get(metadata, "installation_id").Exists() {
+			updated, err := sjson.Set(metadata, "installation_id", client.InstallationID)
+			if err == nil {
+				req.Header.Set("x-codex-turn-metadata", updated)
+			}
+		}
+	}
 
 	proxyURL := ""
 	if account.ProxyID != nil && account.Proxy != nil {

@@ -575,9 +575,9 @@ export default {
         oauthPassthrough: 'Auto passthrough (auth only)',
         oauthPassthroughDesc:
           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',
-        fixedSessionId: 'Ultra-high cache hit rate',
+        fixedSessionId: 'Stable task sessions',
         fixedSessionIdDesc:
-          'OpenAI OAuth only. When enabled, every upstream request for this account uses one fixed Session ID. Turning it off immediately restores the original per-request session generation and isolation logic.',
+          'OpenAI OAuth only. Responses requests use a stable account seed while keeping tasks and API keys isolated. Different tasks do not share an upstream session. Turning this off restores default session generation.',
         longContextBilling: 'API long-context pricing',
         longContextBillingDesc:
           'Disabled by default. Enable only when this account\'s upstream charges OpenAI API long-context rates above the model threshold.',

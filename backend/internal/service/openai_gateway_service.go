@@ -35,8 +35,9 @@ const (
 	openaiStickySessionTTL          = time.Hour // 粘性会话TTL
 	// 与真实 Codex Desktop App 的 User-Agent 结构对齐：
 	// Codex Desktop/{codex_rs_version} ({OS_type} {OS_version}; {arch}) dumb (Codex Desktop; {app_version})
-	// 取值来自 Codex 桌面应用 26.825.41651（内置 codex-rs 0.151.0-alpha.7.1）实抓报文。
-	codexDesktopUserAgent = "Codex Desktop/0.151.0-alpha.7.1 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.825.41651)"
+	// 2026-09-17 Work capture: keep the Rust and Electron versions in one profile.
+	codexDesktopAppVersion = "26.911.61220"
+	codexDesktopUserAgent  = "Codex Desktop/" + codexDesktopVersion + " (Windows 10.0.26100; x86_64) dumb (Codex Desktop; " + codexDesktopAppVersion + ")"
 	// main 中仍有 API Key、自定义上游和非 Desktop 兜底路径使用 CLI 画像；
 	// 与 OAuth 固定 Desktop 画像并存，不能互相覆盖。
 	codexCLIUserAgent = "codex_cli_rs/0.144.1 (Ubuntu 22.4.0; x86_64) xterm-256color"
@@ -54,7 +55,7 @@ const (
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
 	// Codex OAuth 上游请求统一使用本地实抓的 Desktop 画像。
-	codexDesktopVersion              = "0.151.0-alpha.7.1"
+	codexDesktopVersion              = "0.155.0-alpha.2.6"
 	openAIUpstreamEndpointContextKey = "openai_actual_upstream_endpoint"
 	codexCLIVersion                  = "0.144.1"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
@@ -421,6 +422,9 @@ type OpenAIGatewayService struct {
 	tlsFPProfileService   *TLSFingerprintProfileService
 
 	openaiWSPoolOnce              sync.Once
+	codexTelemetryOnce            sync.Once
+	codexTelemetry                *codexTelemetryExporter
+	codexCookies                  codexCookieStore
 	openaiWSStateStoreOnce        sync.Once
 	openaiSchedulerOnce           sync.Once
 	openaiProxyStreamCircuitOnce  sync.Once
@@ -634,6 +638,13 @@ func (s *OpenAIGatewayService) billingDeps() *billingDeps {
 func (s *OpenAIGatewayService) CloseOpenAIWSPool() {
 	if s != nil && s.openaiWSPool != nil {
 		s.openaiWSPool.Close()
+	}
+	if s != nil {
+		// Also prevents a concurrent first request from starting a worker after shutdown.
+		s.codexTelemetryOnce.Do(func() {})
+		if s.codexTelemetry != nil {
+			s.codexTelemetry.Close()
+		}
 	}
 }
 
@@ -1029,7 +1040,7 @@ func getAPIKeyIDFromContext(c *gin.Context) int64 {
 }
 
 // codexDesktopClientVersion 返回 models 清单 query 参数 client_version 使用的三段式版本号
-// （实抓：真实应用发 client_version=0.151.0，不带 alpha 等预发布后缀）。
+// （实抓：真实应用发 client_version=0.155.0，不带 alpha 等预发布后缀）。
 func codexDesktopClientVersion() string {
 	base, _, _ := strings.Cut(codexDesktopVersion, "-")
 	return base

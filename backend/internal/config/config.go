@@ -899,6 +899,8 @@ type GatewayConfig struct {
 	// OpenAICodexRequestCompressionDisabled: 关闭 OAuth Codex 上游请求体 zstd 压缩。
 	// 默认 false（即默认启用 zstd 压缩，匹配真实 Codex CLI 的 content-encoding: zstd）。
 	OpenAICodexRequestCompressionDisabled bool `mapstructure:"openai_codex_request_compression_disabled"`
+	// CodexTelemetry exports measured gateway events in the captured OTLP format.
+	CodexTelemetry CodexTelemetryConfig `mapstructure:"codex_telemetry"`
 	// CodexImageGenerationBridgeEnabled: 是否为 Codex `/v1/responses` 自动注入 image_generation 工具和桥接指令。
 	// 默认关闭，避免纯文本 Codex 请求被意外改写；显式携带 image_generation 工具的请求仍按分组能力转发。
 	CodexImageGenerationBridgeEnabled bool `mapstructure:"codex_image_generation_bridge_enabled"`
@@ -1007,6 +1009,14 @@ type GatewayConfig struct {
 type GatewayLiveConfig struct {
 	// MaxSessionDurationSeconds 是 Live 会话的硬上限。
 	MaxSessionDurationSeconds int `mapstructure:"max_session_duration_seconds"`
+}
+
+type CodexTelemetryConfig struct {
+	// Mode: off, local (rotating JSONL), or remote (OTLP HTTP JSON).
+	Mode          string `mapstructure:"mode"`
+	LocalPath     string `mapstructure:"local_path"`
+	Endpoint      string `mapstructure:"endpoint"`
+	StatsigAPIKey string `mapstructure:"statsig_api_key"`
 }
 
 // GatewayOpenAIHTTP2Config OpenAI HTTP 上游协议配置。
@@ -2196,6 +2206,10 @@ func setDefaults() {
 	viper.SetDefault("gateway.max_account_switches_gemini", 3)
 	viper.SetDefault("gateway.force_codex_cli", false)
 	viper.SetDefault("gateway.openai_codex_request_compression_disabled", false)
+	viper.SetDefault("gateway.codex_telemetry.mode", "remote")
+	viper.SetDefault("gateway.codex_telemetry.local_path", DefaultCodexTelemetryLocalPath)
+	viper.SetDefault("gateway.codex_telemetry.endpoint", DefaultCodexTelemetryEndpoint)
+	viper.SetDefault("gateway.codex_telemetry.statsig_api_key", "")
 	viper.SetDefault("gateway.codex_image_generation_bridge_enabled", false)
 	viper.SetDefault("gateway.openai_passthrough_allow_timeout_headers", false)
 	viper.SetDefault("gateway.openai_compact_model", "gpt-5.4")
@@ -2454,6 +2468,10 @@ func setEnvReachableDefaults() {
 }
 
 func (c *Config) Validate() error {
+	c.Gateway.CodexTelemetry = c.Gateway.CodexTelemetry.WithDefaults()
+	if err := c.Gateway.CodexTelemetry.Validate(); err != nil {
+		return err
+	}
 	forwardedClientIPHeaders, err := NormalizeForwardedClientIPHeaders(c.Security.ForwardedClientIPHeaders)
 	if err != nil {
 		return fmt.Errorf("security.forwarded_client_ip_headers: %w", err)

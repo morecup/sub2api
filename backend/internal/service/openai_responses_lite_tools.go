@@ -27,7 +27,8 @@ func normalizeOpenAIResponsesLiteTools(reqBody map[string]any) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return changed || stripOpenAIResponsesLiteImageDetails(reqBody), nil
+		imagesChanged := stripOpenAIResponsesLiteImageDetails(reqBody)
+		return changed || imagesChanged, nil
 	}
 	tools, ok := rawTools.([]any)
 	if !ok {
@@ -65,7 +66,8 @@ func normalizeOpenAIResponsesLiteTools(reqBody map[string]any) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return changed || stripOpenAIResponsesLiteImageDetails(reqBody), nil
+		imagesChanged := stripOpenAIResponsesLiteImageDetails(reqBody)
+		return changed || imagesChanged, nil
 	}
 
 	input, err := appendOpenAIResponsesLiteAdditionalTools(reqBody["input"], namespaceTools)
