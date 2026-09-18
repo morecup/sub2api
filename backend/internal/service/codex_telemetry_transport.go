@@ -40,6 +40,13 @@ func codexTelemetryHTTPModelRequest(req *http.Request, account *Account) bool {
 		(req.URL.Path == "/backend-api/codex/responses" || req.URL.Path == "/backend-api/codex/responses/compact")
 }
 
+// Routing hints include an optional service tier. It is routing information,
+// not part of the model slug used by the captured telemetry schema.
+func codexTelemetryModelFromRoutingHint(hint string) string {
+	model, _, _ := strings.Cut(strings.TrimSpace(hint), ";")
+	return strings.TrimSpace(strings.TrimPrefix(model, "model="))
+}
+
 func (s *OpenAIGatewayService) observeCodexHTTPRequest(req *http.Request, resp *http.Response, account *Account, proxyURL string, profile *tlsfingerprint.Profile, duration time.Duration, err error) {
 	if !codexTelemetryHTTPModelRequest(req, account) {
 		return
@@ -50,7 +57,7 @@ func (s *OpenAIGatewayService) observeCodexHTTPRequest(req *http.Request, resp *
 	}
 	t := s.getCodexTelemetry()
 	t.recordAPIRequest(codexTelemetryRouteForAccount(account, proxyURL, profile),
-		strings.TrimPrefix(req.Header.Get("x-codex-routing-hint"), "model="), status,
+		codexTelemetryModelFromRoutingHint(req.Header.Get("x-codex-routing-hint")), status,
 		err == nil && status >= 200 && status < 300, duration)
 	if err == nil {
 		s.observeCodexHTTPResponse(req, resp, account, proxyURL, profile)
@@ -101,7 +108,7 @@ func (s *OpenAIGatewayService) observeCodexHTTPResponse(req *http.Request, resp 
 	}
 	resp.Body = &codexTelemetrySSEBody{ReadCloser: resp.Body, exporter: t,
 		route: codexTelemetryRouteForAccount(account, proxyURL, profile),
-		model: strings.TrimPrefix(req.Header.Get("x-codex-routing-hint"), "model=")}
+		model: codexTelemetryModelFromRoutingHint(req.Header.Get("x-codex-routing-hint"))}
 }
 
 // At most 4 KiB of an unfinished SSE line is held. The original stream is

@@ -1628,8 +1628,13 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 	applyOpenCodeSessionHeader(c, account, targetURL, req.Header, body, openCodeSessionHintBody(promptCacheKey))
 	// x-codex-beta-features：按真实 Codex 的会话级行为补注（在账号级覆写之后，
 	// 保证不被覆盖丢失）。
-	applyOpenAICodexBetaFeatures(c, account, req.Header)
-	setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	// The existing Messages bridge has a neutral header contract. Do not add
+	// Desktop capabilities or routing headers after that branch deliberately
+	// avoided the captured Responses profile.
+	if !usesCapturedCodexClientProfile(account) || !(isOpenAICompatMessagesBridgeContext(c) || isOpenAICompatMessagesBridgeBody(body)) {
+		applyOpenAICodexBetaFeatures(c, account, req.Header)
+		setOpenAICodexRoutingHintFromBody(req.Header, account, body)
+	}
 	logOpenAIRoutingDiagnosticsFromBody(ctx, account, "http", req.Header, body, "not_applicable")
 
 	// Inject after the captured profile rebuild so it cannot erase the ticket.

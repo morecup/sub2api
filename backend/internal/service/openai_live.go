@@ -405,8 +405,12 @@ func applyLiveUpstreamIdentityHeaders(headers http.Header, fixedSessionID string
 		account = accounts[0]
 	}
 	headers.Set("OpenAI-Alpha", "quicksilver=v2")
-	ensureCodexIdentityHeaders(headers)
-	enforceCodexIdentityHeadersForAccount(headers, account)
+	if usesCapturedCodexClientProfile(account) {
+		preserveCodexLiveIdentityHeaders(headers)
+	} else {
+		ensureCodexIdentityHeaders(headers)
+		enforceCodexIdentityHeadersForAccount(headers, account)
+	}
 	if fixedSessionID = strings.TrimSpace(fixedSessionID); fixedSessionID != "" {
 		headers.Set("session-id", fixedSessionID)
 		headers.Set("thread-id", fixedSessionID)

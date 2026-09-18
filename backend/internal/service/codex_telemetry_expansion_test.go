@@ -319,7 +319,7 @@ func TestCodexTelemetryHTTPBridgeRecordsActualSwitch(t *testing.T) {
 	t.Cleanup(svc.CloseOpenAIWSPool)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
-	payload := []byte(`{"type":"response.create","model":"gpt-6-astra","input":"fixture","stream":true}`)
+	payload := []byte(`{"type":"response.create","model":"gpt-6-astra","service_tier":"priority","input":"fixture","stream":true}`)
 	_, err := svc.proxyOpenAIWSHTTPBridgeTurn(context.Background(), c, &Account{ID: 9, Platform: PlatformOpenAI, Type: AccountTypeOAuth}, "fixture-only", payload, len(payload), "gpt-6-astra", "", "", "", "", 1, func([]byte) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, 1, calls)
@@ -328,6 +328,7 @@ func TestCodexTelemetryHTTPBridgeRecordsActualSwitch(t *testing.T) {
 	for key, a := range e.series {
 		if key.name == "codex.transport.fallback_to_http" {
 			found = true
+			require.Equal(t, "gpt-6-astra", key.model)
 			require.Equal(t, uint64(1), a.count)
 			require.Equal(t, "responses_websocket", key.fromWireAPI)
 			require.Nil(t, a.buckets)

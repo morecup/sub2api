@@ -213,7 +213,7 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		id, _ := strconv.ParseInt(strings.TrimPrefix(transportScope, "openai-account:"), 10, 64)
 		if id > 0 {
 			clientConn.telemetry = &codexTelemetryWS{exporter: d.telemetry, route: codexTelemetryRoute{accountID: id, proxyURL: proxyURL, profile: profile, client: codexClientProfileFromContext(ctx, id)}}
-			clientConn.telemetry.model.Store(strings.TrimPrefix(headers.Get("x-codex-routing-hint"), "model="))
+			clientConn.telemetry.model.Store(codexTelemetryModelFromRoutingHint(headers.Get("x-codex-routing-hint")))
 		}
 	}
 	return clientConn, 0, respHeaders, nil

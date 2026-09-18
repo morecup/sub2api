@@ -1184,6 +1184,8 @@ func TestForwardAsAnthropic_OAuthPreservesNeutralBridgeIdentity(t *testing.T) {
 			require.Empty(t, upstream.lastReq.Header.Get("originator"))
 			require.Empty(t, upstream.lastReq.Header.Get("version"))
 			require.Empty(t, upstream.lastReq.Header.Get("OpenAI-Beta"))
+			require.Empty(t, upstream.lastReq.Header.Get("x-codex-beta-features"))
+			require.Empty(t, upstream.lastReq.Header.Get("x-codex-routing-hint"))
 		})
 	}
 }
