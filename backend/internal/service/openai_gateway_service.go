@@ -551,8 +551,13 @@ func NewOpenAIGatewayService(
 	if cfg != nil {
 		SetCodexIdentityEnforcementEnabled(!cfg.Gateway.DisableCodexIdentityEnforcement)
 	}
+	var proxyRepo ProxyRepository
+	if settingService != nil {
+		proxyRepo = settingService.proxyRepo
+	}
 	svc := &OpenAIGatewayService{
 		accountRepo:         accountRepo,
+		proxyRepo:           proxyRepo,
 		usageLogRepo:        usageLogRepo,
 		usageBillingRepo:    usageBillingRepo,
 		userRepo:            userRepo,

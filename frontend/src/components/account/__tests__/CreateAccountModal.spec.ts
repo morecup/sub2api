@@ -133,9 +133,9 @@ const ModelWhitelistSelectorStub = defineComponent({
   >models</button>`,
 })
 
-function mountModal(groups: any[] = []) {
+function mountModal(groups: any[] = [], proxies: any[] = []) {
   return mount(CreateAccountModal, {
-    props: { show: true, proxies: [], groups },
+    props: { show: true, proxies, groups },
     global: {
       stubs: {
         BaseDialog: BaseDialogStub,
@@ -195,6 +195,21 @@ async function openCodexImportStep(toggleClicks = 0) {
 }
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
+  it('defaults ticket egress to global and persists a selected proxy', async () => {
+    const proxies = [{ id: 8, name: 'Ticket IP', status: 'active' }]
+    const wrapper = mountModal([], proxies)
+    await selectButtonByText(wrapper, 'OpenAI')
+    const selector = wrapper.get('[data-testid="codex-ticket-proxy"]')
+    expect((selector.element as HTMLSelectElement).value).toBe('global')
+    await selector.setValue('8')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Selected ticket proxy')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await wrapper.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0]?.[0]?.extra.codex_ticket_proxy).toBe('8')
+    wrapper.unmount()
+  })
+
   it.each(['import-codex-session', 'import-codex-pat'])('defaults ticket opt-out on for %s and allows following global settings', async (method) => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, 'OpenAI')

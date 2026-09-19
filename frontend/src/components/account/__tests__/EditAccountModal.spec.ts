@@ -315,12 +315,12 @@ function buildOpenAIOAuthParentAccount() {
   } as any
 }
 
-function mountModal(account = buildAccount(), renderGroupSelector = false) {
+function mountModal(account = buildAccount(), renderGroupSelector = false, proxies: any[] = []) {
   return mount(EditAccountModal, {
     props: {
       show: true,
       account,
-      proxies: [],
+      proxies,
       groups: []
     },
     global: {
@@ -363,6 +363,19 @@ describe('EditAccountModal', () => {
     await enabled.get('form#edit-account-form').trigger('submit.prevent')
     expect(updateAccountMock.mock.calls[0]?.[1]?.extra.codex_ticket_disabled).toBe(true)
     enabled.unmount()
+  })
+
+  it('restores a selected ticket proxy and can return to the global default', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.extra = { codex_ticket_proxy: '8' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    const wrapper = mountModal(account, false, [{ id: 8, name: 'Ticket IP', status: 'active' }])
+    const selector = wrapper.get('[data-testid="codex-ticket-proxy"]')
+    expect((selector.element as HTMLSelectElement).value).toBe('8')
+    await selector.setValue('global')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_ticket_proxy')
+    wrapper.unmount()
   })
 
   it('configures a primary account and multiple OR takeover conditions', async () => {

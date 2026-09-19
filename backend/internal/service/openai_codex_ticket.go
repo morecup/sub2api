@@ -181,20 +181,73 @@ func (s *OpenAIGatewayService) openAICodexTicketHarvestProxyURLContext(ctx conte
 	return strings.TrimSpace(s.openAICodexTicketConfig().HarvestProxyURL)
 }
 
-func (s *OpenAIGatewayService) SetProxyRepository(repo ProxyRepository) { s.proxyRepo = repo }
+func usableOpenAICodexTicketProxy(proxy *Proxy, now time.Time) bool {
+	return proxy != nil && proxy.IsActive() && !proxy.IsExpired(now)
+}
 
-func (s *OpenAIGatewayService) openAICodexTicketProxyURL(ctx context.Context, account *Account) string {
-	choice, _ := account.Extra[OpenAICodexTicketProxyExtraKey].(string)
-	choice = strings.TrimSpace(choice)
-	if choice == "account" && account.Proxy != nil {
-		return account.Proxy.URL()
+func openAICodexTicketProxyChoice(extra map[string]any) (choice string, valid bool) {
+	raw, configured := extra[OpenAICodexTicketProxyExtraKey]
+	if !configured || raw == nil {
+		return "global", true
 	}
-	if id, err := strconv.ParseInt(choice, 10, 64); err == nil && id > 0 && s.proxyRepo != nil {
-		if proxy, err := s.proxyRepo.GetByID(ctx, id); err == nil && proxy != nil && proxy.IsActive() && !proxy.IsExpired(time.Now()) {
-			return proxy.URL()
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value), true
+	case float64:
+		if value > 0 && value == float64(int64(value)) {
+			return strconv.FormatInt(int64(value), 10), true
+		}
+	case int:
+		if value > 0 {
+			return strconv.Itoa(value), true
+		}
+	case int64:
+		if value > 0 {
+			return strconv.FormatInt(value, 10), true
 		}
 	}
-	return s.openAICodexTicketHarvestProxyURLContext(ctx)
+	return "", false
+}
+
+// openAICodexTicketProxyURL resolves the exact egress selected by the account.
+// ready=false means the explicit selection cannot currently be honored; callers
+// must skip harvesting instead of silently leaking the probe through another IP.
+// In account mode, an account without proxy_id intentionally harvests directly.
+func (s *OpenAIGatewayService) openAICodexTicketProxyURL(ctx context.Context, account *Account) (proxyURL string, ready bool) {
+	if s == nil || account == nil {
+		return "", false
+	}
+	choice, validChoice := openAICodexTicketProxyChoice(account.Extra)
+	if !validChoice {
+		return "", false
+	}
+	if choice == "" || choice == "global" {
+		proxyURL = s.openAICodexTicketHarvestProxyURLContext(ctx)
+		return proxyURL, proxyURL != ""
+	}
+	now := time.Now()
+	if choice == "account" {
+		if account.ProxyID == nil && account.Proxy == nil {
+			return "", true
+		}
+		proxy := account.Proxy
+		if account.ProxyID != nil && (proxy == nil || proxy.ID != *account.ProxyID) && s.proxyRepo != nil {
+			proxy, _ = s.proxyRepo.GetByID(ctx, *account.ProxyID)
+		}
+		if !usableOpenAICodexTicketProxy(proxy, now) {
+			return "", false
+		}
+		return proxy.URL(), true
+	}
+	id, err := strconv.ParseInt(choice, 10, 64)
+	if err != nil || id <= 0 || s.proxyRepo == nil {
+		return "", false
+	}
+	proxy, err := s.proxyRepo.GetByID(ctx, id)
+	if err != nil || !usableOpenAICodexTicketProxy(proxy, now) {
+		return "", false
+	}
+	return proxy.URL(), true
 }
 
 // The default and existing target_length: 292 configurations accept both known
@@ -563,8 +616,8 @@ func (s *OpenAIGatewayService) probeOnceOpenAICodexTicket(ctx context.Context, a
 		return
 	}
 	cfg := s.openAICodexTicketConfig()
-	proxyURL := s.openAICodexTicketProxyURL(ctx, account)
-	if proxyURL == "" || s.httpUpstream == nil || ctx.Err() != nil {
+	proxyURL, proxyReady := s.openAICodexTicketProxyURL(ctx, account)
+	if !proxyReady || s.httpUpstream == nil || ctx.Err() != nil {
 		return
 	}
 	key := openAICodexTicketKey(account.ID, model)

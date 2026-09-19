@@ -12,8 +12,15 @@ import (
 )
 
 func TestCodexTicketDisabledSurvivesSchedulerProjection(t *testing.T) {
-	extra := map[string]any{service.OpenAICodexTicketDisabledExtraKey: true, "codex_turn_ticket:model": "private-ticket"}
-	require.Equal(t, map[string]any{service.OpenAICodexTicketDisabledExtraKey: true}, filterSchedulerExtra(extra))
+	extra := map[string]any{
+		service.OpenAICodexTicketDisabledExtraKey: true,
+		service.OpenAICodexTicketProxyExtraKey:    "8",
+		"codex_turn_ticket:model":                 "private-ticket",
+	}
+	require.Equal(t, map[string]any{
+		service.OpenAICodexTicketDisabledExtraKey: true,
+		service.OpenAICodexTicketProxyExtraKey:    "8",
+	}, filterSchedulerExtra(extra))
 	require.Equal(t, true, service.RedactOpenAICodexTicketExtra(extra)[service.OpenAICodexTicketDisabledExtraKey])
 }
 
