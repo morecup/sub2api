@@ -11,6 +11,12 @@ import (
 	"testing"
 )
 
+func TestCodexTicketDisabledSurvivesSchedulerProjection(t *testing.T) {
+	extra := map[string]any{service.OpenAICodexTicketDisabledExtraKey: true, "codex_turn_ticket:model": "private-ticket"}
+	require.Equal(t, map[string]any{service.OpenAICodexTicketDisabledExtraKey: true}, filterSchedulerExtra(extra))
+	require.Equal(t, true, service.RedactOpenAICodexTicketExtra(extra)[service.OpenAICodexTicketDisabledExtraKey])
+}
+
 func TestLockAndMergeAccountExtraPreservesLatestCodexTicket(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)

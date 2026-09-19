@@ -2572,7 +2572,19 @@
 
       <!-- Codex 门票状态（仅 OpenAI OAuth） -->
       <div
-        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && codexTurnTickets.length"
+        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && !isSparkShadow"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+      >
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input v-model="codexTicketDisabled" data-testid="codex-ticket-disabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          {{ t('admin.accounts.openai.codexTicketDisabled') }}
+        </label>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.openai.codexTicketDisabledDesc') }}
+        </p>
+      </div>
+      <div
+        v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && !codexTicketDisabled && codexTurnTickets.length"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
       >
         <label class="input-label mb-0">{{ t('admin.accounts.openai.codexTurnTicket') }}</label>
@@ -3899,6 +3911,7 @@ const openAI429NoCooldownEnabled = ref(false)
 const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
+const codexTicketDisabled = ref(false)
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
@@ -4423,6 +4436,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedScheduling.value = false
   allowOverages.value = false
 	const extra = newAccount.extra as Record<string, unknown> | undefined
+	codexTicketDisabled.value = extra?.codex_ticket_disabled === true
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
@@ -6095,6 +6109,11 @@ const handleSubmit = async () => {
 		delete newExtra.codex_auto_reset_credit_state
 
 		delete newExtra.codex_image_generation_bridge_enabled
+		if (codexTicketDisabled.value) {
+			newExtra.codex_ticket_disabled = true
+		} else {
+			delete newExtra.codex_ticket_disabled
+		}
       switch (codexImageToolMode.value) {
         case 'enabled':
         case 'disabled':

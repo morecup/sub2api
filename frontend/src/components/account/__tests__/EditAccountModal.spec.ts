@@ -343,6 +343,28 @@ describe('EditAccountModal', () => {
     listAccountsMock.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1000, pages: 0 })
   })
 
+  it('saves and restores the per-account ticket opt-out', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.extra = { codex_ticket_disabled: true }
+    updateAccountMock.mockReset()
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+    const checkbox = wrapper.get('[data-testid="codex-ticket-disabled"]')
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+    await checkbox.setValue(false)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).not.toHaveProperty('codex_ticket_disabled')
+    wrapper.unmount()
+
+    account.extra = {}
+    updateAccountMock.mockReset()
+    const enabled = mountModal(account)
+    await enabled.get('[data-testid="codex-ticket-disabled"]').setValue(true)
+    await enabled.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra.codex_ticket_disabled).toBe(true)
+    enabled.unmount()
+  })
+
   it('configures a primary account and multiple OR takeover conditions', async () => {
     const account = buildAccount()
     const primary = { ...buildAccount(), id: 2, name: 'Primary OpenAI Key' }
