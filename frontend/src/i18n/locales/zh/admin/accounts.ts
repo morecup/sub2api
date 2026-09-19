@@ -852,6 +852,7 @@ export default {
         codexFingerprintFull: '完全收敛',
         codexTurnTicket: 'Codex 292 / 332 门票',
         codexTicketDisabled: '强制关闭此账号打票',
+        codexTicketDisabledCreateDesc: '新账号默认关闭打票：不采集、不注入门票，也不因缺票停止调度。取消勾选后跟随全局设置。',
         codexTicketDisabledDesc: '保存后，即使全局已开启，此账号也不采集、不注入门票，且不因缺票停止调度。取消勾选后跟随全局设置；停止调度的账号仍不采集门票。',
         codexTurnTicketDesc: '显示已配置模型的门票状态及剩余有效期，默认支持 292 和 332 字节门票。仅在启用缺票拦截时，没有有效门票的模型才会暂停调度。',
         codexTurnTicketMissing: '暂无有效门票，仍允许请求',

@@ -195,6 +195,30 @@ async function openCodexImportStep(toggleClicks = 0) {
 }
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
+  it.each(['import-codex-session', 'import-codex-pat'])('defaults ticket opt-out on for %s and allows following global settings', async (method) => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    const checkbox = wrapper.get('[data-testid="codex-ticket-disabled"]')
+    expect((checkbox.element as HTMLInputElement).checked).toBe(true)
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('No tickets')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await wrapper.get(`[data-testid="${method}"]`).trigger('click')
+    await flushPromises()
+    const mock = method === 'import-codex-session' ? importCodexSessionMock : createOpenAICodexPATMock
+    expect(mock.mock.calls[0]?.[0]?.extra.codex_ticket_disabled).toBe(true)
+    wrapper.unmount()
+
+    const unchecked = mountModal()
+    await selectButtonByText(unchecked, 'OpenAI')
+    await unchecked.get('[data-testid="codex-ticket-disabled"]').setValue(false)
+    await unchecked.get('form#create-account-form input[type="text"]').setValue('Follow global')
+    await unchecked.get('form#create-account-form').trigger('submit.prevent')
+    await unchecked.get(`[data-testid="${method}"]`).trigger('click')
+    await flushPromises()
+    expect(mock.mock.calls[1]?.[0]?.extra.codex_ticket_disabled).toBe(false)
+    unchecked.unmount()
+  })
+
   beforeEach(() => {
     authIsSimpleMode.value = true
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })

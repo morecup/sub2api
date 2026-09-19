@@ -773,6 +773,7 @@ export default {
         codexFingerprintFull: 'Full convergence',
         codexTurnTicket: 'Codex 292 / 332 ticket',
         codexTicketDisabled: 'Force ticket harvesting off for this account',
+        codexTicketDisabledCreateDesc: 'New accounts default to no ticket harvesting, injection or missing-ticket blocking. Uncheck to follow global settings.',
         codexTicketDisabledDesc: 'After saving, this account neither harvests nor injects tickets and is not blocked for missing tickets, even when globally enabled. Uncheck to follow global settings. Accounts with scheduling disabled still do not harvest tickets.',
         codexTurnTicketDesc: 'Ticket status and remaining validity for the configured models. Both 292- and 332-byte tickets are supported by default. Requests are paused without a valid ticket only when fail-closed is enabled.',
         codexTurnTicketMissing: 'No valid ticket; requests remain allowed',

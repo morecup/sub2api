@@ -362,6 +362,13 @@
       </div>
 
       <!-- Account Type Selection (OpenAI) -->
+      <div v-if="form.platform === 'openai' && accountCategory === 'oauth-based'" class="rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+        <label class="flex items-center gap-2 text-sm font-medium">
+          <input v-model="codexTicketDisabled" data-testid="codex-ticket-disabled" type="checkbox" class="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
+          {{ t('admin.accounts.openai.codexTicketDisabled') }}
+        </label>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.codexTicketDisabledCreateDesc') }}</p>
+      </div>
       <div v-if="form.platform === 'openai'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
         <div class="mt-2 grid grid-cols-2 gap-3" data-tour="account-form-type">
@@ -4567,6 +4574,7 @@ const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_comple
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
+const codexTicketDisabled = ref(true)
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
@@ -5497,6 +5505,7 @@ const resetForm = () => {
   openaiOAuthResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
+  codexTicketDisabled.value = true
   codexToolFrameOn5hExhaustedEnabled.value = false
   codexToolFrame429NoCooldownEnabled.value = true
   codexToolFrameForceAfter5hEnabled.value = false
@@ -5565,6 +5574,7 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
 
   const extra: Record<string, unknown> = { ...(base || {}) }
   if (accountCategory.value === 'oauth-based') {
+    extra.codex_ticket_disabled = codexTicketDisabled.value
     extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
     extra.openai_oauth_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiOAuthResponsesWebSocketV2Mode.value)
   } else if (accountCategory.value === 'apikey') {
