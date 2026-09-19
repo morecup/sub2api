@@ -1096,13 +1096,20 @@ func (s *OpenAIGatewayService) selectBestAccount(ctx context.Context, groupID *i
 		}
 		return s.isBetterAccount(a, b)
 	})
+	preferGrokWeeklyReset(eligible, schedulingAccount)
 	selected := eligible[0]
+	resetNow := time.Now()
+	selectedReset := grokWeeklyResetOrder(selected, resetNow)
 	weightedCandidates := make([]*Account, 0, len(eligible))
 	for _, account := range eligible {
 		if requireCompact && compactTiers[account.ID] != compactTiers[selected.ID] {
 			continue
 		}
 		if rateOrder.enabled && rateOrder.compare(account, selected) != 0 {
+			continue
+		}
+		if selected.Platform == PlatformGrok && account.Platform == PlatformGrok &&
+			!grokWeeklyResetOrder(account, resetNow).Equal(selectedReset) {
 			continue
 		}
 		weightedCandidates = append(weightedCandidates, account)

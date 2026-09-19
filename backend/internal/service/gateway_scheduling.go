@@ -1849,6 +1849,7 @@ func sortAccountsByPriorityAndLastUsed(accounts []*Account, preferOAuth bool) {
 	})
 	shuffleWithinPriorityAndLastUsed(accounts, preferOAuth)
 	weightOrderAccountPriorityGroups(accounts)
+	preferGrokWeeklyReset(accounts, schedulingAccount)
 }
 
 // shuffleWithinSortGroups 对排序后的 accountWithLoad 切片应用同优先级账号权重。
@@ -1858,6 +1859,7 @@ func shuffleWithinSortGroups(accounts []accountWithLoad) {
 		return
 	}
 	weightOrderAccountWithLoadGroups(accounts)
+	preferGrokWeeklyReset(accounts, func(item accountWithLoad) *Account { return item.account })
 }
 
 func weightOrderAccountWithLoadGroups(accounts []accountWithLoad) {

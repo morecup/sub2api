@@ -1142,6 +1142,19 @@ func (s *defaultOpenAIAccountScheduler) buildOpenAISelectionOrder(
 		return append(primary, overflow...)
 	}
 
+	// Grok spends the earliest weekly window first within manual priority.
+	// Apply the existing score/weight policy independently inside each tier.
+	if req.Platform == PlatformGrok {
+		buildTier := buildSelectionOrder
+		buildSelectionOrder = func(pool []openAIAccountCandidateScore) []openAIAccountCandidateScore {
+			var ordered []openAIAccountCandidateScore
+			for _, group := range grokWeeklyCandidateGroups(pool) {
+				ordered = append(ordered, buildTier(group)...)
+			}
+			return ordered
+		}
+	}
+
 	if req.RequireCompact {
 		supported := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
 		unknown := make([]openAIAccountCandidateScore, 0, len(plan.candidates))
