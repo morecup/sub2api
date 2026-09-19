@@ -27,6 +27,7 @@ func ticketTestAccount(id int64) *Account {
 		ID:          id,
 		Platform:    PlatformOpenAI,
 		Type:        AccountTypeOAuth,
+		Schedulable: true,
 		Credentials: map[string]any{"access_token": "tok", "chatgpt_account_id": "acc-1"},
 	}
 }

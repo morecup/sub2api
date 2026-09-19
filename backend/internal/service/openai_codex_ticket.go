@@ -505,7 +505,7 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTickets(ctx context.Context) {
 	probed := 0
 	for i := range accounts {
 		account := accounts[i]
-		if account.Status != StatusActive || !isOpenAICodexTicketAccount(&account) {
+		if account.Status != StatusActive || !account.Schedulable || !isOpenAICodexTicketAccount(&account) {
 			continue
 		}
 		for _, model := range cfg.Models {
@@ -539,7 +539,7 @@ func (s *OpenAIGatewayService) refreshOpenAICodexTickets(ctx context.Context) {
 // gAAAAA 前缀）就落库；否则记 Info miss，交给下个周期重试。同一 key 并发去重，避免上一发还没
 // 回来又叠一发。
 func (s *OpenAIGatewayService) probeOnceOpenAICodexTicket(ctx context.Context, account *Account, model string) {
-	if s == nil || !isOpenAICodexTicketAccount(account) || ctx.Err() != nil || !s.openAICodexTicketEnabledContext(ctx) {
+	if s == nil || !isOpenAICodexTicketAccount(account) || !account.Schedulable || ctx.Err() != nil || !s.openAICodexTicketEnabledContext(ctx) {
 		return
 	}
 	cfg := s.openAICodexTicketConfig()
