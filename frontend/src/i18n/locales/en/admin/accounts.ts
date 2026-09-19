@@ -772,7 +772,7 @@ export default {
         codexFingerprintSession: 'Device + Session',
         codexFingerprintFull: 'Full convergence',
         codexTurnTicket: 'Codex 292 / 332 ticket',
-        codexTurnTicketDesc: 'Ticket status for the configured models. Requests are paused without a valid ticket only when fail-closed is enabled.',
+        codexTurnTicketDesc: 'Ticket status and remaining validity for the configured models. Both 292- and 332-byte tickets are supported by default. Requests are paused without a valid ticket only when fail-closed is enabled.',
         codexTurnTicketMissing: 'No valid ticket; requests remain allowed',
         codexTurnTicketReady: '{time} left',
         codexTurnTicketPaused: 'No valid ticket; this model is paused',

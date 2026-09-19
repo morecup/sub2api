@@ -538,7 +538,7 @@ export default {
         codexHardeningTitle: 'Codex 设置',
         codexTicketEnabled: '292 / 332 打票',
         codexTicketEnabledDesc:
-          '关闭后不打票、不注入 x-codex-turn-state，按原链路转发。开启后后台打票，并在业务请求中覆盖该头。',
+          '开启后在后台采集门票，默认同时接受 292 和 332 字节，并在对应模型的业务请求中注入 x-codex-turn-state。关闭后停止采集和注入，按原链路转发。',
         codexTicketHarvestProxy: '292 / 332 打票代理',
         codexTicketHarvestProxyDesc:
           '仅在门票功能开启时用于打票，保存后后续探测会使用新代理，无需重启。日常业务仍走账号自己的住宅代理。填写完整代理 URL（http 或 socks5h，含用户名和密码）。代理服务商需自行负责出口 IP 轮换。留空并保存表示不改已保存的值。',

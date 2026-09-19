@@ -545,7 +545,7 @@ export default {
         codexHardeningTitle: "Codex Settings",
         codexTicketEnabled: "292 / 332 ticket harvest",
         codexTicketEnabledDesc:
-          "When off, the gateway neither harvests nor injects x-codex-turn-state and forwards traffic as usual. When on, it harvests tickets in the background and overwrites that header on production requests.",
+          "When enabled, harvests tickets in the background, accepting both 292 and 332 bytes by default, and injects x-codex-turn-state into requests for the configured models. When disabled, stops harvesting and injecting tickets and forwards traffic as usual.",
         codexTicketHarvestProxy: "292 / 332 harvest proxy",
         codexTicketHarvestProxyDesc:
           "Used only for minting tickets when the ticket feature is enabled. Changes apply to subsequent probes without a restart. Production traffic still uses each account's residential proxy. Paste a full HTTP or SOCKS5h proxy URL including username and password. The proxy provider must handle IP rotation. Leave blank when saving to keep the stored value.",
