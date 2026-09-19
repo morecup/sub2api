@@ -25,12 +25,14 @@ import (
 const (
 	// OpenAICodexTicketDisabledExtraKey overrides the global ticket switch for one account.
 	OpenAICodexTicketDisabledExtraKey = "codex_ticket_disabled"
-	openAICodexTicketExtraKeyPrefix   = "codex_turn_ticket:"
-	openAICodexAstraMinVersion        = "0.153.4"
-	openAICodexTicketStatePrefix      = "gAAAAA"
-	openAICodexTicketDefaultLength    = 292
-	openAICodexTicketDefaultModel     = "gpt-6-astra"
-	openAICodexTicketDefaultSolModel  = "gpt-5.6-sol"
+	// OpenAICodexTicketProxyExtraKey stores "global", "account", or a proxy ID.
+	OpenAICodexTicketProxyExtraKey   = "codex_ticket_proxy"
+	openAICodexTicketExtraKeyPrefix  = "codex_turn_ticket:"
+	openAICodexAstraMinVersion       = "0.153.4"
+	openAICodexTicketStatePrefix     = "gAAAAA"
+	openAICodexTicketDefaultLength   = 292
+	openAICodexTicketDefaultModel    = "gpt-6-astra"
+	openAICodexTicketDefaultSolModel = "gpt-5.6-sol"
 )
 
 // ErrOpenAICodexTicketUnavailable 表示该号该模型没有可用的门票，
@@ -177,6 +179,22 @@ func (s *OpenAIGatewayService) openAICodexTicketHarvestProxyURLContext(ctx conte
 		}
 	}
 	return strings.TrimSpace(s.openAICodexTicketConfig().HarvestProxyURL)
+}
+
+func (s *OpenAIGatewayService) SetProxyRepository(repo ProxyRepository) { s.proxyRepo = repo }
+
+func (s *OpenAIGatewayService) openAICodexTicketProxyURL(ctx context.Context, account *Account) string {
+	choice, _ := account.Extra[OpenAICodexTicketProxyExtraKey].(string)
+	choice = strings.TrimSpace(choice)
+	if choice == "account" && account.Proxy != nil {
+		return account.Proxy.URL()
+	}
+	if id, err := strconv.ParseInt(choice, 10, 64); err == nil && id > 0 && s.proxyRepo != nil {
+		if proxy, err := s.proxyRepo.GetByID(ctx, id); err == nil && proxy != nil && proxy.IsActive() && !proxy.IsExpired(time.Now()) {
+			return proxy.URL()
+		}
+	}
+	return s.openAICodexTicketHarvestProxyURLContext(ctx)
 }
 
 // The default and existing target_length: 292 configurations accept both known
@@ -545,7 +563,7 @@ func (s *OpenAIGatewayService) probeOnceOpenAICodexTicket(ctx context.Context, a
 		return
 	}
 	cfg := s.openAICodexTicketConfig()
-	proxyURL := s.openAICodexTicketHarvestProxyURLContext(ctx)
+	proxyURL := s.openAICodexTicketProxyURL(ctx, account)
 	if proxyURL == "" || s.httpUpstream == nil || ctx.Err() != nil {
 		return
 	}

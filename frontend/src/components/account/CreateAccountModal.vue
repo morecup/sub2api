@@ -368,6 +368,12 @@
           {{ t('admin.accounts.openai.codexTicketDisabled') }}
         </label>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.codexTicketDisabledCreateDesc') }}</p>
+        <label class="mt-3 block text-xs font-medium">{{ t('admin.accounts.openai.codexTicketProxy') }}</label>
+        <select v-model="codexTicketProxy" class="input mt-1 w-full" data-testid="codex-ticket-proxy">
+          <option value="global">{{ t('admin.accounts.openai.codexTicketProxyGlobal') }}</option>
+          <option value="account">{{ t('admin.accounts.openai.codexTicketProxyAccount') }}</option>
+          <option v-for="proxy in proxies" :key="proxy.id" :value="String(proxy.id)">{{ proxy.name }}</option>
+        </select>
       </div>
       <div v-if="form.platform === 'openai'">
         <label class="input-label">{{ t('admin.accounts.accountType') }}</label>
@@ -4575,6 +4581,7 @@ const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF
 const openaiAPIKeyResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
 const codexCLIOnlyEnabled = ref(false)
 const codexTicketDisabled = ref(true)
+const codexTicketProxy = ref('global')
 const codexToolFrameOn5hExhaustedEnabled = ref(false)
 const codexToolFrame429NoCooldownEnabled = ref(true)
 const codexToolFrameForceAfter5hEnabled = ref(false)
@@ -5506,6 +5513,7 @@ const resetForm = () => {
   openaiAPIKeyResponsesWebSocketV2Mode.value = OPENAI_WS_MODE_OFF
   codexCLIOnlyEnabled.value = false
   codexTicketDisabled.value = true
+  codexTicketProxy.value = 'global'
   codexToolFrameOn5hExhaustedEnabled.value = false
   codexToolFrame429NoCooldownEnabled.value = true
   codexToolFrameForceAfter5hEnabled.value = false
@@ -5575,6 +5583,8 @@ const buildOpenAIExtra = (base?: Record<string, unknown>): Record<string, unknow
   const extra: Record<string, unknown> = { ...(base || {}) }
   if (accountCategory.value === 'oauth-based') {
     extra.codex_ticket_disabled = codexTicketDisabled.value
+    if (codexTicketProxy.value === 'global') delete extra.codex_ticket_proxy
+    else extra.codex_ticket_proxy = codexTicketProxy.value
     extra.openai_oauth_responses_websockets_v2_mode = openaiOAuthResponsesWebSocketV2Mode.value
     extra.openai_oauth_responses_websockets_v2_enabled = isOpenAIWSModeEnabled(openaiOAuthResponsesWebSocketV2Mode.value)
   } else if (accountCategory.value === 'apikey') {

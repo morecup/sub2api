@@ -2583,6 +2583,15 @@
           {{ t('admin.accounts.openai.codexTicketDisabledDesc') }}
         </p>
       </div>
+      <div v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && !isSparkShadow" class="mt-3">
+        <label class="input-label mb-1">{{ t('admin.accounts.openai.codexTicketProxy') }}</label>
+        <select v-model="codexTicketProxy" class="input w-full" data-testid="codex-ticket-proxy">
+          <option value="global">{{ t('admin.accounts.openai.codexTicketProxyGlobal') }}</option>
+          <option value="account">{{ t('admin.accounts.openai.codexTicketProxyAccount') }}</option>
+          <option v-for="proxy in proxies" :key="proxy.id" :value="String(proxy.id)">{{ proxy.name }}</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.openai.codexTicketProxyDesc') }}</p>
+      </div>
       <div
         v-if="account?.platform === 'openai' && (account?.type === 'oauth' || account?.type === 'setup-token') && !codexTicketDisabled && codexTurnTickets.length"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
@@ -3912,6 +3921,7 @@ const codexCLIOnlyAppServerEnabled = ref(false)
 type CodexImageToolMode = 'inherit' | 'enabled' | 'disabled' | 'block'
 const codexImageToolMode = ref<CodexImageToolMode>('inherit')
 const codexTicketDisabled = ref(false)
+const codexTicketProxy = ref('global')
 type AnthropicAPIKeyAuthScheme = 'x_api_key' | 'authorization_bearer'
 const anthropicPassthroughEnabled = ref(false)
 const anthropicAPIKeyAuthScheme = ref<AnthropicAPIKeyAuthScheme>('x_api_key')
@@ -4436,7 +4446,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedScheduling.value = false
   allowOverages.value = false
 	const extra = newAccount.extra as Record<string, unknown> | undefined
-	codexTicketDisabled.value = extra?.codex_ticket_disabled === true
+  codexTicketDisabled.value = extra?.codex_ticket_disabled === true
+  codexTicketProxy.value = typeof extra?.codex_ticket_proxy === 'string' ? extra.codex_ticket_proxy : 'global'
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
@@ -6114,6 +6125,8 @@ const handleSubmit = async () => {
 		} else {
 			delete newExtra.codex_ticket_disabled
 		}
+		if (codexTicketProxy.value === 'global') delete newExtra.codex_ticket_proxy
+		else newExtra.codex_ticket_proxy = codexTicketProxy.value
       switch (codexImageToolMode.value) {
         case 'enabled':
         case 'disabled':
