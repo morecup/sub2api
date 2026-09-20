@@ -490,6 +490,19 @@ func normalizeOpenAIFixedSessionExtra(platform, accountType string, extra map[st
 	return normalized, nil
 }
 
+func normalizeOpenAIFixedSessionCreateExtra(platform, accountType string, extra map[string]any) (map[string]any, error) {
+	normalized := maps.Clone(extra)
+	if platform == PlatformOpenAI && accountType == AccountTypeOAuth {
+		if normalized == nil {
+			normalized = make(map[string]any, 1)
+		}
+		if _, provided := normalized[openAIFixedSessionIDEnabledKey]; !provided {
+			normalized[openAIFixedSessionIDEnabledKey] = true
+		}
+	}
+	return normalizeOpenAIFixedSessionExtra(platform, accountType, normalized)
+}
+
 func normalizeOpenAIFixedSessionUpdateExtra(account *Account, input *UpdateAccountInput, normalized map[string]any) (map[string]any, error) {
 	if account == nil {
 		return normalized, nil
@@ -625,7 +638,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
-	accountExtra, err = normalizeOpenAIFixedSessionExtra(input.Platform, input.Type, accountExtra)
+	accountExtra, err = normalizeOpenAIFixedSessionCreateExtra(input.Platform, input.Type, accountExtra)
 	if err != nil {
 		return nil, err
 	}

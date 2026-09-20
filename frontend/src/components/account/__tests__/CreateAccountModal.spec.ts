@@ -452,6 +452,41 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     )
   })
 
+  it('shows stable task sessions for OpenAI OAuth only and enables them by default', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+
+    const toggle = wrapper.get('[data-testid="create-openai-fixed-session-id-toggle"]')
+    expect(toggle.attributes('aria-checked')).toBe('true')
+
+    await selectButtonByText(wrapper, 'API Key')
+    expect(wrapper.find('[data-testid="create-openai-fixed-session-id-toggle"]').exists()).toBe(false)
+  })
+
+  it('leaves the stable session default to new-account normalization and submits an explicit import opt-out', async () => {
+    const enabled = await openCodexImportStep()
+    await enabled.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[0]?.[0]?.extra?.openai_fixed_session_id_enabled).toBeUndefined()
+    enabled.unmount()
+
+    const disabled = mountModal()
+    await selectButtonByText(disabled, 'OpenAI')
+    await disabled.get('[data-testid="create-openai-fixed-session-id-toggle"]').trigger('click')
+    await disabled.get('form#create-account-form input[type="text"]').setValue('Stable sessions off')
+    await disabled.get('form#create-account-form').trigger('submit.prevent')
+    await disabled.get('[data-testid="import-codex-session"]').trigger('click')
+    await flushPromises()
+    expect(importCodexSessionMock.mock.calls[1]?.[0]?.extra?.openai_fixed_session_id_enabled).toBe(false)
+    disabled.unmount()
+  })
+
+  it('does not submit stable task session settings for OpenAI API key accounts', async () => {
+    await submitApiKeyAccount('openai')
+
+    expect(createAccountMock.mock.calls[0]?.[0]?.extra).not.toHaveProperty('openai_fixed_session_id_enabled')
+  })
+
   it('enables upstream billing probes by default for new OpenAI API key accounts', async () => {
     await submitApiKeyAccount('openai')
 

@@ -63,6 +63,36 @@ func TestNormalizeOpenAIFixedSessionExtra(t *testing.T) {
 	})
 }
 
+func TestNormalizeOpenAIFixedSessionCreateExtra(t *testing.T) {
+	t.Run("new OpenAI OAuth accounts enable stable sessions by default", func(t *testing.T) {
+		extra, err := normalizeOpenAIFixedSessionCreateExtra(PlatformOpenAI, AccountTypeOAuth, nil)
+
+		require.NoError(t, err)
+		require.Equal(t, true, extra[openAIFixedSessionIDEnabledKey])
+		parsed, err := uuid.Parse(extra[openAISessionIDKey].(string))
+		require.NoError(t, err)
+		require.Equal(t, uuid.Version(7), parsed.Version())
+	})
+
+	t.Run("new OpenAI OAuth accounts can explicitly opt out", func(t *testing.T) {
+		extra, err := normalizeOpenAIFixedSessionCreateExtra(PlatformOpenAI, AccountTypeOAuth, map[string]any{
+			openAIFixedSessionIDEnabledKey: false,
+		})
+
+		require.NoError(t, err)
+		require.NotContains(t, extra, openAIFixedSessionIDEnabledKey)
+		require.NotContains(t, extra, openAISessionIDKey)
+	})
+
+	t.Run("non OAuth accounts do not receive stable session settings", func(t *testing.T) {
+		extra, err := normalizeOpenAIFixedSessionCreateExtra(PlatformOpenAI, AccountTypeAPIKey, nil)
+
+		require.NoError(t, err)
+		require.NotContains(t, extra, openAIFixedSessionIDEnabledKey)
+		require.NotContains(t, extra, openAISessionIDKey)
+	})
+}
+
 func TestAccountGetOpenAIFixedSessionID(t *testing.T) {
 	const fixed = "019ff4d1-0567-7630-ba3d-e564a4a519ac"
 	account := &Account{

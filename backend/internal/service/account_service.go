@@ -239,6 +239,10 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 			return nil, err
 		}
 	}
+	extra, err := normalizeOpenAIFixedSessionCreateExtra(req.Platform, req.Type, req.Extra)
+	if err != nil {
+		return nil, err
+	}
 
 	// 创建账号
 	account := &Account{
@@ -247,7 +251,7 @@ func (s *AccountService) Create(ctx context.Context, req CreateAccountRequest) (
 		Platform:    req.Platform,
 		Type:        req.Type,
 		Credentials: SanitizeStoredCredentials(req.Platform, req.Credentials),
-		Extra:       prepareCodexFingerprintExtraForCreate(req.Platform, req.Type, req.Extra),
+		Extra:       prepareCodexFingerprintExtraForCreate(req.Platform, req.Type, extra),
 		ProxyID:     req.ProxyID,
 		Concurrency: req.Concurrency,
 		Priority:    req.Priority,
