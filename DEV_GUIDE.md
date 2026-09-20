@@ -297,7 +297,7 @@ pnpm build
 ```bash
 # 运行服务器
 cd backend
-go run ./cmd/server/
+go run -tags http2legacy ./cmd/server/
 
 # 生成 Ent 代码
 go generate ./ent

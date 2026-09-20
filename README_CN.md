@@ -539,7 +539,7 @@ pnpm run build
 # 4. 编译后端（嵌入前端）
 cd ../backend
 VERSION="$(./scripts/resolve-version.sh)"
-go build -tags embed -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
+go build -tags "embed http2legacy" -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
 
 # 5. 创建配置文件
 cp ../deploy/config.example.yaml ./config.yaml
@@ -548,7 +548,7 @@ cp ../deploy/config.example.yaml ./config.yaml
 nano config.yaml
 ```
 
-> **注意：** `-tags embed` 参数会将前端嵌入到二进制文件中。不使用此参数编译的程序将不包含前端界面。
+> **注意：** `embed` tag 会将前端嵌入二进制文件；`http2legacy` tag 用于在 Go 1.27 下保留 Grok 指纹所需的有序 HTTP/2 请求编码器。
 
 **`config.yaml` 关键配置：**
 
@@ -703,7 +703,7 @@ websocat -H="Sec-WebSocket-Protocol: sub2api-admin, jwt.<ADMIN_TOKEN>" ws://loca
 ```bash
 # 后端（支持热重载）
 cd backend
-go run ./cmd/server
+go run -tags http2legacy ./cmd/server
 
 # 前端（支持热重载）
 cd frontend

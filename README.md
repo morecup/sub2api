@@ -501,7 +501,7 @@ pnpm run build
 # 4. Build backend with embedded frontend
 cd ../backend
 VERSION="$(./scripts/resolve-version.sh)"
-go build -tags embed -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
+go build -tags "embed http2legacy" -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
 
 # 5. Create configuration file
 cp ../deploy/config.example.yaml ./config.yaml
@@ -510,7 +510,7 @@ cp ../deploy/config.example.yaml ./config.yaml
 nano config.yaml
 ```
 
-> **Note:** The `-tags embed` flag embeds the frontend into the binary. Without this flag, the binary will not serve the frontend UI.
+> **Note:** The `embed` tag embeds the frontend into the binary. The `http2legacy` tag preserves the ordered HTTP/2 request encoder required by Grok fingerprinting on Go 1.27.
 
 **Key configuration in `config.yaml`:**
 
@@ -701,7 +701,7 @@ Because step 5 above pre-creates `config.yaml`, the setup wizard will be **skipp
 ```bash
 # Backend (with hot reload)
 cd backend
-go run ./cmd/server
+go run -tags http2legacy ./cmd/server
 
 # Frontend (with hot reload)
 cd frontend

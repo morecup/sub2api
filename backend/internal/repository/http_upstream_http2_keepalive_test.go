@@ -23,13 +23,15 @@ func http2KeepAliveTestPoolSettings() poolSettings {
 }
 
 // requireHTTP2Configured 断言 http2 已显式挂到 http.Transport 上。
-// x/net/http2 在 go1.27 && !http2legacy 下是标准库 HTTP/2 的包装：ConfigureTransports 通过
-// Transport.RegisterProtocol("http/2") 注册配置并打开 Protocols.HTTP2（TLSNextProto 不承载 h2 入口），
-// ReadIdleTimeout/PingTimeout 在建连时映射为 http.HTTP2Config.SendPingTimeout/PingTimeout。
+// x/net/http2 在 go1.27 && !http2legacy 下通过 Protocols 注册标准库包装；
+// http2legacy 下则通过 TLSNextProto 注册 fork transport。两条生产构建路径都必须覆盖。
 func requireHTTP2Configured(t *testing.T, tr *http.Transport, msg string) {
 	t.Helper()
-	require.NotNil(t, tr.Protocols, msg)
-	require.True(t, tr.Protocols.HTTP2(), msg)
+	if tr.Protocols != nil && tr.Protocols.HTTP2() {
+		return
+	}
+	_, legacyConfigured := tr.TLSNextProto["h2"]
+	require.True(t, legacyConfigured, msg)
 }
 
 // 长流 / OpenAI 上游改走 HTTP/2 后，池化连接被代理/NAT 静默掐断会成为“死连接”：

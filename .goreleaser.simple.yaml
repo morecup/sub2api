@@ -13,7 +13,7 @@ builds:
     main: ./cmd/server
     binary: sub2api
     flags:
-      - -tags=embed
+      - -tags=embed,http2legacy
     env:
       - CGO_ENABLED=0
     goos:

@@ -502,7 +502,7 @@ pnpm run build
 # 4. フロントエンドを組み込んだバックエンドをビルド
 cd ../backend
 VERSION="$(./scripts/resolve-version.sh)"
-go build -tags embed -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
+go build -tags "embed http2legacy" -ldflags="-X main.Version=${VERSION}" -o sub2api ./cmd/server
 
 # 5. 設定ファイルを作成
 cp ../deploy/config.example.yaml ./config.yaml
@@ -511,7 +511,7 @@ cp ../deploy/config.example.yaml ./config.yaml
 nano config.yaml
 ```
 
-> **注意:** `-tags embed` フラグはフロントエンドをバイナリに組み込みます。このフラグがない場合、バイナリはフロントエンド UI を提供しません。
+> **注意:** `embed` タグはフロントエンドをバイナリに組み込みます。`http2legacy` タグは Go 1.27 で Grok フィンガープリントに必要な順序付き HTTP/2 リクエストエンコーダーを保持します。
 
 **`config.yaml` の主要設定:**
 
@@ -635,7 +635,7 @@ URL バリデーションまたはレスポンスヘッダーフィルタリン�
 ```bash
 # バックエンド（ホットリロード付き）
 cd backend
-go run ./cmd/server
+go run -tags http2legacy ./cmd/server
 
 # フロントエンド（ホットリロード付き）
 cd frontend
