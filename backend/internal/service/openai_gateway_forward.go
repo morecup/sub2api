@@ -96,7 +96,7 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// lite 头同源，头体契约一致。合成路径不执行：lite 出站模型由 transform 的
 	// sink 全权处理（含 tools 全量下沉与 reasoning.context），非 lite 模型不支持
 	// reasoning.context=all_turns、真实客户端也不发送，不做任何 lite 归一化。
-	if account.IsOpenAIOAuth() && ((passthroughEnabled && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader))) || (!passthroughEnabled && !isOpenAIResponsesCompactPath(c) && !isOpenAICompatMessagesBridgeBody(body) && isCodexResponsesLiteModel(resolveOpenAIForwardUpstreamModel(account, gjson.GetBytes(body, "model").String(), isOpenAIResponsesCompactPath(c))))) {
+	if account.IsOpenAIOAuth() && passthroughEnabled && isOpenAIResponsesLiteHeader(c.GetHeader(responsesLiteHeader)) {
 		liteBody, changed, liteErr := normalizeOpenAIResponsesLiteToolsPayload(body)
 		if liteErr != nil {
 			param := "tools"
