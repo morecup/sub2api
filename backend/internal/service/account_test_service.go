@@ -1183,6 +1183,10 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 	}
 	if s.accountRepo == nil || len(responseBody) == 0 {
 		if resp.StatusCode == http.StatusPaymentRequired && s.accountRepo != nil {
+			if resetAt, exhausted := grokExhaustedWeeklyResetAt(account, now); exhausted {
+				persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
+				return
+			}
 			stateCtx, cancel := openAIAccountStateContext(ctx)
 			defer cancel()
 			_ = s.accountRepo.SetTempUnschedulable(stateCtx, account.ID, now.Add(30*time.Minute), "grok payment required")
@@ -1203,9 +1207,15 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 		}
 		return
 	}
-	if decision.Class == GrokFailureBilling && (isGrokSpendingLimitError(responseBody) || strings.Contains(strings.ToLower(decision.Reason), "credit")) {
-		persistGrokRateLimit(ctx, s.accountRepo, account, grokSpendingLimitResetAt(account, now))
-		return
+	if decision.Class == GrokFailureBilling {
+		if resetAt, exhausted := grokExhaustedWeeklyResetAt(account, now); exhausted {
+			persistGrokRateLimit(ctx, s.accountRepo, account, resetAt)
+			return
+		}
+		if isGrokSpendingLimitError(responseBody) || strings.Contains(strings.ToLower(decision.Reason), "credit") {
+			persistGrokRateLimit(ctx, s.accountRepo, account, grokSpendingLimitResetAt(account, now))
+			return
+		}
 	}
 	cooldown := time.Duration(0)
 	reason := ""

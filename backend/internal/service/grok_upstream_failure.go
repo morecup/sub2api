@@ -732,6 +732,14 @@ func (s *OpenAIGatewayService) applyGrokUpstreamFailureDecision(
 			return true
 		}
 	case GrokFailureBilling:
+		// A generic 402 is also how xAI reports an exhausted included weekly
+		// allowance. When a billing probe already established that 7d window,
+		// preserve its real reset boundary instead of repeatedly applying the
+		// legacy 30-minute temporary-unschedulable fallback.
+		if resetAt, exhausted := grokExhaustedWeeklyResetAt(account, time.Now()); exhausted {
+			s.rateLimitGrok(ctx, account, resetAt)
+			return true
+		}
 		low := strings.ToLower(decision.Reason)
 		if strings.Contains(low, "spending") || strings.Contains(low, "credits") {
 			// Spending-limit/credit exhaustion is a billing-window condition. Keep

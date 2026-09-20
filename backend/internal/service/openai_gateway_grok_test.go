@@ -2636,6 +2636,41 @@ func TestAccountTestServiceGrokOAuthPaymentRequiredTemporarilyUnschedulesAccount
 	require.Contains(t, recorder.Body.String(), "Grok Responses API returned 402")
 }
 
+func TestAccountTestServiceGrokOAuthPaymentRequiredUsesExhaustedWeeklyReset(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	usagePercent := 100.0
+	resetAt := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	account := healthyGrokOAuthGatewayTestAccount(57, "access-token")
+	account.Extra = map[string]any{grokBillingExtraKey: &xai.BillingSummary{
+		PeriodType:   "weekly",
+		UsagePercent: &usagePercent,
+		PeriodEnd:    resetAt.Format(time.RFC3339),
+	}}
+	repo := &grokQuotaAccountRepo{}
+	upstream := &httpUpstreamRecorder{resp: &http.Response{
+		StatusCode: http.StatusPaymentRequired,
+		Header:     http.Header{"Content-Type": []string{"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"Payment required"}}`)),
+	}}
+	svc := &AccountTestService{
+		accountRepo:       repo,
+		grokTokenProvider: NewGrokTokenProvider(repo, nil),
+		httpUpstream:      upstream,
+	}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/admin/accounts/57/test", nil)
+
+	err := svc.testGrokAccountConnection(c, account, "grok", "", AccountTestModeDefault, AccountTestOptions{})
+
+	require.Error(t, err)
+	require.Zero(t, repo.tempUnschedCalls)
+	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, account.ID, repo.lastRateLimitedID)
+	require.WithinDuration(t, resetAt, repo.lastRateLimitResetAt, time.Second)
+}
+
 func TestForwardAsChatCompletionsForGrokStreamingUsesResponsesWithoutCacheIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -3110,6 +3145,61 @@ func TestHandleGrokAccountUpstreamErrorSpendingLimitUsesRecoverableProbeCool(t *
 	require.Equal(t, 1, repo.rateLimitedCalls)
 	require.WithinDuration(t, before.Add(grokSpendingLimitProbeCooldown), repo.lastRateLimitResetAt, 2*time.Second)
 	require.Zero(t, repo.tempUnschedCalls)
+}
+
+func TestHandleGrokAccountUpstreamErrorPaymentRequiredUsesExhaustedWeeklyReset(t *testing.T) {
+	usagePercent := 100.0
+	resetAt := time.Now().UTC().Add(72 * time.Hour).Truncate(time.Second)
+	account := &Account{
+		ID: 2571, Platform: PlatformGrok, Type: AccountTypeOAuth,
+		Extra: map[string]any{grokBillingExtraKey: map[string]any{
+			"period_type":   "weekly",
+			"usage_percent": usagePercent,
+			"period_end":    resetAt.Format(time.RFC3339),
+		}},
+	}
+	repo := &grokQuotaAccountRepo{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+
+	svc.handleGrokAccountUpstreamError(
+		context.Background(),
+		account,
+		http.StatusPaymentRequired,
+		nil,
+		[]byte(`{"error":{"message":"Payment required"}}`),
+	)
+
+	require.True(t, svc.isOpenAIAccountRuntimeBlocked(account))
+	require.Equal(t, 1, repo.rateLimitedCalls)
+	require.Equal(t, account.ID, repo.lastRateLimitedID)
+	require.WithinDuration(t, resetAt, repo.lastRateLimitResetAt, time.Second)
+	require.Zero(t, repo.tempUnschedCalls)
+}
+
+func TestHandleGrokAccountUpstreamErrorPaymentRequiredKeepsFallbackForAvailableWeeklyQuota(t *testing.T) {
+	usagePercent := 99.0
+	account := &Account{
+		ID: 2572, Platform: PlatformGrok, Type: AccountTypeOAuth,
+		Extra: map[string]any{grokBillingExtraKey: &xai.BillingSummary{
+			PeriodType:   "weekly",
+			UsagePercent: &usagePercent,
+			PeriodEnd:    time.Now().UTC().Add(72 * time.Hour).Format(time.RFC3339),
+		}},
+	}
+	repo := &grokQuotaAccountRepo{}
+	svc := &OpenAIGatewayService{accountRepo: repo}
+
+	svc.handleGrokAccountUpstreamError(
+		context.Background(),
+		account,
+		http.StatusPaymentRequired,
+		nil,
+		[]byte(`{"error":{"message":"Payment required"}}`),
+	)
+
+	require.Equal(t, 1, repo.tempUnschedCalls)
+	require.Equal(t, "grok payment required", repo.lastTempUnschedReason)
+	require.Zero(t, repo.rateLimitedCalls)
 }
 
 func TestHandleGrokAccountUpstreamErrorTempUnschedulesNonRateLimitStates(t *testing.T) {
