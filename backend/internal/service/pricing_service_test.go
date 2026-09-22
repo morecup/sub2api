@@ -1110,6 +1110,14 @@ func TestDefaultCatalogSnapshot_CacheTierContract(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, logSink.ContainsMessage("carry cache above-tier prices"), "快照不应触发孤儿 cache 字段哨兵")
 	require.False(t, logSink.ContainsMessage("one-sided long-context ladder"), "快照不应触发单侧阶梯哨兵")
+	grok47 := data["grok-4.7"]
+	require.NotNil(t, grok47)
+	require.InDelta(t, 2e-6, grok47.InputCostPerToken, 1e-15)
+	require.InDelta(t, 0.5e-6, grok47.CacheReadInputTokenCost, 1e-15)
+	require.InDelta(t, 6e-6, grok47.OutputCostPerToken, 1e-15)
+	require.Equal(t, 200000, grok47.LongContextInputTokenThreshold)
+	require.InDelta(t, 2.0, grok47.LongContextInputCostMultiplier, 1e-12)
+	require.InDelta(t, 2.0, grok47.LongContextOutputCostMultiplier, 1e-12)
 	for _, model := range []string{
 		"gemini-2.5-pro", "gemini-3-pro-preview", "gemini-3.1-pro-preview",
 		"gemini-3.1-pro-high", "gemini-3.1-pro-low", "gemini-3.1-pro-preview-customtools",

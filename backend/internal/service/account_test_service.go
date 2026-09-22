@@ -1196,6 +1196,16 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 	if isGrokContentPolicyRejection(resp.StatusCode, responseBody) {
 		return
 	}
+	if resp.StatusCode == http.StatusForbidden {
+		// Preserve the upstream 403 exactly as the test result and do not turn
+		// an entitlement/access response into temporary account unavailability.
+		// The explicit spending-limit payload is the only 403 that carries a
+		// scheduler-relevant, recoverable window.
+		if isGrokSpendingLimitError(responseBody) {
+			persistGrokRateLimit(ctx, s.accountRepo, account, grokSpendingLimitResetAt(account, now))
+		}
+		return
+	}
 	decision := classifyGrokUpstreamFailure(resp.StatusCode, responseBody, "")
 	if decision.Class == GrokFailureFreeUsage {
 		if resetAt, limited := grokRateLimitResetAtForAccount(account, snapshot, now); limited && resetAt.After(now) {
@@ -1224,8 +1234,6 @@ func (s *AccountTestService) observeGrokTestResponse(ctx context.Context, accoun
 		cooldown, reason = 10*time.Minute, "grok oauth token unauthorized"
 	case http.StatusPaymentRequired:
 		cooldown, reason = 30*time.Minute, "grok payment required"
-	case http.StatusForbidden:
-		cooldown, reason = 30*time.Minute, "grok entitlement or subscription tier denied"
 	default:
 		if resp.StatusCode >= 500 {
 			cooldown, reason = 2*time.Minute, "grok upstream temporary error"

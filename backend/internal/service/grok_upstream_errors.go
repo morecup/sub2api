@@ -1,11 +1,9 @@
 package service
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/tidwall/gjson"
 )
@@ -266,43 +264,4 @@ func grokStructuredErrorMessageCandidates(body []byte) []string {
 		}
 	}
 	return candidates
-}
-
-// applyGrokForbiddenPolicy applies an administrator's existing temporary
-// unschedulable rules to a non-content 403. It reports true only when a rule
-// matched; unmatched responses retain the legacy entitlement cooldown.
-func (s *OpenAIGatewayService) applyGrokForbiddenPolicy(ctx context.Context, account *Account, responseBody []byte) bool {
-	if account == nil || !account.IsTempUnschedulableEnabled() {
-		return false
-	}
-
-	matches := matchTempUnschedulableRules(account, http.StatusForbidden, responseBody)
-	if len(matches) == 0 {
-		return false
-	}
-
-	match := matches[0]
-	// Reuse the central policy implementation when it has a repository. This
-	// preserves the existing reason/cache format and avoids duplicating writes.
-	if s != nil && s.rateLimitService != nil && s.rateLimitService.accountRepo != nil {
-		stateCtx, cancel := openAIAccountStateContext(ctx)
-		handled := s.rateLimitService.tryTempUnschedulable(
-			stateCtx,
-			account,
-			http.StatusForbidden,
-			responseBody,
-		)
-		cancel()
-		if handled {
-			return true
-		}
-	}
-
-	// A partially constructed service (for example a unit-test gateway) still
-	// honors the configured duration instead of silently falling back to 30m.
-	cooldown := time.Duration(match.rule.DurationMinutes) * time.Minute
-	if cooldown > 0 {
-		s.tempUnscheduleGrok(ctx, account, cooldown, "grok configured forbidden rule")
-	}
-	return true
 }

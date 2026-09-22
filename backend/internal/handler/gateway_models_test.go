@@ -120,7 +120,7 @@ func TestGatewayCodexModels_NonOpenAIGroupsUseMappedModels(t *testing.T) {
 		{
 			name:       "Grok",
 			platform:   service.PlatformGrok,
-			model:      "grok-4.6",
+			model:      "grok-4.7",
 			efforts:    []string{"low", "medium", "high", "xhigh"},
 			modalities: []string{"text", "image"},
 		},
@@ -538,7 +538,9 @@ func assertGrokGatewayReasoningEfforts(t *testing.T, groupID int64, modelID stri
 	require.Equal(t, want, model.ReasoningEfforts)
 }
 
-func TestGatewayModels_Grok46AdvertisesReasoningEffort(t *testing.T) {
+func TestGatewayModels_Grok47AdvertisesReasoningEffort(t *testing.T) {
+	require.True(t, grokModelSupportsConfigurableReasoning("grok-4.7"))
+	require.True(t, grokModelSupportsConfigurableReasoning("grok-4.7-latest"))
 	require.True(t, grokModelSupportsConfigurableReasoning("grok-4.6"))
 }
 

@@ -561,7 +561,7 @@ func patchGrokResponsesBodyBase(body []byte, upstreamModel string) ([]byte, erro
 			}
 		}
 	}
-	if strings.EqualFold(upstreamModel, "grok-4.5") || strings.EqualFold(upstreamModel, "grok-4.6") {
+	if strings.EqualFold(upstreamModel, "grok-4.5") || strings.EqualFold(upstreamModel, "grok-4.6") || strings.EqualFold(upstreamModel, "grok-4.7") {
 		for _, unsupportedField := range []string{"presence_penalty", "presencePenalty", "frequency_penalty", "frequencyPenalty", "stop"} {
 			if gjson.GetBytes(out, unsupportedField).Exists() {
 				out, err = sjson.DeleteBytes(out, unsupportedField)
@@ -741,16 +741,18 @@ func normalizeGrokReasoningEffortValue(raw, model string) (string, bool) {
 }
 
 // GrokSupportsXHighReasoningEffort reports whether the model advertises and
-// forwards the xhigh reasoning effort (Grok 4.6 and its undated alias).
+// forwards the xhigh reasoning effort (Grok 4.6/4.7 and their client aliases).
 func GrokSupportsXHighReasoningEffort(model string) bool {
 	model = strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
-	return model == "grok-4.6" || model == "grok-4.6-latest"
+	return model == "grok-4.6" || model == "grok-4.6-latest" ||
+		model == "grok-4.7" || model == "grok-4.7-latest"
 }
 
 func grokSupportsReasoningEffort(model string) bool {
 	model = strings.ToLower(xai.StripGrokProviderPrefix(strings.TrimSpace(model)))
 	switch model {
 	case "grok-4.5", "grok-4.5-latest", "grok-4.6", "grok-4.6-latest",
+		"grok-4.7", "grok-4.7-latest",
 		"grok-4.3", "grok-4.3-latest",
 		"grok-3-mini", "grok-3-mini-fast", "grok-4.20-0309-reasoning",
 		"grok-4.20-reasoning", "grok-4.20-multi-agent-0309":
@@ -2084,12 +2086,25 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 	// the failover decision below applies a bounded model-scoped block instead.
 	s.updateGrokUsageSnapshotWithRateLimit(ctx, account, snapshot, decision.Class != GrokFailureModelCapacity)
 
+	if statusCode == http.StatusForbidden {
+		// A 403 is an upstream request outcome, not evidence that this account
+		// is temporarily unhealthy. Keep its original body for the
+		// failover/client path and do not replace it with a synthetic
+		// temp-unschedulable reason. The one established exception is xAI's
+		// explicit spending-limit signal, which represents a recoverable billing
+		// window and therefore belongs in normal rate-limit state instead.
+		if isGrokSpendingLimitError(responseBody) {
+			s.rateLimitGrok(ctx, account, grokSpendingLimitResetAt(account, now))
+		}
+		return
+	}
+
 	// Body-first free-usage / empty / billing / capacity must run before the
 	// status switch so non-429 free-usage bodies still cool the account.
-	// Pool-mode still skips durable mutation unless an explicit temp rule matches.
+	// Pool-mode skips durable account mutation.
 	if decision.ShouldCooldown && decision.Class != GrokFailureNone && decision.Class != GrokFailureRateLimit {
 		if account.IsPoolMode() {
-			// Allow configured temp rules (403) below; skip default body cools.
+			// Skip account-wide body-derived cooldowns in pool mode.
 		} else {
 			// A free-tier exhaustion message describes a rolling usage window. Use
 			// an upstream absolute reset (or Retry-After) when available; otherwise
@@ -2111,9 +2126,6 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 		}
 	}
 
-	if statusCode == http.StatusForbidden && s.applyGrokForbiddenPolicy(ctx, account, responseBody) {
-		return
-	}
 	if account.IsPoolMode() {
 		slog.Info("grok_pool_mode_error_state_skipped", "account_id", account.ID, "status_code", statusCode)
 		return
@@ -2124,13 +2136,6 @@ func (s *OpenAIGatewayService) handleGrokAccountUpstreamError(ctx context.Contex
 	case http.StatusPaymentRequired:
 		// 402 without a body-classified billing decision: keep the legacy 30m cool.
 		s.tempUnscheduleGrok(ctx, account, 30*time.Minute, "grok payment required")
-	case http.StatusForbidden:
-		// Spending-limit already handled by body classifier when phrasing matches.
-		if isGrokSpendingLimitError(responseBody) {
-			s.rateLimitGrok(ctx, account, grokSpendingLimitResetAt(account, time.Now()))
-			return
-		}
-		s.tempUnscheduleGrok(ctx, account, 30*time.Minute, "grok access or entitlement denied")
 	case http.StatusTooManyRequests:
 		// updateGrokUsageSnapshot installs rate-limit state for non-pool accounts.
 		// Free-usage 429 was already cooled above via body classification.

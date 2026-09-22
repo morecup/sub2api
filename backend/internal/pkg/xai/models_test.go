@@ -14,6 +14,8 @@ func TestDefaultModelMappingExcludesCrossClientWildcards(t *testing.T) {
 
 	require.Equal(t, "grok-4.6", mapping["grok"])
 	require.Equal(t, "grok-4.6", mapping["grok-latest"])
+	require.Equal(t, "grok-4.7", mapping["grok-4.7"])
+	require.Equal(t, "grok-4.7", mapping["grok-4.7-latest"])
 	require.Equal(t, "grok-build-0.1", mapping["grok-build"])
 	require.Equal(t, "grok-build-0.1", mapping["grok-build-latest"])
 	require.Equal(t, DefaultImagineImageQualityModel, mapping["grok-imagine-edit"])
@@ -53,6 +55,7 @@ func TestIsGrokModelID(t *testing.T) {
 	t.Parallel()
 	require.True(t, IsGrokModelID("grok-4.5"))
 	require.True(t, IsGrokModelID("grok-4.6"))
+	require.True(t, IsGrokModelID("grok-4.7"))
 	require.True(t, IsGrokModelID("x-ai/grok-4.3"))
 	require.False(t, IsGrokModelID("gpt-5"))
 	require.False(t, IsGrokModelID("claude-sonnet-4"))
@@ -64,14 +67,17 @@ func TestIsGrokImagineModel(t *testing.T) {
 	require.True(t, IsGrokImagineModel("grok-imagine-video-1.5-preview"))
 	require.True(t, IsGrokImagineModel("xai/grok-imagine-image-quality"))
 	require.True(t, IsGrokImagineModel("grok-video-1.5"))
-	require.False(t, IsGrokImagineModel("grok-4.6"))
+	require.False(t, IsGrokImagineModel("grok-4.7"))
 	require.False(t, IsGrokImagineModel("grok-build-0.1"))
 }
 
-func TestDefaultModelsIncludesGrok46(t *testing.T) {
+func TestDefaultModelsIncludesCurrentGrokModels(t *testing.T) {
 	t.Parallel()
 	ids := DefaultModelIDs()
+	require.Contains(t, ids, "grok-4.7")
 	require.Contains(t, ids, "grok-4.6")
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7"))
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7-latest"))
 	require.Equal(t, "grok-4.6", ResolveGrokTextResponsesModelID("grok-4.6"))
 	require.Equal(t, "grok-4.6", ResolveGrokTextResponsesModelID("grok-4.6-latest"))
 }
@@ -83,7 +89,9 @@ func TestResolveGrokTextResponsesModelID(t *testing.T) {
 	require.Equal(t, "grok-4.20-multi-agent-0309", ResolveGrokTextResponsesModelID("grok-4.20-multi-agent"))
 }
 
-func TestExplicitGrok45DoesNotFollowRuntimeDefault(t *testing.T) {
+func TestExplicitGrokModelsDoNotFollowRuntimeDefault(t *testing.T) {
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7", "grok-4.6"))
+	require.Equal(t, "grok-4.7", ResolveGrokTextResponsesModelID("grok-4.7-latest", "grok-4.6"))
 	require.Equal(t, "grok-4.5", ResolveGrokTextResponsesModelID("grok-4.5", "grok-4.6"))
 	require.Equal(t, "grok-4.5", ResolveGrokTextResponsesModelID("grok-4.5-latest", "grok-4.6"))
 	require.Equal(t, "grok-4.6", ResolveGrokTextResponsesModelID("grok", "grok-4.6"))

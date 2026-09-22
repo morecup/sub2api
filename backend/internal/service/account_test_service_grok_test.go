@@ -64,7 +64,7 @@ func TestObserveGrokTestResponseDoesNotQuarantineContentPolicy(t *testing.T) {
 	require.Zero(t, repo.rateLimitedCalls)
 }
 
-func TestObserveGrokTestResponseKeepsEntitlement403Cooldown(t *testing.T) {
+func TestObserveGrokTestResponseEntitlement403DoesNotMutateScheduling(t *testing.T) {
 	account := &Account{ID: 1903, Platform: PlatformGrok, Type: AccountTypeOAuth}
 	repo := &grokQuotaAccountRepo{mockAccountRepoForPlatform: &mockAccountRepoForPlatform{
 		accountsByID: map[int64]*Account{account.ID: account},
@@ -75,11 +75,9 @@ func TestObserveGrokTestResponseKeepsEntitlement403Cooldown(t *testing.T) {
 		Header:     make(http.Header),
 		Body:       io.NopCloser(strings.NewReader(`{"error":{"message":"subscription required"}}`)),
 	}
-	before := time.Now()
 	svc.observeGrokTestResponse(context.Background(), account, resp)
-	require.Equal(t, 1, repo.tempUnschedCalls)
-	require.Equal(t, "grok entitlement or subscription tier denied", repo.lastTempUnschedReason)
-	require.Greater(t, repo.lastTempUnschedUntil, before.Add(29*time.Minute))
+	require.Zero(t, repo.tempUnschedCalls)
+	require.Zero(t, repo.rateLimitedCalls)
 }
 
 func (r *grokAccountTestRateLimitRepo) SetRateLimited(_ context.Context, _ int64, resetAt time.Time) error {

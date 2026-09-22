@@ -54,9 +54,11 @@ describe('useModelWhitelist', () => {
     expect(getModelsByPlatform('antigravity')).toContain('claude-opus-4-8')
   })
 
-  it('xAI 模型列表包含 Grok 4.6 和官方别名', () => {
+  it('xAI 模型列表包含 Grok 4.7、4.6 和兼容别名', () => {
     const models = getModelsByPlatform('grok')
 
+    expect(models).toContain('grok-4.7')
+    expect(models).toContain('grok-4.7-latest')
     expect(models).toContain('grok-4.6')
     expect(models).toContain('grok-4.6-latest')
     expect(models).toContain('grok-4.5')

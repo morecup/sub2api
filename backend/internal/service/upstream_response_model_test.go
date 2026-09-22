@@ -66,6 +66,16 @@ func TestUpstreamModelMismatchTreatsGrokBuildRuntimeIDsAsAliases(t *testing.T) {
 		responseModel string
 	}{
 		{
+			name:          "grok 4.7",
+			sentModel:     "grok-4.7",
+			responseModel: "grok-4.7-build",
+		},
+		{
+			name:          "grok 4.7 latest",
+			sentModel:     "grok-4.7-latest",
+			responseModel: "grok-4.7-build",
+		},
+		{
 			name:          "issue 5634 grok 4.6",
 			sentModel:     "grok-4.6",
 			responseModel: "grok-4.6-build",

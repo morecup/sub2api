@@ -200,6 +200,8 @@ func TestPatchGrokResponsesBodySanitizesComposerReasoningParameters(t *testing.T
 		{name: "grok 4.5", upstreamModel: "grok-4.5", wantReasoning: true},
 		{name: "grok 4.6", upstreamModel: "grok-4.6", wantReasoning: true},
 		{name: "grok 4.6 latest", upstreamModel: "grok-4.6-latest", wantReasoning: true},
+		{name: "grok 4.7", upstreamModel: "grok-4.7", wantReasoning: true},
+		{name: "grok 4.7 latest", upstreamModel: "grok-4.7-latest", wantReasoning: true},
 	}
 
 	bodyTemplate := []byte(`{
@@ -242,10 +244,10 @@ func TestExtractGrokResponsesReasoningEffortSupportsOpenAICompatibleField(t *tes
 	require.Equal(t, "high", *effort)
 }
 
-func TestPatchGrokResponsesBodyDropsGrok45And46ReasoningUnsupportedFields(t *testing.T) {
+func TestPatchGrokResponsesBodyDropsGrok45Through47ReasoningUnsupportedFields(t *testing.T) {
 	t.Parallel()
 
-	for _, model := range []string{"grok-4.5", "grok-4.6"} {
+	for _, model := range []string{"grok-4.5", "grok-4.6", "grok-4.7"} {
 		t.Run(model, func(t *testing.T) {
 			body := []byte(`{
 				"model": "grok-latest",
@@ -313,6 +315,8 @@ func TestPatchGrokResponsesBodyNormalizesReasoningEffortAliases(t *testing.T) {
 		{name: "xhigh stays high for 4.5", body: `{"input":"hi","reasoning_effort":"xhigh"}`, upstreamModel: "grok-4.5", path: "reasoning_effort", want: "high"},
 		{name: "xhigh nested for 4.6", body: `{"input":"hi","reasoning":{"effort":"xhigh"}}`, upstreamModel: "grok-4.6", path: "reasoning.effort", want: "xhigh"},
 		{name: "xhigh snake for 4.6 latest", body: `{"input":"hi","reasoning_effort":"xhigh"}`, upstreamModel: "grok-4.6-latest", path: "reasoning_effort", want: "xhigh"},
+		{name: "xhigh nested for 4.7", body: `{"input":"hi","reasoning":{"effort":"xhigh"}}`, upstreamModel: "grok-4.7", path: "reasoning.effort", want: "xhigh"},
+		{name: "xhigh snake for 4.7 latest", body: `{"input":"hi","reasoning_effort":"xhigh"}`, upstreamModel: "grok-4.7-latest", path: "reasoning_effort", want: "xhigh"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -344,6 +348,10 @@ func TestNormalizeGrokChatReasoningEffort(t *testing.T) {
 	require.False(t, gjson.GetBytes(patched, "reasoningEffort").Exists())
 
 	patched, err = normalizeGrokChatReasoningEffort([]byte(`{"reasoning_effort":"xhigh"}`), "grok-4.6")
+	require.NoError(t, err)
+	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
+
+	patched, err = normalizeGrokChatReasoningEffort([]byte(`{"reasoning_effort":"xhigh"}`), "grok-4.7")
 	require.NoError(t, err)
 	require.Equal(t, "xhigh", gjson.GetBytes(patched, "reasoning_effort").String())
 
@@ -3217,13 +3225,6 @@ func TestHandleGrokAccountUpstreamErrorTempUnschedulesNonRateLimitStates(t *test
 			wantReason:      "grok credentials unauthorized",
 			wantMinCooldown: 10*time.Minute - time.Second,
 			wantMaxCooldown: 10*time.Minute + time.Second,
-		},
-		{
-			name:            "forbidden entitlement",
-			status:          http.StatusForbidden,
-			wantReason:      "grok access or entitlement denied",
-			wantMinCooldown: 30*time.Minute - time.Second,
-			wantMaxCooldown: 30*time.Minute + time.Second,
 		},
 		{
 			name:            "payment required",

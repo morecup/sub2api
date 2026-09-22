@@ -650,6 +650,14 @@ func TestBuildCodexModelsManifestForGroupUsesProviderImageCapabilities(t *testin
 		modalities []any
 	}{
 		{
+			name:  "official Grok 4.7",
+			model: "grok-4.7",
+			accounts: []Account{{
+				ID: 9, Platform: PlatformGrok, Type: AccountTypeOAuth,
+			}},
+			modalities: []any{"text", "image"},
+		},
+		{
 			name:  "official Grok 4.6",
 			model: "grok-4.6",
 			accounts: []Account{{

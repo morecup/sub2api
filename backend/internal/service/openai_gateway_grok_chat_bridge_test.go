@@ -20,6 +20,13 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+func TestGrokChatResponsesBridgeModelIncludesGrok47(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, grokChatResponsesBridgeModel("grok-4.7"))
+	require.True(t, grokChatResponsesBridgeModel("xai/grok-4.7-latest"))
+}
+
 func TestGrokChatResponsesBridgeEligibility(t *testing.T) {
 	t.Parallel()
 

@@ -365,6 +365,24 @@ func TestOpenAIHandleFailoverExhausted_PassesThroughRawUpstreamBody(t *testing.T
 	require.NotContains(t, w.Body.String(), "Upstream request failed")
 }
 
+func TestOpenAIHandleFailoverExhausted_PassesThroughRawGrokForbiddenBody(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, EndpointResponses, nil)
+
+	rawBody := `{"error":{"code":"access_denied","message":"This account cannot use grok-4.6"}}`
+	(&OpenAIGatewayHandler{}).handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:      http.StatusForbidden,
+		ResponseBody:    []byte(rawBody),
+		ResponseHeaders: http.Header{"Content-Type": []string{"application/json"}},
+	}, false)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.JSONEq(t, rawBody, w.Body.String())
+	require.NotContains(t, w.Body.String(), "Upstream access forbidden")
+}
+
 func TestOpenAIEnsureForwardErrorResponse_AfterDeltaAppendsSingleValidResponseFailed(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

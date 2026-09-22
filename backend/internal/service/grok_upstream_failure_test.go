@@ -175,6 +175,33 @@ func TestAppendGrokOpsUpstreamErrorRetainsTrueQuota429Response(t *testing.T) {
 	require.Empty(t, events[0].Reason, "retaining a body must not reclassify a true quota response as capacity")
 }
 
+func TestAppendGrokOpsUpstreamErrorRetainsForbiddenResponse(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	body := `{"error":{"code":"access_denied","message":"This account cannot use grok-4.6"}}`
+
+	appendGrokOpsUpstreamError(c, OpsUpstreamErrorEvent{
+		Platform:           PlatformGrok,
+		AccountID:          7303,
+		UpstreamStatusCode: http.StatusForbidden,
+		Kind:               "failover",
+	}, http.Header{
+		"Content-Type":  []string{"application/json"},
+		"X-Request-Id":  []string{"req-forbidden"},
+		"Authorization": []string{"must-not-be-retained"},
+	}, []byte(body))
+
+	raw, ok := c.Get(OpsUpstreamErrorsKey)
+	require.True(t, ok)
+	events, ok := raw.([]*OpsUpstreamErrorEvent)
+	require.True(t, ok)
+	require.Len(t, events, 1)
+	require.Equal(t, body, events[0].UpstreamResponseBody)
+	require.Equal(t, []string{"application/json"}, events[0].UpstreamResponseHeaders["Content-Type"])
+	require.Equal(t, []string{"req-forbidden"}, events[0].UpstreamResponseHeaders["X-Request-Id"])
+	require.NotContains(t, events[0].UpstreamResponseHeaders, "Authorization")
+}
+
 func TestGrokFastTransientAllowsExactlyOneAccountFollowup(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	state := &OpenAIOAuth429FailoverState{}
@@ -467,19 +494,17 @@ func TestHandleGrokAccountUpstreamError_ContentPolicyStillNoMutation(t *testing.
 	require.Zero(t, repo.tempUnschedCalls)
 }
 
-func TestHandleGrokAccountUpstreamError_Entitlement403Unchanged(t *testing.T) {
+func TestHandleGrokAccountUpstreamError_Entitlement403DoesNotMutateScheduling(t *testing.T) {
 	repo := &grokQuotaAccountRepo{}
 	svc := &OpenAIGatewayService{accountRepo: repo}
 	account := &Account{ID: 9105, Platform: PlatformGrok, Type: AccountTypeOAuth}
-	before := time.Now()
 
 	svc.handleGrokAccountUpstreamError(
 		context.Background(), account, http.StatusForbidden, nil,
 		[]byte(`{"error":{"message":"subscription required"}}`),
 	)
 
-	require.Equal(t, 1, repo.tempUnschedCalls)
-	require.Equal(t, "grok access or entitlement denied", repo.lastTempUnschedReason)
-	require.Greater(t, repo.lastTempUnschedUntil, before.Add(29*time.Minute))
-	require.Less(t, repo.lastTempUnschedUntil, before.Add(31*time.Minute))
+	require.Zero(t, repo.tempUnschedCalls)
+	require.Zero(t, repo.rateLimitedCalls)
+	require.False(t, svc.isOpenAIAccountRuntimeBlocked(account))
 }

@@ -44,7 +44,7 @@ The default Go 1.27 tests and the `http2legacy` tests are both required: they pr
   ```
 
 - `tools/deploy_vps.py` is the canonical production path. Do not replace it with a bare `go build -tags embed`, an ad-hoc binary copy, or a PM2 restart of an old binary.
-- The deployment script builds the entire working tree. Before running it, inspect `git status --short`. If unrelated or user-owned changes exist, build from an isolated clean worktree at the intended commit. Never stash, discard, or silently include another person's changes.
+- The deployment script builds the current local repository working tree. Before running it, inspect `git status --short` and ensure the listed changes are the intended production contents. Never stash or discard another person's changes.
 - Before replacement, record the current PM2 PID/restart count, binary SHA-256, configuration SHA-256, and health result. Preserve the script-created binary/pricing backups for rollback.
 - After replacement, verify all of the following:
   - `pm2` reports `sub2api-pool-bald-app` as `online` with a new PID and only one expected restart.

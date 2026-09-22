@@ -121,11 +121,13 @@ func newGrokUpstreamFailoverError(
 	return failoverErr
 }
 
-// appendGrokOpsUpstreamError retains the exact Grok 429/503 response body and a
-// diagnostic header allowlist. The general error body logging switch still
-// controls unrelated upstream responses.
+// appendGrokOpsUpstreamError retains the exact Grok 403/429/503 response body
+// and a diagnostic header allowlist. In particular, a 403 must keep the
+// provider's original reason rather than being represented only as a generic
+// entitlement failure. The general error body logging switch still controls
+// unrelated upstream responses.
 func appendGrokOpsUpstreamError(c *gin.Context, event OpsUpstreamErrorEvent, headers http.Header, responseBody []byte) {
-	if event.UpstreamStatusCode == http.StatusTooManyRequests || event.UpstreamStatusCode == http.StatusServiceUnavailable {
+	if event.UpstreamStatusCode == http.StatusForbidden || event.UpstreamStatusCode == http.StatusTooManyRequests || event.UpstreamStatusCode == http.StatusServiceUnavailable {
 		event.UpstreamResponseBody = truncateString(string(responseBody), grokFastFailureOpsBodyMaxBytes)
 		event.UpstreamResponseHeaders = grokDiagnosticResponseHeaders(headers)
 	}
