@@ -98,19 +98,27 @@ func TestHandle429_FallbackDisabledSkipsLocalMark(t *testing.T) {
 }
 
 func TestHandle429_OpenAIRateLimitExceededWithoutResetRetriesWithoutCooldown(t *testing.T) {
-	accountRepo := &rateLimit429AccountRepoStub{}
-	settingRepo := newMockSettingRepo()
-	data, _ := json.Marshal(RateLimit429CooldownSettings{Enabled: true, CooldownSeconds: 12})
-	settingRepo.data[SettingKeyRateLimit429CooldownSettings] = string(data)
+	for _, retryAfter := range []string{"", "1", "300", time.Now().Add(time.Minute).UTC().Format(http.TimeFormat)} {
+		t.Run(retryAfter, func(t *testing.T) {
+			accountRepo := &rateLimit429AccountRepoStub{}
+			settingRepo := newMockSettingRepo()
+			data, _ := json.Marshal(RateLimit429CooldownSettings{Enabled: true, CooldownSeconds: 12})
+			settingRepo.data[SettingKeyRateLimit429CooldownSettings] = string(data)
 
-	settingSvc := NewSettingService(settingRepo, &config.Config{})
-	svc := NewRateLimitService(accountRepo, nil, &config.Config{}, nil, nil)
-	svc.SetSettingService(settingSvc)
+			settingSvc := NewSettingService(settingRepo, &config.Config{})
+			svc := NewRateLimitService(accountRepo, nil, &config.Config{}, nil, nil)
+			svc.SetSettingService(settingSvc)
 
-	account := &Account{ID: 47, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
-	svc.handle429(context.Background(), account, http.Header{}, []byte(`{"detail":"Rate limit exceeded"}`))
+			account := &Account{ID: 47, Platform: PlatformOpenAI, Type: AccountTypeOAuth}
+			headers := http.Header{}
+			if retryAfter != "" {
+				headers.Set("Retry-After", retryAfter)
+			}
+			svc.handle429(context.Background(), account, headers, []byte(`{"detail":"Rate limit exceeded"}`))
 
-	require.Zero(t, accountRepo.rateLimitCalls)
+			require.Zero(t, accountRepo.rateLimitCalls)
+		})
+	}
 }
 
 func TestHandle429_OpenAIRateLimitExceededWithResetStillCoolsDown(t *testing.T) {
@@ -121,6 +129,7 @@ func TestHandle429_OpenAIRateLimitExceededWithResetStillCoolsDown(t *testing.T) 
 		"X-Codex-Primary-Used-Percent":        []string{"100"},
 		"X-Codex-Primary-Reset-After-Seconds": []string{"120"},
 		"X-Codex-Primary-Window-Minutes":      []string{"300"},
+		"Retry-After":                         []string{"1"},
 	}
 
 	svc.handle429(context.Background(), account, headers, []byte(`{"detail":"Rate limit exceeded"}`))

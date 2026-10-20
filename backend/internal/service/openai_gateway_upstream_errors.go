@@ -244,23 +244,40 @@ func isOpenAIContextWindowError(upstreamMsg string, upstreamBody []byte) bool {
 
 const openAI429RetryWithoutCooldownReason = GatewayFailureReason("openai_429_retry_without_cooldown")
 
+const openAICodexCapacityMessage = "Codex is at capacity, please try again later"
+
+func isOpenAICodexCapacity429(statusCode int, responseBody []byte) bool {
+	if statusCode != http.StatusTooManyRequests {
+		return false
+	}
+	message := strings.TrimSpace(extractUpstreamErrorMessage(responseBody))
+	if message == "" {
+		message = strings.TrimSpace(gjson.GetBytes(responseBody, "response.error.message").String())
+	}
+	if message == "" && !gjson.ValidBytes(responseBody) {
+		message = strings.TrimSpace(string(responseBody))
+	}
+	return strings.EqualFold(strings.TrimSuffix(message, "."), openAICodexCapacityMessage)
+}
+
 // isOpenAI429RetryWithoutCooldown identifies the transient ChatGPT backend
-// response observed when the provider refuses a burst without exposing any
-// quota-window reset signal. Keeping an account-level cooldown for this shape
-// makes every request re-arm the same short pause. The request should instead
-// consume its bounded retry/failover budget without changing account state.
+// capacity response or a bare burst limit without a quota-window reset signal.
+// Neither should park the account after the request's retries are exhausted.
+// The explicit capacity message describes provider load even when the response
+// also includes quota telemetry. The request should instead
+// retry once on the selected account without changing account state. Retry-After
+// controls that replay's delay; it is not evidence of account quota exhaustion.
 func isOpenAI429RetryWithoutCooldown(statusCode int, headers http.Header, responseBody []byte) bool {
 	if statusCode != http.StatusTooManyRequests {
 		return false
+	}
+	if isOpenAICodexCapacity429(statusCode, responseBody) {
+		return true
 	}
 	if !strings.EqualFold(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)), "Rate limit exceeded") {
 		return false
 	}
 	if calculateOpenAI429ResetTime(headers) != nil {
-		return false
-	}
-	now := time.Now()
-	if resetAt := parseRetryAfterResetTime(headers, now); resetAt != nil && resetAt.After(now) {
 		return false
 	}
 	return parseOpenAIRateLimitResetTime(responseBody) == nil
@@ -349,18 +366,39 @@ func newOpenAIUpstreamFailoverError(
 	retryableOnSameAccount bool,
 ) *UpstreamFailoverError {
 	requestScopedCapacity := isOpenAIRequestScopedCapacityShed(upstreamMsg, responseBody)
+	codexCapacity := isOpenAICodexCapacity429(statusCode, responseBody)
 	failoverErr := &UpstreamFailoverError{
 		StatusCode:             statusCode,
 		ResponseBody:           responseBody,
 		ResponseHeaders:        responseHeaders.Clone(),
 		RetryableOnSameAccount: retryableOnSameAccount || requestScopedCapacity,
-		RequestScopedTransient: requestScopedCapacity,
+		RequestScopedTransient: requestScopedCapacity || codexCapacity,
 	}
 	if isOpenAI429RetryWithoutCooldown(statusCode, responseHeaders, responseBody) {
 		failoverErr.RetryableOnSameAccount = true
+		failoverErr.SameAccountRetryLimitOverride = 1
+		failoverErr.SameAccountRetryMax = 1
 		failoverErr.ImmediateSameAccountRetry = true
+		if codexCapacity {
+			failoverErr.SameAccountRetryDelay = 100 * time.Millisecond
+			failoverErr.ImmediateSameAccountRetry = false
+		}
+		now := time.Now()
+		if retryAt := parseRetryAfterResetTime(responseHeaders, now); retryAt != nil && retryAt.After(now) {
+			failoverErr.SameAccountRetryDelay = retryAt.Sub(now)
+			if failoverErr.SameAccountRetryDelay > openAIOAuth429MaxRetryDelay {
+				failoverErr.SameAccountRetryDelay = openAIOAuth429MaxRetryDelay
+			}
+			failoverErr.ImmediateSameAccountRetry = false
+		}
+		failoverErr.SkipRetryExhaustedTempUnschedule = true
 		failoverErr.SuppressAccountScheduleFailure = true
 		failoverErr.Reason = openAI429RetryWithoutCooldownReason
+		failoverErr.ClientStatusCode = http.StatusTooManyRequests
+		failoverErr.ClientMessage = "Rate limit exceeded"
+		if codexCapacity {
+			failoverErr.ClientMessage = openAICodexCapacityMessage
+		}
 	}
 	if isOpenAIRequestBodyTooLargeError(statusCode, upstreamMsg, responseBody) {
 		failoverErr.RetryableOnSameAccount = false
@@ -389,6 +427,12 @@ func newOpenAIUpstreamFailoverError(
 	return failoverErr
 }
 
+// IsOpenAI429RetryWithoutCooldown identifies a request-local retry that keeps
+// the selected account for one replay before falling back to another account.
+func (e *UpstreamFailoverError) IsOpenAI429RetryWithoutCooldown() bool {
+	return e != nil && e.Reason == openAI429RetryWithoutCooldownReason
+}
+
 func (s *OpenAIGatewayService) newOpenAIAccountFailoverError(
 	account *Account,
 	statusCode int,
@@ -411,7 +455,8 @@ func (s *OpenAIGatewayService) newOpenAIAccountFailoverErrorWithClassificationHe
 	shouldDisable bool,
 	retryableOnSameAccount bool,
 ) *UpstreamFailoverError {
-	oauth429Retry := s.shouldRetryOpenAIOAuth429OnSameAccountWithResponse(account, statusCode, shouldDisable, classificationHeaders, responseBody)
+	oauth429Retry := !isOpenAI429RetryWithoutCooldown(statusCode, classificationHeaders, responseBody) &&
+		s.shouldRetryOpenAIOAuth429OnSameAccountWithResponse(account, statusCode, shouldDisable, classificationHeaders, responseBody)
 	failoverErr := newOpenAIUpstreamFailoverError(
 		statusCode,
 		responseHeaders,

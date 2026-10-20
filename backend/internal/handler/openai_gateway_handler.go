@@ -772,7 +772,7 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 					accountReleaseFunc()
 				}
 			}()
-			return forwardWithGrokFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
+			return forwardWithAccountFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
 				return h.gatewayService.Forward(c.Request.Context(), c, account, attemptBody)
 			})
 		}()
@@ -1353,7 +1353,7 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 					accountReleaseFunc()
 				}
 			}()
-			return forwardWithGrokFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
+			return forwardWithAccountFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
 				return h.gatewayService.ForwardAsAnthropic(c.Request.Context(), c, account, forwardBody, promptCacheKey, defaultMappedModel)
 			})
 		}()

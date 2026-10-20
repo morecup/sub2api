@@ -247,7 +247,7 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 					accountReleaseFunc()
 				}
 			}()
-			return forwardWithGrokFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
+			return forwardWithAccountFastRetries(c, account, &oauth429FailoverState, func() (*service.OpenAIForwardResult, error) {
 				return h.gatewayService.ForwardAsChatCompletions(c.Request.Context(), c, account, forwardBody, promptCacheKey, "")
 			})
 		}()

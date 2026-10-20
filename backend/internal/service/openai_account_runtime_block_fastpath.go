@@ -58,6 +58,9 @@ const (
 // classifyOpenAIOAuth429 区分账号配额耗尽信号与普通瞬时 429。只有窗口达到
 // 100% 或响应体明确给出 reset 时间时，才视为配额限流信号。
 func classifyOpenAIOAuth429(headers http.Header, responseBody []byte) (openAIOAuth429Disposition, *time.Time) {
+	if isOpenAICodexCapacity429(http.StatusTooManyRequests, responseBody) {
+		return openAIOAuth429Transient, nil
+	}
 	if snapshot := ParseCodexRateLimitHeaders(headers); snapshot != nil {
 		if normalized := snapshot.Normalize(); normalized != nil {
 			if normalized.Used7dPercent != nil && *normalized.Used7dPercent >= 100 {
@@ -85,7 +88,10 @@ func classifyOpenAIOAuth429(headers http.Header, responseBody []byte) (openAIOAu
 		resetAt := time.Unix(*resetUnix, 0)
 		return openAIOAuth429QuotaReset, &resetAt
 	}
-	if resetAt := parseRetryAfterResetTime(headers, time.Now()); resetAt != nil && (strings.EqualFold(strings.TrimSpace(extractUpstreamErrorMessage(responseBody)), "Rate limit exceeded") || resetAt.After(time.Now().Add(openAIOAuth429RetryWindow))) {
+	if isOpenAI429RetryWithoutCooldown(http.StatusTooManyRequests, headers, responseBody) {
+		return openAIOAuth429Transient, nil
+	}
+	if resetAt := parseRetryAfterResetTime(headers, time.Now()); resetAt != nil && resetAt.After(time.Now().Add(openAIOAuth429RetryWindow)) {
 		return openAIOAuth429QuotaReset, resetAt
 	}
 	return openAIOAuth429Transient, nil
