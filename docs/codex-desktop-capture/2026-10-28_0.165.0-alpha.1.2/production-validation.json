@@ -1,0 +1,354 @@
+{
+  "verified_at": "2026-10-28T09:05:52.622559+00:00",
+  "endpoint": "https://bald.lulucoding.com",
+  "transport": "HTTP Responses streaming; production account WebSocket mode is off",
+  "release": {
+    "binary_sha256": "531502269d266c6a8f6a3fb38d4e909895b00bf9820e1a9e11c567bf99925882",
+    "running_sha256": "531502269d266c6a8f6a3fb38d4e909895b00bf9820e1a9e11c567bf99925882",
+    "pricing_sha256": "13b3611a05e4cc0a6f9085cab257e64c3ff072a3df5a7b94ea8cbdf3e60a9105",
+    "build_tags": [
+      "build\t-tags=embed,http2legacy",
+      "build\t-tags=embed,http2legacy"
+    ],
+    "profile_versions": [
+      {
+        "app": "26.1023.50603",
+        "cli": "0.165.0-alpha.1.2",
+        "count": 1916,
+        "browser": "156.0.0.0"
+      }
+    ]
+  },
+  "deployment": {
+    "canonical_command": "python tools/deploy_vps.py",
+    "old_pid": 3213824,
+    "new_pid": 1186944,
+    "expected_process_starts": 1,
+    "automatic_restarts": 0,
+    "checks": {
+      "online": true,
+      "new_pid": true,
+      "single_restart": true,
+      "binary_match": true,
+      "tags": true,
+      "config_unchanged": true,
+      "health": true,
+      "assets": true,
+      "profiles_preserved": true,
+      "pricing_policy_preserved": true,
+      "other_processes_unchanged": true,
+      "log_sink_healthy": true,
+      "clean_fatal_logs": true,
+      "external_http": true
+    },
+    "external_http": {
+      "/health": 200,
+      "/admin/accounts": 200
+    },
+    "config_sha256": "2134dcebeb5514994176d137b7d8c1589bf1cb0f143593a51dcb585aea3c0feb",
+    "profile_environment_preserved": true,
+    "two_existing_routes_added_gpt_6_1_terra": true,
+    "binary_and_pricing_backups_preserved": true
+  },
+  "requests": {
+    "total_gateway_attempts": 17,
+    "completed": 16,
+    "outbound_snapshots": 18,
+    "usage_records": 16,
+    "models": [
+      {
+        "model": "gpt-6.1-sol",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-6-astra",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-6.1-terra",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-6-sol",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-6-luna",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-5.6-sol",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "first_turn": "passed",
+        "continuation": "passed",
+        "returned_model_matches": true,
+        "outbound_headers_match": true,
+        "egress_timezone_matches": true,
+        "time_contexts_match": true,
+        "attestation_region_matches": true,
+        "metadata_and_session_match": true
+      }
+    ]
+  },
+  "initial_failure": {
+    "model": "gpt-6.1-sol",
+    "upstream_status": 429,
+    "upstream_code": "turn_rate_limit_exceeded",
+    "upstream_message": "Codex is at capacity, please try again later",
+    "gateway_stream_error": "gateway_concurrency_limit",
+    "retry_first_and_second_turn_passed": true
+  },
+  "outbound_sample": {
+    "headers": {
+      "accept": "text/event-stream",
+      "content-encoding": "zstd",
+      "content-type": "application/json",
+      "originator": "codex_work_desktop",
+      "user-agent": "Codex Desktop/0.165.0-alpha.1.2 (Windows 10.0.26200; x86_64) dumb (Codex Desktop; 26.1023.50603)",
+      "version": "0.165.0-alpha.1.2",
+      "x-codex-beta-features": "remote_compaction_v2",
+      "x-openai-internal-codex-responses-lite": "true"
+    },
+    "header_names": [
+      "accept",
+      "authorization",
+      "chatgpt-account-id",
+      "content-encoding",
+      "content-type",
+      "cookie",
+      "originator",
+      "session-id",
+      "thread-id",
+      "user-agent",
+      "version",
+      "x-client-request-id",
+      "x-codex-beta-features",
+      "x-codex-routing-hint",
+      "x-codex-turn-metadata",
+      "x-codex-window-id",
+      "x-oai-attestation",
+      "x-openai-internal-codex-responses-lite"
+    ],
+    "tls_profile": "Codex Desktop 26.1023.6123.0 (rustls / reqwest)",
+    "header_order": [
+      "version",
+      "x-codex-beta-features",
+      "x-codex-turn-state",
+      "originator",
+      "x-codex-window-id",
+      "x-codex-turn-metadata",
+      "x-oai-attestation",
+      "x-openai-internal-codex-responses-lite",
+      "x-codex-routing-hint",
+      "x-client-request-id",
+      "session-id",
+      "thread-id",
+      "accept",
+      "content-encoding",
+      "content-type",
+      "authorization",
+      "chatgpt-account-id",
+      "user-agent",
+      "cookie",
+      "content-length"
+    ],
+    "timezone": "America/New_York",
+    "locale": "en-US",
+    "egress_resolved": true,
+    "attestation_timezone_matches": true,
+    "attestation_locale_matches": true,
+    "metadata_body_matches": true,
+    "session_cache_matches": true,
+    "ws_metadata_absent": true,
+    "time_contexts": [
+      {
+        "role": "user",
+        "tag": "environment_context",
+        "timezone": "America/New_York",
+        "date": "2026-10-28"
+      },
+      {
+        "role": "developer",
+        "tag": "codex_apps_client_time_context",
+        "timezone": "America/New_York",
+        "date": "2026-10-28"
+      }
+    ]
+  },
+  "egress_verification": {
+    "source": "Selected proxy probe followed by an independent geographic lookup of the observed exit IP",
+    "country": "US",
+    "timezone": "America/New_York",
+    "saved_account_timezone": "Asia/Shanghai",
+    "input_timezone": "Asia/Shanghai",
+    "input_date": "2001-01-01",
+    "persisted_account_profile_unchanged": true
+  },
+  "logging": {
+    "source": "ops_system_logs and live ingestion health; file logs are disabled",
+    "diagnostics": {
+      "count": 93,
+      "latest": "2026-10-28T17:05:54.172676+08:00",
+      "unsupported_http2": 0,
+      "panic_fatal": 0
+    },
+    "sink": {
+      "queue_depth": 0,
+      "queue_capacity": 5000,
+      "dropped_count": 0,
+      "write_failed_count": 0,
+      "written_count": 93,
+      "avg_write_delay_ms": 3,
+      "last_error": ""
+    }
+  },
+  "preflight": [
+    {
+      "name": "repository-default",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/repository",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "repository-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit http2legacy",
+        "./internal/repository",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "service-default",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/service",
+        "-run",
+        "Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)|QueryUsage|Heartbeat|Failover",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "service-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit http2legacy",
+        "./internal/service",
+        "-run",
+        "Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)|QueryUsage|Heartbeat|Failover",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "build-tags",
+      "command": [
+        "bash",
+        "deploy/tests/grok-http2-build-tags-test.sh"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "transport-default",
+      "command": [
+        "go",
+        "test",
+        "./internal/pkg/grokhttp2/...",
+        "./internal/pkg/tlsfingerprint",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "transport-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=http2legacy",
+        "./internal/pkg/grokhttp2/...",
+        "./internal/pkg/tlsfingerprint",
+        "-count=1"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "limitations": [
+    "Only the active production HTTP route was invoked. Production WebSocket forwarding was not enabled or tested.",
+    "Outbound snapshots inspect actual request objects at the upstream transport boundary; configured HTTP/2 order is checked against capture and local wire tests, not a new production TLS MITM capture.",
+    "Account-specific Windows build 10.0.26200 is preserved; official capture host used 10.0.26100. CLI/App versions and request conventions match.",
+    "This is a low-effort text first-turn/continuation smoke test, not every account, reasoning effort, tool/image/compact case or service tier.",
+    "The initial 6.1 Sol capacity failure remains recorded; successful retry does not guarantee future upstream capacity."
+  ],
+  "diagnostic_cleanup": {
+    "removed_private_snapshots": 18,
+    "remaining_for_this_run": 0,
+    "release_and_mapping_backups_preserved": true
+  }
+}

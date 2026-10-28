@@ -422,7 +422,7 @@ func normalizeOpenAILongContextBillingExtra(platform string, extra map[string]an
 	}
 	_, exists := normalized[openAILongContextBillingEnabledKey]
 	if !exists {
-		normalized[openAILongContextBillingEnabledKey] = false
+		normalized[openAILongContextBillingEnabledKey] = true
 	}
 	return normalized, nil
 }
@@ -434,11 +434,9 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 	}
 
 	_, provided := input.Extra[openAILongContextBillingEnabledKey]
-	current, hasCurrent := account.Extra[openAILongContextBillingEnabledKey].(bool)
 	if !provided {
-		if hasCurrent {
-			normalized[openAILongContextBillingEnabledKey] = current
-		}
+		// Updating an existing account must preserve its effective billing setting.
+		normalized[openAILongContextBillingEnabledKey] = account.IsOpenAILongContextBillingEnabled()
 	}
 	return normalized, nil
 }

@@ -1,0 +1,105 @@
+{
+  "captured_at": "2026-10-28T11:43:11.366433+00:00",
+  "source": "One passively observed live production ingress to port 18082; not a generated smoke prompt",
+  "client_user_agent": "Codex Desktop/0.165.0-alpha.1.2 (Mac OS 27.0.1; arm64) unknown (Codex Desktop; 26.1023.50603)",
+  "model": "gpt-6.1-sol",
+  "decoded_body_sha256": "bd7f6cf39d35ee1e9ad8358ad334db44f9f05efe1c9672c0e5e04274566449bb",
+  "body_bytes": 472407,
+  "input_items": 42,
+  "method": {
+    "ingress_capture": "Bounded tcpdump stream consumed in memory; first complete Codex Responses request only; stopped immediately afterwards",
+    "credential_headers": "Authorization, cookies, API keys and forwarded client IPs removed before export",
+    "replay": "Complete semantic JSON through the local production Forward path, using snapshots of two production client profiles and their independently probed egress zones; terminal upstream adapter captures the request and returns a fixture",
+    "external_model_calls": 0,
+    "production_original_egress_captured": false,
+    "server_configuration_modified": false
+  },
+  "validation": [
+    {
+      "account_id": 1958,
+      "egress_timezone": "America/New_York",
+      "time_blocks_synchronized": true,
+      "attestation_locale_timezone_screen_match": true,
+      "installation_matches_account": true,
+      "header_body_metadata_match": true,
+      "header_body_session_match": true,
+      "async_question_trigger_preserved_after_fix": true,
+      "tool_call_output_pairs_intact": 9,
+      "tool_inputs_outputs_schemas_unchanged": true,
+      "reasoning_encrypted_content_unchanged": true,
+      "input_items_preserved": 42,
+      "only_time_context_text_changed": true
+    },
+    {
+      "account_id": 1961,
+      "egress_timezone": "America/Los_Angeles",
+      "time_blocks_synchronized": true,
+      "attestation_locale_timezone_screen_match": true,
+      "installation_matches_account": true,
+      "header_body_metadata_match": true,
+      "header_body_session_match": true,
+      "async_question_trigger_preserved_after_fix": true,
+      "tool_call_output_pairs_intact": 9,
+      "tool_inputs_outputs_schemas_unchanged": true,
+      "reasoning_encrypted_content_unchanged": true,
+      "input_items_preserved": 42,
+      "only_time_context_text_changed": true
+    }
+  ],
+  "replaced": [
+    "timezone in standalone user environment_context",
+    "timezone in standalone developer codex_apps_client_time_context",
+    "User-Agent OS/architecture/client profile",
+    "installation_id",
+    "session_id and thread_id with prompt_cache_key",
+    "window_id",
+    "attestation generated from selected account/egress"
+  ],
+  "preserved": [
+    "turn_id, root_turn_id, context_window_id (observed unchanged across the two route replays)",
+    "original local filesystem paths, shell and workspace metadata",
+    "tool argument and output contents; 9 call/result associations",
+    "reasoning encrypted_content",
+    "user and developer task instructions apart from the generated time blocks"
+  ],
+  "finding": {
+    "field": "turn_trigger",
+    "observed_inbound": "send_user_message_async_question",
+    "production_code_before_fix": "composer",
+    "local_code_after_fix": "send_user_message_async_question",
+    "bundled_desktop_app_contains_observed_enum": true,
+    "local_fix_deployed": false
+  },
+  "identifier_policy_note": "Turn/context IDs are still client-owned in the captured Desktop profile path. Account isolation of these IDs, if desired, needs deterministic mapping and consistent root/fork/prediction references; it is not equivalent to randomizing each request. Original session UUID inside a real workspace path must not be globally substituted.",
+  "timezone_semantics_note": "The generated client time context explicitly tells the model to use it for user-facing dates and schedules. Rewriting it to the egress zone also changes that behavior; this is not merely transport fingerprint metadata.",
+  "limits": [
+    "One real request; not representative of all clients or every request variant.",
+    "The complete outgoing body was inspected by an offline replay, not captured from the original production upstream TLS stream.",
+    "The small async-question metadata fix is local and is not included in the earlier deployed binary.",
+    "The captured payload is retained privately outside Git; the public report contains no prompt, workspace path or credential values."
+  ],
+  "tests": [
+    {
+      "tags": "unit",
+      "scope": "async-question metadata regression, October metadata and Codex metadata tests",
+      "result": "passed"
+    },
+    {
+      "tags": "unit http2legacy",
+      "scope": "same metadata regression selection",
+      "result": "passed"
+    },
+    {
+      "tags": "unit http2legacy",
+      "scope": "full captured request through Forward with two production profiles and a local terminal adapter",
+      "result": "passed"
+    }
+  ],
+  "production_after_audit": {
+    "capture_processes_remaining": 0,
+    "pid": 1186944,
+    "health_http": 200,
+    "binary_sha256": "531502269d266c6a8f6a3fb38d4e909895b00bf9820e1a9e11c567bf99925882",
+    "unchanged": true
+  }
+}

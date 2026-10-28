@@ -57,14 +57,13 @@ func TestCodexLifecycleWSAndCompactionMetadata(t *testing.T) {
 	require.Equal(t, contextID, gjson.Get(compact, "context_window_id").String())
 }
 
-func TestCodexLifecycleFixedNamespaceIsolation(t *testing.T) {
+func TestCodexLifecycleFixedSessionUsesSavedAccountSeed(t *testing.T) {
 	fixed, task := newCodexUUIDV7(), newCodexUUIDV7()
-	a := resolveCodexSessionUUID(1, 2, task, fixed)
-	require.Equal(t, a, resolveCodexSessionUUID(1, 2, task, fixed))
-	require.NotEqual(t, a, resolveCodexSessionUUID(1, 2, newCodexUUIDV7(), fixed))
-	require.NotEqual(t, a, resolveCodexSessionUUID(1, 3, task, fixed))
-	require.NotEqual(t, a, resolveCodexSessionUUID(2, 2, task, fixed))
-	require.NotEqual(t, resolveCodexSessionUUID(1, 2, "", fixed), resolveCodexSessionUUID(1, 2, "", fixed))
+	require.Equal(t, fixed, resolveCodexSessionUUID(1, 2, task, fixed))
+	require.Equal(t, fixed, resolveCodexSessionUUID(1, 2, newCodexUUIDV7(), fixed))
+	require.Equal(t, fixed, resolveCodexSessionUUID(1, 3, task, fixed))
+	require.Equal(t, fixed, resolveCodexSessionUUID(2, 2, task, fixed))
+	require.Equal(t, fixed, resolveCodexSessionUUID(1, 2, "", fixed))
 	require.Equal(t, task, codexSessionSeedFromMetadata("", `{"thread_id":"`+task+`"}`))
 }
 

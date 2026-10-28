@@ -627,6 +627,11 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 	body []byte,
 	token string,
 ) (*http.Request, error) {
+	account = s.prepareCodexEgressAccount(ctx, account)
+	body, err := rewriteCodexEgressTimezone(body, account, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("apply codex passthrough egress timezone: %w", err)
+	}
 	targetURL := openaiPlatformAPIURL
 	switch account.Type {
 	case AccountTypeOAuth:
@@ -710,7 +715,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequestOpenAIPassthrough(
 		actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 		req.Header.Set(openAIWSTurnMetadataHeader, openAIWSFrameTurnMetadata(body, req.Header.Get(openAIWSTurnMetadataHeader)))
 		fedRAMP := req.Header.Get("x-openai-fedramp")
-		applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, isCompact, responsesLite, actualModel)
+		applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, account.GetOpenAIFixedSessionID(), resolveOpenAIUpstreamOriginator(c, false), isCompact, responsesLite, actualModel)
+		applyCodexAnalyticsPolicy(req.Header, s.cfg)
 		if fedRAMP != "" {
 			req.Header.Set("x-openai-fedramp", fedRAMP)
 		}
@@ -1170,7 +1176,10 @@ type openaiNonStreamingResultPassthrough struct {
 
 const openAIStreamKeepaliveBytesKey = "openai_stream_keepalive_bytes"
 
-func recordOpenAIStreamKeepaliveBytes(c *gin.Context, written int) {
+// RecordOpenAIStreamKeepaliveBytes records non-semantic heartbeats written by
+// the request goroutine, including concurrency/message queue pings before
+// Forward. These bytes must not prevent an otherwise safe stream retry.
+func RecordOpenAIStreamKeepaliveBytes(c *gin.Context, written int) {
 	if c == nil || written <= 0 {
 		return
 	}
@@ -1188,15 +1197,19 @@ func openAIStreamClientOutputStarted(c *gin.Context, localStarted bool) bool {
 	if c == nil || c.Writer == nil {
 		return false
 	}
-	// compact keepalive comments commit the HTTP response as 200, but they are
-	// not semantic model output and therefore must not block a safe retry.
-	// Without a compact keepalive this is equivalent to checking Writer.Size().
+	// Queue and upstream-wait heartbeats commit HTTP 200, but contain no model
+	// output and must not block a safe retry, including across attempts.
 	return OpenAICompactKeepaliveAdjustedWrittenSize(c) >= 0
 }
 
 func openAIStreamEventIsPreamble(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
-	case "response.created", "response.in_progress":
+	case "response.created", "response.queued", "response.in_progress",
+		"response.metadata", "codex.rate_limits", "codex.response.metadata",
+		"responsesapi.websocket_timing":
+		// Lifecycle and telemetry events contain no model output. In particular,
+		// response.metadata may precede an overload error with an empty output;
+		// committing it would prevent the subsequent retry or account failover.
 		return true
 	default:
 		return false

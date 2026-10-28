@@ -30,6 +30,7 @@ const (
 // *OpenAIForwardResult（WebSearchCalls=1，供按次计费）；上游错误被原样透传
 // 给客户端时返回 (nil, nil)，不产生计费。
 func (s *OpenAIGatewayService) ForwardAlphaSearch(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	account = s.prepareCodexEgressAccount(ctx, account)
 	if s == nil || c == nil || account == nil {
 		return nil, fmt.Errorf("service, context, and account are required")
 	}
@@ -289,6 +290,7 @@ func (s *OpenAIGatewayService) buildOpenAIAlphaSearchResponsesWebSearchRequest(c
 		model := gjson.GetBytes(body, "model").String()
 		fedRAMP := req.Header.Get("x-openai-fedramp")
 		applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, false, model)
+		applyCodexAnalyticsPolicy(req.Header, s.cfg)
 		if fedRAMP != "" {
 			req.Header.Set("x-openai-fedramp", fedRAMP)
 		}

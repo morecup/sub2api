@@ -1,0 +1,119 @@
+{
+  "generated_at": "2026-09-23T10:29:01.962293+00:00",
+  "core_cases": [
+    {
+      "case": "sol_ws",
+      "passed": true,
+      "checks": {
+        "image_observed": true,
+        "tool_error_recovered": true,
+        "local_artifact_verified": true,
+        "post_compact_disk_verified": true,
+        "verifier_result_observed": true,
+        "interrupted_after_deltas": true,
+        "recovery_completed": true
+      },
+      "artifact": "sol_ws.json",
+      "artifact_sha256": "636bd08e9b7a7514136490123686457824590c592ceb32463cd11610a2b28673",
+      "request_count_including_continuations": 16,
+      "workspace_kinds": {
+        "omitted": 2,
+        "project": 14
+      }
+    },
+    {
+      "case": "luna_ws",
+      "passed": true,
+      "checks": {
+        "image_observed": true,
+        "tool_error_recovered": true,
+        "local_artifact_verified": true,
+        "post_compact_disk_verified": true,
+        "verifier_result_observed": true,
+        "interrupted_after_deltas": true,
+        "recovery_completed": true
+      },
+      "artifact": "luna_ws.json",
+      "artifact_sha256": "8dada2c7fd9cee2d151d1f54cb0efb8efc8f36fc49662ab1594dc6b94d67d044",
+      "request_count_including_continuations": 21,
+      "workspace_kinds": {
+        "omitted": 2,
+        "project": 19
+      }
+    },
+    {
+      "case": "luna_http",
+      "passed": true,
+      "checks": {
+        "image_observed": true,
+        "tool_error_recovered": true,
+        "local_artifact_verified": true,
+        "post_compact_disk_verified": true,
+        "verifier_result_observed": true,
+        "interrupted_after_deltas": true,
+        "recovery_completed": true
+      },
+      "artifact": "luna_http.json",
+      "artifact_sha256": "8edc353b44ed1bd676c3fc407e725faa2505a079f9f6f0508ae4ae366c3c6352",
+      "request_count_including_continuations": 15,
+      "workspace_kinds": {
+        "project": 14,
+        "omitted": 1
+      }
+    },
+    {
+      "case": "sol_http",
+      "passed": true,
+      "checks": {
+        "image_observed": true,
+        "tool_error_recovered": true,
+        "local_artifact_verified": true,
+        "post_compact_disk_verified": true,
+        "verifier_result_observed": true,
+        "interrupted_after_deltas": true,
+        "recovery_completed": true
+      },
+      "artifact": "sol_http.json",
+      "artifact_sha256": "304f72f5d6bb60f52e4b450417d7b1bb282ee1c07d5a7837daf847ef681d3bf9",
+      "request_count_including_continuations": 15,
+      "workspace_kinds": {
+        "project": 14,
+        "omitted": 1
+      }
+    }
+  ],
+  "additional_smoke_cases": [
+    {
+      "case": "sol_fast",
+      "passed": true,
+      "effort": "high",
+      "service_tier": "priority",
+      "actual_transports": [
+        "HTTP"
+      ]
+    },
+    {
+      "case": "luna_fast",
+      "passed": true,
+      "effort": "high",
+      "service_tier": "priority",
+      "actual_transports": [
+        "WS"
+      ]
+    }
+  ],
+  "all_required_core_checks_passed": true,
+  "normal_chat_posts_in_matrix_session": 0,
+  "model_requests_including_prewarm_titles_continuations": 78,
+  "explicit_synthetic_426_count": 4,
+  "raw_files_excluded_from_git": true,
+  "fault_injection_removed": true,
+  "host": {
+    "checked_at": "2026-09-23T10:27:45.6861929Z",
+    "original_main_process_unchanged": true,
+    "original_store_asar_unchanged": true,
+    "system_proxy_unchanged": true,
+    "capture_ports_released": true
+  },
+  "sanitized_json_scan_passed": true
+}

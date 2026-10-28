@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -98,6 +99,58 @@ func TestShouldAutoPauseOpenAIAccountByQuota_AutoResetCreditStates(t *testing.T)
 		paused, _ := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
 		require.False(t, paused)
 	})
+}
+
+func TestShouldAutoPauseOpenAIAccountByQuota_ToolFrameWithoutCredits(t *testing.T) {
+	now := time.Now().UTC()
+	for _, window := range []string{"5h", "7d"} {
+		for _, used := range []float64{90, 100} {
+			for _, tc := range []struct {
+				name      string
+				toolFrame bool
+				status    string
+				count     int
+				checkedAt string
+				wantPause bool
+			}{
+				{"no credits with Tool Frame", true, OpenAIAutoResetStatusNoCredit, 0, now.Format(time.RFC3339), false},
+				{"no credits without Tool Frame", false, OpenAIAutoResetStatusNoCredit, 0, now.Format(time.RFC3339), true},
+				{"unknown inventory", true, "", 0, "", true},
+				{"stale empty inventory", true, OpenAIAutoResetStatusNoCredit, 0, now.Add(-2 * openAIAutoResetSnapshotTTL).Format(time.RFC3339), true},
+				{"missing timestamp", true, OpenAIAutoResetStatusNoCredit, 0, "", true},
+				{"invalid timestamp", true, OpenAIAutoResetStatusNoCredit, 0, "invalid", true},
+				{"checking inventory", true, OpenAIAutoResetStatusChecking, 0, now.Format(time.RFC3339), true},
+				{"reset in progress", true, OpenAIAutoResetStatusResetting, 0, now.Format(time.RFC3339), true},
+				{"failed reset", true, OpenAIAutoResetStatusFailed, 0, now.Format(time.RFC3339), true},
+				{"inconsistent inventory", true, OpenAIAutoResetStatusNoCredit, 1, now.Format(time.RFC3339), true},
+				{"available credits", true, OpenAIAutoResetStatusAvailable, 1, now.Format(time.RFC3339), used >= 100},
+			} {
+				t.Run(window+"/"+fmt.Sprint(used)+"/"+tc.name, func(t *testing.T) {
+					extra := map[string]any{
+						OpenAIAutoResetCreditEnabledExtraKey:  true,
+						openAICodexToolFrameOn5hExhaustedKey:  tc.toolFrame,
+						"auto_pause_" + window + "_threshold": 0.8,
+						"codex_" + window + "_used_percent":   used,
+						"codex_" + window + "_reset_at":       now.Add(time.Hour).Format(time.RFC3339),
+						"codex_usage_updated_at":              now.Format(time.RFC3339),
+					}
+					if tc.status != "" {
+						extra[OpenAIAutoResetCreditStateExtraKey] = OpenAIAutoResetCreditState{
+							Status: tc.status, AvailableCount: tc.count, CheckedAt: tc.checkedAt,
+						}
+					}
+					account := &Account{Platform: PlatformOpenAI, Type: AccountTypeOAuth, Extra: extra}
+					paused, decision := shouldAutoPauseOpenAIAccountByQuota(context.Background(), account)
+					require.Equal(t, tc.wantPause, paused)
+					if tc.wantPause {
+						require.Equal(t, window, decision.window)
+					} else {
+						require.Empty(t, decision.reason)
+					}
+				})
+			}
+		}
+	}
 }
 
 func TestSelectOpenAIAutoResetCandidate_FailsClosed(t *testing.T) {

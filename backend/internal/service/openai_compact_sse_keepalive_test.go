@@ -75,7 +75,7 @@ func TestOpenAIAdjustedWrittenSizeExcludesResponsesStreamKeepalive(t *testing.T)
 	c, rec := newCompactBridgeTestContext(t, false)
 	n, err := c.Writer.Write([]byte(":\n\n"))
 	require.NoError(t, err)
-	recordOpenAIStreamKeepaliveBytes(c, n)
+	RecordOpenAIStreamKeepaliveBytes(c, n)
 
 	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
 
@@ -83,6 +83,55 @@ func TestOpenAIAdjustedWrittenSizeExcludesResponsesStreamKeepalive(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, len("data: semantic\n\n"), OpenAICompactKeepaliveAdjustedWrittenSize(c))
 	require.Equal(t, ":\n\ndata: semantic\n\n", rec.Body.String())
+}
+
+func TestOpenAISSEKeepalivePreservesStateAcrossRetries(t *testing.T) {
+	c, rec := newCompactBridgeTestContext(t, false)
+	for attempt := range 4 {
+		stop := startOpenAISSEKeepalive(c, time.Hour)
+		t.Cleanup(stop)
+		// An attempt can fail before its first heartbeat. It must still retain
+		// the previous attempt's committed headers and non-semantic byte count.
+		if attempt%2 == 0 {
+			value, _ := c.Get(openAICompactSSEKeepaliveKey)
+			require.True(t, value.(*openAICompactSSEKeepalive).beat())
+		}
+		require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
+		require.False(t, openAIStreamClientOutputStarted(c, false))
+		require.True(t, StopOpenAICompactSSEKeepaliveCommitted(c))
+		stop()
+	}
+	require.Equal(t, strings.Repeat(": keepalive\n\n", 2), rec.Body.String())
+	_, err := c.Writer.WriteString("data: answer\n\n")
+	require.NoError(t, err)
+	require.Equal(t, len("data: answer\n\n"), OpenAICompactKeepaliveAdjustedWrittenSize(c))
+	require.True(t, openAIStreamClientOutputStarted(c, false))
+}
+
+func TestOpenAISSEKeepaliveReplacementStopsPreviousWorker(t *testing.T) {
+	c, rec := newCompactBridgeTestContext(t, true)
+	originalWriter := c.Writer
+	stopOuter := StartOpenAICompactSSEKeepalive(c, time.Hour)
+	t.Cleanup(stopOuter)
+	outerWriter := c.Writer
+	value, _ := c.Get(openAICompactSSEKeepaliveKey)
+	previous := value.(*openAICompactSSEKeepalive)
+	require.True(t, previous.beat())
+
+	stopInner := startOpenAISSEKeepalive(c, time.Hour)
+	t.Cleanup(stopInner)
+	value, _ = c.Get(openAICompactSSEKeepaliveKey)
+	current := value.(*openAICompactSSEKeepalive)
+	require.False(t, previous.beat(), "replacing the worker must stop it before taking its byte count")
+	require.True(t, current.beat())
+	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
+	stopInner()
+	require.Same(t, outerWriter, c.Writer)
+	stopOuter()
+	require.Same(t, originalWriter, c.Writer)
+	require.True(t, StopOpenAICompactSSEKeepaliveCommitted(c))
+	require.Equal(t, strings.Repeat(": keepalive\n\n", 2), rec.Body.String())
+	require.Equal(t, -1, OpenAICompactKeepaliveAdjustedWrittenSize(c))
 }
 
 // 心跳已提交后，2xx 桥接续写事件而不重复提交响应头。

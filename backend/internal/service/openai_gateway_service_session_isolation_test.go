@@ -104,17 +104,12 @@ func TestGenerateCodexSessionUUIDPreservesPlausibleV7Timestamp(t *testing.T) {
 	}
 }
 
-func TestResolveCodexSessionUUIDRejectsNonV7FixedShape(t *testing.T) {
+func TestResolveCodexSessionUUIDUsesSavedFixedIDVerbatim(t *testing.T) {
 	const fixedV4 = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
-	generated := resolveCodexSessionUUID(7, 42, "ignored", fixedV4)
-	parsed, err := uuid.Parse(generated)
-	require.NoError(t, err)
-	require.Equal(t, uuid.Version(7), parsed.Version())
-	require.NotEqual(t, fixedV4, generated)
-	require.Equal(t, generated, resolveCodexSessionUUID(7, 42, "ignored", fixedV4))
-	require.NotEqual(t, generated, resolveCodexSessionUUID(7, 42, "other", fixedV4), "fixed namespace must isolate tasks")
-	require.NotEqual(t, generated, resolveCodexSessionUUID(7, 99, "ignored", fixedV4), "fixed namespace must isolate API keys")
-	require.NotEqual(t, generated, resolveCodexSessionUUID(8, 42, "other", fixedV4), "legacy fixed IDs must remain account-isolated")
+	require.Equal(t, fixedV4, resolveCodexSessionUUID(7, 42, "ignored", fixedV4))
+	require.Equal(t, fixedV4, resolveCodexSessionUUID(7, 42, "other", fixedV4), "fixed mode must ignore task identity")
+	require.Equal(t, fixedV4, resolveCodexSessionUUID(7, 99, "ignored", fixedV4), "fixed mode must ignore API-key identity")
+	require.Equal(t, fixedV4, resolveCodexSessionUUID(8, 42, "other", fixedV4), "fixed mode must ignore account IDs and use the saved seed")
 }
 
 func TestCodexSessionUUIDCacheExpiresAndEvictsLRU(t *testing.T) {

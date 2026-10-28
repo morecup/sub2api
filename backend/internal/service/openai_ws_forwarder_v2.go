@@ -15,6 +15,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
+	"github.com/tidwall/sjson"
 )
 
 func (s *OpenAIGatewayService) forwardOpenAIWSV2(
@@ -153,6 +154,10 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 	storeDisabledConnMode := s.openAIWSStoreDisabledConnMode()
 	forceNewConnByPolicy := shouldForceNewConnOnStoreDisabled(storeDisabledConnMode, lastFailureReason)
 	forceNewConn := forceNewConnByPolicy && storeDisabled && previousResponseID == "" && sessionHash != "" && preferredConnID == ""
+	reasoningEffort := ""
+	if reasoning, ok := payload["reasoning"].(map[string]any); ok {
+		reasoningEffort, _ = reasoning["effort"].(string)
+	}
 	wsHeaders, sessionResolution, buildHdrErr := s.buildOpenAIWSHeaders(
 		ctx,
 		c,
@@ -165,6 +170,7 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 		promptCacheKey,
 		openAIWSPayloadString(payload, "model"),
 		openAIWSPayloadString(payload, "service_tier"),
+		reasoningEffort,
 	)
 	if buildHdrErr != nil {
 		return nil, fmt.Errorf("build ws headers: %w", buildHdrErr)
@@ -176,6 +182,11 @@ func (s *OpenAIGatewayService) forwardOpenAIWSV2(
 			installationID := codexClientProfileForAccount(account).InstallationID
 			generate, hasGenerate := payload["generate"].(bool)
 			turnMetadata = codexRequestTurnMetadata(sessionID, windowID, installationID, turnMetadata, hasGenerate && !generate)
+			turnMetadata = codexMetadataRequestFields(turnMetadata, openAIWSPayloadString(payload, "model"), "")
+			if gjson.Get(wsHeaders.Get(openAIWSTurnMetadataHeader), "analytics_enabled").Type == gjson.False {
+				turnMetadata, _ = sjson.Set(turnMetadata, "analytics_enabled", false)
+			}
+
 			setOpenAIWSTurnMetadata(payload, turnMetadata)
 			applyCodexClientMetadata(payload, installationID, turnMetadata)
 			payloadBytes = -1

@@ -383,11 +383,11 @@ func TestBuildOpenAIWSHeaders_CarriesSessionBetaFeatures(t *testing.T) {
 	}
 
 	headers := build(t, oauthAccount, "")
-	require.Equal(t, "realtime_conversation,remote_compaction_v2", headers.Get("x-codex-beta-features"),
+	require.Equal(t, "remote_compaction_v2", headers.Get("x-codex-beta-features"),
 		"WS 握手也必须带会话级 beta 头")
 
 	declared := build(t, oauthAccount, "some_other_feature")
-	require.Equal(t, []string{"realtime_conversation,remote_compaction_v2"}, declared.Values("x-codex-beta-features"),
+	require.Equal(t, []string{"remote_compaction_v2"}, declared.Values("x-codex-beta-features"),
 		"OAuth 始终使用已抓包的 Desktop beta 组合")
 
 	apiKeyHeaders := build(t, &Account{Platform: PlatformOpenAI, Type: AccountTypeAPIKey}, "")

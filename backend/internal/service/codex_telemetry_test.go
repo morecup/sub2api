@@ -214,7 +214,7 @@ func TestCodexTelemetryWSRealFramesAndModelSwitch(t *testing.T) {
 	require.NoError(t, c.WriteFrame(ctx, coderws.MessageText, []byte(`{"type":"response.create","model":"gpt-5.5"}`)))
 	_, _, err = c.ReadFrame(ctx)
 	require.NoError(t, err)
-	require.Len(t, e.series, 8)
+	require.Len(t, e.series, 10)
 	for _, model := range []string{"gpt-6-astra", "gpt-5.5"} {
 		require.Contains(t, string(codexTelemetryPayload(e.series, time.Now())), model)
 	}

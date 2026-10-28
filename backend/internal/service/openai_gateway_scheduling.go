@@ -553,6 +553,16 @@ func shouldAutoPauseOpenAIAccountByQuota(ctx context.Context, account *Account) 
 	// 只有新鲜状态明确存在可用卡才继续放行到消费阈值。
 	if config := ResolveOpenAIAutoResetCreditConfig(account); config.Enabled {
 		now := time.Now()
+		state := openAIAutoResetStateFromExtra(account.Extra)
+		// A confirmed empty credit inventory cannot reset the quota. Let the
+		// configured Tool Frame path serve requests instead of waiting for a
+		// reset that cannot happen. Unknown/stale and in-flight states still
+		// follow the reset checks below so available credits retain priority.
+		if account.IsOpenAIOAuth() && resolveAccountExtraBool(account.Extra, openAICodexToolFrameOn5hExhaustedKey) &&
+			state != nil && state.Status == OpenAIAutoResetStatusNoCredit && state.AvailableCount == 0 &&
+			!openAIAutoResetStateStale(state, now) {
+			return false, openAIQuotaAutoPauseDecision{}
+		}
 		utilization5h, has5h := resolveOpenAIQuotaUtilization(account.Extra, "5h", now)
 		utilization7d, has7d := resolveOpenAIQuotaUtilization(account.Extra, "7d", now)
 		if has5h && utilization5h >= config.Threshold5h {

@@ -164,7 +164,7 @@ func TestForwardAlphaSearchPATUsesResponsesWebSearchFallback(t *testing.T) {
 		gjson.Get(upstream.lastReq.Header.Get("X-Codex-Turn-Metadata"), "turn_id").String(),
 	)
 	require.Equal(t, codexDesktopOriginator, upstream.lastReq.Header.Get("Originator"))
-	require.Equal(t, "realtime_conversation,remote_compaction_v2", upstream.lastReq.Header.Get("X-Codex-Beta-Features"))
+	require.Equal(t, "remote_compaction_v2", upstream.lastReq.Header.Get("X-Codex-Beta-Features"))
 	require.Empty(t, upstream.lastReq.Header.Get("X-Codex-Turn-State"))
 	require.Empty(t, upstream.lastReq.Header.Get(responsesLiteHeaderKey))
 	require.Empty(t, upstream.lastReq.Header.Get("Accept-Language"))

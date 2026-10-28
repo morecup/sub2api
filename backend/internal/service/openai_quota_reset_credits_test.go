@@ -251,12 +251,20 @@ func TestQueryUsageKeepsAggregationWithDesktopRequestProfile(t *testing.T) {
 		require.Empty(t, r.Header.Get("openai-beta"))
 		require.Empty(t, r.Header.Get("x-openai-attach-auth"))
 		require.Empty(t, r.Header.Get("x-openai-attach-integrity-state"))
-		require.Empty(t, r.Header.Get("sec-ch-ua"))
 		switch r.URL.Path {
 		case "/backend-api/wham/usage":
+			require.Equal(t, `"Chromium";v="156", "CodexBrowser";v="156"`, r.Header.Get("sec-ch-ua"))
+			require.Equal(t, codexClientProfileForAccount(account).DeviceID, r.Header.Get("oai-did"))
+			require.Equal(t, "codex_webview", r.Header.Get("x-openai-web-frontend"))
+			require.Equal(t, "electron", r.Header.Get("x-openai-codex-window-type"))
+			require.Equal(t, "1", r.Header.Get("x-openai-codex-pricing-chooser"))
+			require.Equal(t, "chatgpt", r.Header.Get("oai-app-brand"))
 			w.Header().Set("content-type", "application/json")
 			_, _ = w.Write([]byte(`{"rate_limit_reset_credits":{"available_count":3}}`))
 		case "/backend-api/wham/rate-limit-reset-credits":
+			require.Empty(t, r.Header.Get("sec-ch-ua"))
+			require.Empty(t, r.Header.Get("x-openai-web-frontend"))
+			require.Empty(t, r.Header.Get("oai-app-brand"))
 			listCalls++
 			w.Header().Set("content-type", "application/json")
 			_, _ = w.Write([]byte(`{"available_count":2,"credits":[{"status":"available","expires_at":"2026-07-25T00:00:00Z"},{"status":"available","expires_at":"2026-07-26T00:00:00Z"}]}`))

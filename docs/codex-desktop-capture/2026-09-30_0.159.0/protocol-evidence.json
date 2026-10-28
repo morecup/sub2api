@@ -1,0 +1,1790 @@
+{
+  "generated_at": "2026-09-30T04:49:46.845871+00:00",
+  "versions": {
+    "package": "26.928.1915.0",
+    "app": "26.928.20755",
+    "cli": "0.159.0",
+    "webview_chromium": "154.0.0.0",
+    "otel_sdk": "0.31.0"
+  },
+  "baseline_versions": {
+    "package": "26.917.6896.0",
+    "app": "26.917.51856",
+    "cli": "0.155.0-alpha.16"
+  },
+  "model_manifest": [
+    {
+      "slug": "gpt-6.1-sol",
+      "display_name": "GPT-6.1-Sol",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        },
+        {
+          "effort": "ultra",
+          "description": "Maximum reasoning with automatic task delegation"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": "xhigh",
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "2x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.153.0"
+    },
+    {
+      "slug": "gpt-6-astra",
+      "display_name": "GPT-6-Astra",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        },
+        {
+          "effort": "ultra",
+          "description": "Maximum reasoning with automatic task delegation"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": "xhigh",
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "2x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.153.0"
+    },
+    {
+      "slug": "gpt-6-sol",
+      "display_name": "GPT-6-Sol",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        },
+        {
+          "effort": "ultra",
+          "description": "Maximum reasoning with automatic task delegation"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed"
+        }
+      ],
+      "minimal_client_version": "0.155.0"
+    },
+    {
+      "slug": "gpt-6-luna",
+      "display_name": "GPT-6-Luna",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed"
+        }
+      ],
+      "minimal_client_version": "0.155.0"
+    },
+    {
+      "slug": "gpt-reserve",
+      "display_name": "GPT-Reserve",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v1",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.144.0"
+    },
+    {
+      "slug": "gpt-5.6-sol",
+      "display_name": "GPT-5.6-Sol",
+      "default_reasoning_level": "low",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        },
+        {
+          "effort": "ultra",
+          "description": "Maximum reasoning with automatic task delegation"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.144.0"
+    },
+    {
+      "slug": "gpt-5.6-terra",
+      "display_name": "GPT-5.6-Terra",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        },
+        {
+          "effort": "ultra",
+          "description": "Maximum reasoning with automatic task delegation"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v2",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.144.0"
+    },
+    {
+      "slug": "gpt-5.6-luna",
+      "display_name": "GPT-5.6-Luna",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v1",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.144.0"
+    },
+    {
+      "slug": "gpt-5.5",
+      "display_name": "GPT-5.5",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        }
+      ],
+      "use_responses_lite": false,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 272000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": null,
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": null,
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.124.0"
+    },
+    {
+      "slug": "codex-auto-review",
+      "display_name": "Codex Auto Review",
+      "default_reasoning_level": "medium",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "Fast responses with lighter reasoning"
+        },
+        {
+          "effort": "medium",
+          "description": "Balances speed and reasoning depth for everyday tasks"
+        },
+        {
+          "effort": "high",
+          "description": "Greater reasoning depth for complex problems"
+        },
+        {
+          "effort": "xhigh",
+          "description": "Extra high reasoning depth for complex problems"
+        },
+        {
+          "effort": "max",
+          "description": "Maximum reasoning depth for the hardest problems"
+        }
+      ],
+      "use_responses_lite": true,
+      "input_modalities": [
+        "text",
+        "image"
+      ],
+      "context_window": 272000,
+      "max_context_window": 872000,
+      "supports_parallel_tool_calls": true,
+      "multi_agent_version": "v1",
+      "multi_agent_reasoning_effort": null,
+      "tool_mode": "code_mode_only",
+      "prefer_websockets": true,
+      "supports_search_tool": true,
+      "apply_patch_tool_type": "freeform",
+      "service_tiers": [
+        {
+          "id": "priority",
+          "name": "Fast",
+          "description": "1.5x speed, increased usage"
+        }
+      ],
+      "minimal_client_version": "0.98.0"
+    }
+  ],
+  "request_counts_including_prewarm_titles_and_continuations": {
+    "gpt-5.6-luna": 11,
+    "gpt-6.1-sol": 35,
+    "gpt-6-luna": 3
+  },
+  "frame_types": {
+    "response.create": 35,
+    "codex.rate_limits": 35,
+    "codex.response.metadata": 35,
+    "response.created": 35,
+    "response.in_progress": 35,
+    "responsesapi.websocket_timing": 34,
+    "response.completed": 34,
+    "response.output_item.added": 53,
+    "response.output_item.done": 52,
+    "response.content_part.added": 14,
+    "response.output_text.delta": 704,
+    "response.output_text.done": 13,
+    "response.content_part.done": 13,
+    "response.custom_tool_call_input.delta": 1499,
+    "response.custom_tool_call_input.done": 17,
+    "response.metadata": 21,
+    "response.function_call_arguments.delta": 76,
+    "response.function_call_arguments.done": 4,
+    "response.compaction.compacting": 2
+  },
+  "headers": [
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 101,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "originator",
+        "version",
+        "x-codex-beta-features",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "openai-beta",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "ambient_suggestions",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "Codex Desktop",
+      "routing_hint": "model=gpt-5.6-luna",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 101,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "originator",
+        "version",
+        "x-codex-beta-features",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "openai-beta",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "ambient_suggestion_safety",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "Codex Desktop",
+      "routing_hint": "model=gpt-5.6-luna",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 101,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "openai-beta",
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 101,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "openai-beta",
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "thread_title",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6-luna",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 101,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "openai-beta",
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "client_type",
+        "model",
+        "reasoning_effort",
+        "source",
+        "workspace_kind"
+      ],
+      "request_kind": "turn",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 426,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "openai-beta",
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "GET",
+      "http_version": "HTTP/1.1",
+      "status": 426,
+      "names": [
+        "host",
+        "connection",
+        "upgrade",
+        "sec-websocket-version",
+        "sec-websocket-key",
+        "cookie",
+        "chatgpt-account-id",
+        "authorization",
+        "user-agent",
+        "openai-beta",
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-codex-routing-hint",
+        "x-oai-attestation",
+        "sec-websocket-extensions"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "prewarm",
+      "thread_source": "thread_title",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6-luna",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": "responses_websockets=2026-02-06",
+      "lite_header": null,
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "client_type",
+        "model",
+        "reasoning_effort",
+        "source",
+        "workspace_kind"
+      ],
+      "request_kind": "turn",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "model",
+        "reasoning_effort"
+      ],
+      "request_kind": "turn",
+      "thread_source": "thread_title",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6-luna",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "x-codex-turn-state",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "client_type",
+        "model",
+        "reasoning_effort",
+        "source",
+        "workspace_kind"
+      ],
+      "request_kind": "turn",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "compaction"
+      ],
+      "request_kind": "compaction",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "client_type",
+        "model",
+        "reasoning_effort",
+        "source",
+        "workspace_kind"
+      ],
+      "request_kind": "turn",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    },
+    {
+      "method": "POST",
+      "http_version": "HTTP/2.0",
+      "status": 200,
+      "names": [
+        "version",
+        "x-codex-beta-features",
+        "originator",
+        "x-codex-window-id",
+        "x-codex-turn-metadata",
+        "x-oai-attestation",
+        "x-openai-internal-codex-responses-lite",
+        "x-codex-routing-hint",
+        "x-client-request-id",
+        "session-id",
+        "thread-id",
+        "accept",
+        "content-encoding",
+        "content-type",
+        "authorization",
+        "chatgpt-account-id",
+        "user-agent",
+        "cookie",
+        "content-length"
+      ],
+      "metadata_keys": [
+        "installation_id",
+        "session_id",
+        "thread_id",
+        "agent_name",
+        "turn_id",
+        "window_id",
+        "window_number",
+        "context_window_id",
+        "request_kind",
+        "root_turn_id",
+        "thread_source",
+        "turn_trigger",
+        "sandbox",
+        "sandbox_mode",
+        "auto_review_enabled",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "workspaces",
+        "turn_started_at_unix_ms",
+        "analytics_enabled",
+        "client_type",
+        "model",
+        "reasoning_effort",
+        "source",
+        "workspace_kind"
+      ],
+      "request_kind": "turn",
+      "thread_source": "user",
+      "user_agent": "Codex Desktop/0.159.0 (Windows 10.0.26100; x86_64) dumb (Codex Desktop; 26.928.20755)",
+      "version": "0.159.0",
+      "originator": "codex_work_desktop",
+      "routing_hint": "model=gpt-6.1-sol;tier=priority",
+      "beta_features": "remote_compaction_v2",
+      "openai_beta": null,
+      "lite_header": "true",
+      "has_cookie": true
+    }
+  ],
+  "request_structure": {
+    "keys": {
+      "observed": [
+        "access_programs",
+        "client_metadata",
+        "generate",
+        "include",
+        "input",
+        "model",
+        "parallel_tool_calls",
+        "previous_response_id",
+        "prompt_cache_key",
+        "reasoning",
+        "service_tier",
+        "store",
+        "stream",
+        "stream_options",
+        "text",
+        "tool_choice",
+        "type"
+      ],
+      "newly_observed": [
+        "service_tier"
+      ],
+      "baseline_only_not_proof_of_removal": []
+    },
+    "metadata_keys": {
+      "observed": [
+        "agent_name",
+        "analytics_enabled",
+        "auto_review_enabled",
+        "client_type",
+        "compaction",
+        "context_window_id",
+        "installation_id",
+        "model",
+        "node_repl_auto_review_required",
+        "node_repl_disabled",
+        "reasoning_effort",
+        "request_kind",
+        "root_turn_id",
+        "sandbox",
+        "sandbox_mode",
+        "session_id",
+        "source",
+        "thread_id",
+        "thread_source",
+        "turn_id",
+        "turn_started_at_unix_ms",
+        "turn_trigger",
+        "window_id",
+        "window_number",
+        "workspace_kind",
+        "workspaces"
+      ],
+      "newly_observed": [
+        "client_type",
+        "compaction",
+        "source"
+      ],
+      "baseline_only_not_proof_of_removal": []
+    },
+    "client_metadata_keys": {
+      "observed": [
+        "guardian_credits_requested",
+        "mcp_attribution",
+        "root_turn_id",
+        "session_id",
+        "thread_id",
+        "turn_id",
+        "ws_request_header_x_openai_internal_codex_responses_lite",
+        "x-codex-installation-id",
+        "x-codex-turn-metadata",
+        "x-codex-window-id",
+        "x-codex-ws-stream-request-start-ms"
+      ],
+      "newly_observed": [
+        "mcp_attribution"
+      ],
+      "baseline_only_not_proof_of_removal": []
+    }
+  },
+  "metrics": {
+    "observed": [
+      "codex.app_server.codex_home.size_bytes",
+      "codex.apps.installed.connector_count",
+      "codex.apps.installed.duration_ms",
+      "codex.apps.installed.response_bytes",
+      "codex.apps.installed.tool_count",
+      "codex.apps.read.duration_ms",
+      "codex.apps.refresh.duration_ms",
+      "codex.apps.snapshot.age_ms",
+      "codex.feature.state",
+      "codex.hooks.run",
+      "codex.hooks.run.duration_ms",
+      "codex.mcp.protocol_discovery",
+      "codex.mcp.protocol_discovery.duration_ms",
+      "codex.mcp.tools.cache_publish.duration_ms",
+      "codex.mcp.tools.cache_write.duration_ms",
+      "codex.mcp.tools.fetch_uncached.duration_ms",
+      "codex.mcp.tools.list.duration_ms",
+      "codex.plugins.loaded_cache.event",
+      "codex.plugins.loaded_cache.load.duration_ms",
+      "codex.plugins.loaded_cache.request",
+      "codex.plugins.loaded_cache.wait.duration_ms",
+      "codex.process.start",
+      "codex.remote_models.fetch_update.duration_ms",
+      "codex.remote_models.load_cache.duration_ms",
+      "codex.responses_api_engine_iapi_tbt.duration_ms",
+      "codex.responses_api_inference_time.duration_ms",
+      "codex.responses_api_overhead.duration_ms",
+      "codex.rollout_compression.materialize",
+      "codex.rollout_compression.read",
+      "codex.rollout_compression.read.io_duration_ms",
+      "codex.shell_snapshot",
+      "codex.shell_snapshot.duration_ms",
+      "codex.skills.shadow_selection",
+      "codex.skills.shadow_selection.catalog_entries",
+      "codex.skills.shadow_selection.duration_ms",
+      "codex.skills.shadow_selection.query_terms",
+      "codex.skills.shadow_selection.reduction_bps",
+      "codex.skills.shadow_selection.selected_entries",
+      "codex.sqlite.init.count",
+      "codex.sqlite.init.duration_ms",
+      "codex.sqlite.logs.write.bytes",
+      "codex.sqlite.logs.write.count",
+      "codex.sqlite.logs.write.duration_ms",
+      "codex.sqlite.logs.write.entries",
+      "codex.sqlite.logs.write.max_entry_bytes",
+      "codex.sse_event",
+      "codex.sse_event.duration_ms",
+      "codex.startup.phase.duration_ms",
+      "codex.startup_prewarm.age_at_first_turn_ms",
+      "codex.startup_prewarm.duration_ms",
+      "codex.startup_prewarm.websocket_check",
+      "codex.task.compact",
+      "codex.thread.skills.description_truncated_chars",
+      "codex.thread.skills.enabled_total",
+      "codex.thread.skills.kept_total",
+      "codex.thread.skills.truncated",
+      "codex.thread.started",
+      "codex.thread_history.sqlite_projection",
+      "codex.tool.unified_exec",
+      "codex.transport.fallback_to_http",
+      "codex.turn.e2e_duration_ms",
+      "codex.turn.memory",
+      "codex.turn.network_proxy",
+      "codex.turn.tool.call",
+      "codex.turn.ttfm.duration_ms",
+      "codex.turn.ttft.duration_ms",
+      "codex.turn.unified_exec.running_processes",
+      "codex.websocket.continuation",
+      "codex.websocket.event",
+      "codex.websocket.event.duration_ms",
+      "codex.websocket.request",
+      "codex.websocket.request.duration_ms",
+      "codex.windows_mxc.available",
+      "codex.windows_sandbox.runner_result",
+      "codex.windows_system_config.namespace_squatting_probe"
+    ],
+    "newly_observed": [
+      "codex.sse_event",
+      "codex.sse_event.duration_ms",
+      "codex.startup_prewarm.websocket_check",
+      "codex.task.compact",
+      "codex.transport.fallback_to_http"
+    ],
+    "baseline_only_not_proof_of_removal": [
+      "codex.approval.requested",
+      "codex.rollout.persistence.append",
+      "codex.rollout.persistence.item_bytes",
+      "codex.rollout.persistence.turn_bytes",
+      "codex.windows_sandbox.private_desktop"
+    ]
+  },
+  "otlp_resources": [
+    {
+      "attribute_keys": [
+        "env",
+        "os",
+        "os_version",
+        "service.name",
+        "service.version",
+        "telemetry.sdk.language",
+        "telemetry.sdk.name",
+        "telemetry.sdk.version"
+      ],
+      "version_values": {
+        "telemetry.sdk.language": {
+          "stringValue": "rust"
+        },
+        "os_version": {
+          "stringValue": "10.0.26100"
+        },
+        "service.name": {
+          "stringValue": "codex-app-server"
+        },
+        "service.version": {
+          "stringValue": "0.159.0"
+        },
+        "telemetry.sdk.name": {
+          "stringValue": "opentelemetry"
+        },
+        "os": {
+          "stringValue": "Windows"
+        },
+        "env": {
+          "stringValue": "dev"
+        },
+        "telemetry.sdk.version": {
+          "stringValue": "0.31.0"
+        }
+      }
+    }
+  ],
+  "telemetry": {
+    "ab.chatgpt.com/otlp/v1/metrics": {
+      "requests": 24,
+      "statuses": {
+        "202": 24
+      },
+      "metric_names": [
+        "codex.app_server.codex_home.size_bytes",
+        "codex.apps.installed.connector_count",
+        "codex.apps.installed.duration_ms",
+        "codex.apps.installed.response_bytes",
+        "codex.apps.installed.tool_count",
+        "codex.apps.read.duration_ms",
+        "codex.apps.refresh.duration_ms",
+        "codex.apps.snapshot.age_ms",
+        "codex.feature.state",
+        "codex.hooks.run",
+        "codex.hooks.run.duration_ms",
+        "codex.mcp.protocol_discovery",
+        "codex.mcp.protocol_discovery.duration_ms",
+        "codex.mcp.tools.cache_publish.duration_ms",
+        "codex.mcp.tools.cache_write.duration_ms",
+        "codex.mcp.tools.fetch_uncached.duration_ms",
+        "codex.mcp.tools.list.duration_ms",
+        "codex.plugins.loaded_cache.event",
+        "codex.plugins.loaded_cache.load.duration_ms",
+        "codex.plugins.loaded_cache.request",
+        "codex.plugins.loaded_cache.wait.duration_ms",
+        "codex.process.start",
+        "codex.remote_models.fetch_update.duration_ms",
+        "codex.remote_models.load_cache.duration_ms",
+        "codex.responses_api_engine_iapi_tbt.duration_ms",
+        "codex.responses_api_inference_time.duration_ms",
+        "codex.responses_api_overhead.duration_ms",
+        "codex.rollout_compression.materialize",
+        "codex.rollout_compression.read",
+        "codex.rollout_compression.read.io_duration_ms",
+        "codex.shell_snapshot",
+        "codex.shell_snapshot.duration_ms",
+        "codex.skills.shadow_selection",
+        "codex.skills.shadow_selection.catalog_entries",
+        "codex.skills.shadow_selection.duration_ms",
+        "codex.skills.shadow_selection.query_terms",
+        "codex.skills.shadow_selection.reduction_bps",
+        "codex.skills.shadow_selection.selected_entries",
+        "codex.sqlite.init.count",
+        "codex.sqlite.init.duration_ms",
+        "codex.sqlite.logs.write.bytes",
+        "codex.sqlite.logs.write.count",
+        "codex.sqlite.logs.write.duration_ms",
+        "codex.sqlite.logs.write.entries",
+        "codex.sqlite.logs.write.max_entry_bytes",
+        "codex.sse_event",
+        "codex.sse_event.duration_ms",
+        "codex.startup.phase.duration_ms",
+        "codex.startup_prewarm.age_at_first_turn_ms",
+        "codex.startup_prewarm.duration_ms",
+        "codex.startup_prewarm.websocket_check",
+        "codex.task.compact",
+        "codex.thread.skills.description_truncated_chars",
+        "codex.thread.skills.enabled_total",
+        "codex.thread.skills.kept_total",
+        "codex.thread.skills.truncated",
+        "codex.thread.started",
+        "codex.thread_history.sqlite_projection",
+        "codex.tool.unified_exec",
+        "codex.transport.fallback_to_http",
+        "codex.turn.e2e_duration_ms",
+        "codex.turn.memory",
+        "codex.turn.network_proxy",
+        "codex.turn.tool.call",
+        "codex.turn.ttfm.duration_ms",
+        "codex.turn.ttft.duration_ms",
+        "codex.turn.unified_exec.running_processes",
+        "codex.websocket.continuation",
+        "codex.websocket.event",
+        "codex.websocket.event.duration_ms",
+        "codex.websocket.request",
+        "codex.websocket.request.duration_ms",
+        "codex.windows_mxc.available",
+        "codex.windows_sandbox.runner_result",
+        "codex.windows_system_config.namespace_squatting_probe"
+      ],
+      "attribute_keys": [
+        "active",
+        "after_prewarm",
+        "app.version",
+        "auth_mode",
+        "available",
+        "cache",
+        "candidate_set_truncated",
+        "catalog_surface",
+        "compression_enabled",
+        "config_use_memories",
+        "db",
+        "directory",
+        "env",
+        "error",
+        "error_kind",
+        "event",
+        "execution_mode",
+        "failure_reason",
+        "feature",
+        "feature_enabled",
+        "force_refresh",
+        "format",
+        "from_wire_api",
+        "handler_type",
+        "has_citations",
+        "hook_name",
+        "include_tools",
+        "input",
+        "is_git",
+        "is_worktree",
+        "kind",
+        "manual",
+        "method",
+        "mode",
+        "model",
+        "observation",
+        "originator",
+        "os",
+        "os_version",
+        "outcome",
+        "path",
+        "phase",
+        "query_script",
+        "query_truncated",
+        "read_allowed",
+        "read_progress",
+        "reason",
+        "refresh",
+        "reload",
+        "result",
+        "retained_previous_snapshot",
+        "runtime",
+        "server_kind",
+        "service.name",
+        "service.version",
+        "service_name",
+        "session_source",
+        "source",
+        "stage",
+        "status",
+        "success",
+        "telemetry.sdk.language",
+        "telemetry.sdk.name",
+        "telemetry.sdk.version",
+        "tmp_mem_enabled",
+        "trigger",
+        "tty",
+        "type",
+        "value",
+        "version"
+      ],
+      "event_names": [],
+      "seen_in_baseline": true
+    },
+    "ab.chatgpt.com/v1/initialize": {
+      "requests": 4,
+      "statuses": {
+        "200": 2,
+        "204": 2
+      },
+      "metric_names": [],
+      "attribute_keys": [],
+      "event_names": [],
+      "seen_in_baseline": false
+    },
+    "chat.openai.com/ces/v1/telemetry/intake": {
+      "requests": 103,
+      "statuses": {
+        "202": 103
+      },
+      "metric_names": [],
+      "attribute_keys": [],
+      "event_names": [],
+      "seen_in_baseline": true
+    },
+    "chatgpt.com/ces/statsc/flush": {
+      "requests": 1,
+      "statuses": {
+        "200": 1
+      },
+      "metric_names": [],
+      "attribute_keys": [],
+      "event_names": [],
+      "seen_in_baseline": true
+    },
+    "chatgpt.com/ces/v1/rgstr": {
+      "requests": 44,
+      "statuses": {
+        "202": 44
+      },
+      "metric_names": [],
+      "attribute_keys": [],
+      "event_names": [
+        "__protobuf_structured_event__",
+        "statsig::config_exposure",
+        "statsig::gate_exposure",
+        "statsig::layer_exposure",
+        "statsig::non_exposed_checks"
+      ],
+      "seen_in_baseline": true
+    },
+    "o33249.ingest.us.sentry.io/api/<id>/envelope/": {
+      "requests": 10,
+      "statuses": {
+        "None": 10
+      },
+      "metric_names": [],
+      "attribute_keys": [],
+      "event_names": [],
+      "seen_in_baseline": true
+    }
+  },
+  "limitations": [
+    "The proxy records application protocol semantics; it is not a direct measurement of the original upstream TLS or HTTP/2 fingerprint.",
+    "Newly observed fields, endpoints, or metric names do not alone prove they were introduced in this release.",
+    "Fresh isolated profile, copied existing authentication, explicit bundled CLI selection, and enabled remote debugging differ from the normal installed app launch."
+  ],
+  "metric_binary_presence": {
+    "codex.sse_event": {
+      "baseline": true,
+      "current": true
+    },
+    "codex.sse_event.duration_ms": {
+      "baseline": true,
+      "current": true
+    },
+    "codex.startup_prewarm.websocket_check": {
+      "baseline": false,
+      "current": true
+    },
+    "codex.task.compact": {
+      "baseline": true,
+      "current": true
+    },
+    "codex.transport.fallback_to_http": {
+      "baseline": true,
+      "current": true
+    }
+  }
+}

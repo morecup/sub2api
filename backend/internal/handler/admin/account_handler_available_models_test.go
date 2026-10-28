@@ -255,6 +255,9 @@ func TestAccountHandlerGetAvailableModels_OpenAIAPIKeyDefaultsToConcreteGPT56Sol
 		ids = append(ids, model.ID)
 	}
 	require.Contains(t, ids, "gpt-6-astra")
+	require.Contains(t, ids, "gpt-6-sol")
+	require.Contains(t, ids, "gpt-6-luna")
+	require.Contains(t, ids, "gpt-reserve")
 }
 
 func TestAccountHandlerGetAvailableModels_OpenAIOAuthIncludesGPT6Astra(t *testing.T) {

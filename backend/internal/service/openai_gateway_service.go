@@ -36,8 +36,8 @@ const (
 	openaiStickySessionTTL          = time.Hour // 粘性会话TTL
 	// 与真实 Codex Desktop App 的 User-Agent 结构对齐：
 	// Codex Desktop/{codex_rs_version} ({OS_type} {OS_version}; {arch}) dumb (Codex Desktop; {app_version})
-	// 2026-09-17 Work capture: keep the Rust and Electron versions in one profile.
-	codexDesktopAppVersion = "26.911.61220"
+	// 2026-10-28 Work capture: keep the Rust and Electron versions in one profile.
+	codexDesktopAppVersion = "26.1023.50603"
 	codexDesktopUserAgent  = "Codex Desktop/" + codexDesktopVersion + " (Windows 10.0.26100; x86_64) dumb (Codex Desktop; " + codexDesktopAppVersion + ")"
 	// main 中仍有 API Key、自定义上游和非 Desktop 兜底路径使用 CLI 画像；
 	// 与 OAuth 固定 Desktop 画像并存，不能互相覆盖。
@@ -57,7 +57,7 @@ const (
 	openAIWSRetryJitterRatioDefault    = 0.2
 	openAICompactSessionSeedKey        = "openai_compact_session_seed"
 	// Codex OAuth 上游请求统一使用本地实抓的 Desktop 画像。
-	codexDesktopVersion              = "0.155.0-alpha.2.6"
+	codexDesktopVersion              = "0.165.0-alpha.1.2"
 	openAIUpstreamEndpointContextKey = "openai_actual_upstream_endpoint"
 	codexCLIVersion                  = "0.144.1"
 	// Codex 限额快照仅用于后台展示/诊断，不需要每个成功请求都立即落库。
@@ -441,6 +441,7 @@ var ErrNoAvailableCompactAccounts = errors.New("no available accounts support /r
 type OpenAIGatewayService struct {
 	accountRepo           AccountRepository
 	proxyRepo             ProxyRepository
+	codexEgressProfiles   *CodexEgressProfileService
 	usageLogRepo          UsageLogRepository
 	usageBillingRepo      UsageBillingRepository
 	userRepo              UserRepository
@@ -545,6 +546,7 @@ func NewOpenAIGatewayService(
 	settingService *SettingService,
 	userPlatformQuotaRepo UserPlatformQuotaRepository,
 	tlsFPProfileService *TLSFingerprintProfileService,
+	egressProfiles ...*CodexEgressProfileService,
 ) *OpenAIGatewayService {
 	// enforceCodexIdentityHeaders 是 HTTP / 透传 / WS / 探针 等出站路径共用的纯函数收口点，
 	// 拿不到配置，故在此发布进程级开关快照。配置取反义，零值即「强制统一出口开启」。
@@ -594,6 +596,9 @@ func NewOpenAIGatewayService(
 		responseHeaderFilter:  compileResponseHeaderFilter(cfg),
 		codexSnapshotThrottle: newAccountWriteThrottle(openAICodexSnapshotPersistMinInterval),
 		openaiModelTransient:  newOpenAIAccountModelTransientState(openAIModelTransientDefaultMax),
+	}
+	if len(egressProfiles) > 0 {
+		svc.codexEgressProfiles = egressProfiles[0]
 	}
 	if rateLimitService != nil {
 		rateLimitService.SetAccountRuntimeBlocker(svc)

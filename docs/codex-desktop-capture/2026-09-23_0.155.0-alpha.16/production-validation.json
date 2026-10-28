@@ -1,0 +1,95 @@
+{
+  "checked_at": "2026-09-23T11:19:47.542111+00:00",
+  "binary_sha256": "faca1e124c8884eec6da8203f28f67c83c1e2cb39999909fe3677313c1704564",
+  "pricing_sha256": "f4c76be5cadc24cf70f6d4a9ba56f638fb138d23a4b80b5701f71dd2f0864923",
+  "build_tags": [
+    "build\t-tags=embed,http2legacy"
+  ],
+  "checks": {
+    "online": true,
+    "new_pid": true,
+    "single_restart": true,
+    "binary_match": true,
+    "tags": true,
+    "config_unchanged": true,
+    "health": true,
+    "assets": true,
+    "profiles_preserved": true,
+    "pricing_policy_preserved": true,
+    "other_processes_unchanged": true,
+    "clean_fatal_logs": true,
+    "pricing_file_matches": true,
+    "new_models_bill_correctly": true
+  },
+  "effective_pricing_per_token": {
+    "gpt-6-sol": {
+      "cache_read_price": 2e-07,
+      "cache_write_1h_price": null,
+      "cache_write_price": 2.5e-06,
+      "found": true,
+      "image_input_price": 0,
+      "image_output_price": 0,
+      "input_price": 2e-06,
+      "max_reasoning_effort_multiplier": null,
+      "output_price": 1e-05
+    },
+    "gpt-6-luna": {
+      "cache_read_price": 1e-08,
+      "cache_write_1h_price": null,
+      "cache_write_price": 1.25e-07,
+      "found": true,
+      "image_input_price": 0,
+      "image_output_price": 0,
+      "input_price": 1e-07,
+      "max_reasoning_effort_multiplier": null,
+      "output_price": 5e-07
+    }
+  },
+  "new_models_present": {
+    "gpt-6-sol": true,
+    "gpt-6-luna": true
+  },
+  "real_requests": [
+    {
+      "model": "gpt-6-sol",
+      "http": 200,
+      "response_model": "gpt-6-sol",
+      "completed": true
+    },
+    {
+      "model": "gpt-6-luna",
+      "http": 200,
+      "response_model": "gpt-6-luna",
+      "completed": true
+    }
+  ],
+  "billing_validation": [
+    {
+      "model": "gpt-6-sol",
+      "input_tokens": 4397,
+      "output_tokens": 5,
+      "cost_usd": "0.008844",
+      "matched": true
+    },
+    {
+      "model": "gpt-6-luna",
+      "input_tokens": 4397,
+      "output_tokens": 5,
+      "cost_usd": "0.0004422",
+      "matched": true
+    }
+  ],
+  "telemetry_acknowledgements": [
+    {
+      "result": "acknowledged",
+      "status": 202,
+      "proxy": true,
+      "batches": 6
+    }
+  ],
+  "limitations": [
+    "Live minimal requests validate Standard pricing only; Fast/Flex/long-context boundaries are covered by local regression tests.",
+    "OTLP acknowledgement proves collector receipt, not downstream processing.",
+    "Full service suite has an independently reproduced pre-existing nil-response test failure; targeted checks passed."
+  ]
+}

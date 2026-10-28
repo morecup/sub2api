@@ -234,7 +234,12 @@ func TestFetchOpenAIModelsListEmptyAndMalformedResponses(t *testing.T) {
 func TestPinnedOpenAIModelsListMixedAccountsShareColdCacheAcrossGroups(t *testing.T) {
 	_, oauthCalls := newCodexModelsOAuthCacheServer(t, `{"models":[{"slug":"shared-model"},{"slug":"oauth-special"}]}`)
 	var apiCalls atomic.Int32
-	s := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(_ *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
+	s := newCodexModelsAPIKeyTestService(&codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, accountID int64, _ int) (*http.Response, error) {
+		// Both account types now use the upstream abstraction. Keep the OAuth
+		// fixture on its local server so this still tests cache sharing.
+		if accountID == 1 {
+			return http.DefaultClient.Do(req)
+		}
 		apiCalls.Add(1)
 		return ordinaryModelsUpstreamResponse(`{"data":[{"id":"shared-model","owned_by":"api-provider"},{"id":"api-special"}]}`), nil
 	}})

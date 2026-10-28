@@ -755,6 +755,7 @@ func (s *AccountTestService) testBedrockAccountConnection(c *gin.Context, ctx co
 // testOpenAIAccountConnection tests an OpenAI account's connection
 func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account *Account, modelID string, prompt string, mode string) error {
 	ctx := c.Request.Context()
+	account = s.openaiGatewayService.prepareCodexEgressAccount(ctx, account)
 	mode = normalizeAccountTestMode(mode)
 
 	// Default to openai.DefaultTestModel for OpenAI testing
@@ -902,6 +903,7 @@ func (s *AccountTestService) testOpenAIAccountConnection(c *gin.Context, account
 		if isOAuth {
 			req.Host = "chatgpt.com"
 			applyCodexOAuthMimicHeadersForAccount(req, account, 0, sessionSeed, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(upstreamTestModelID), upstreamTestModelID)
+			applyCodexAnalyticsPolicy(req.Header, s.cfg)
 			applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 			body, err = syncCodexOAuthMimicRequestBody(req, body, false)
 			if err != nil {
@@ -2196,6 +2198,7 @@ func (s *AccountTestService) testOpenAIChatCompletionsConnection(
 // endpoint has been sunset upstream (404, #5598/#5624) and is no longer probed.
 func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account *Account, testModelID string) error {
 	ctx := c.Request.Context()
+	account = s.openaiGatewayService.prepareCodexEgressAccount(ctx, account)
 	credentialAccount := account
 	if account.IsShadow() {
 		resolved, err := resolveCredentialAccount(ctx, s.accountRepo, account)
@@ -2291,6 +2294,7 @@ func (s *AccountTestService) testOpenAICompactConnection(c *gin.Context, account
 	if isOAuth {
 		req.Host = "chatgpt.com"
 		applyCodexOAuthMimicHeadersForAccount(req, account, 0, probeSessionID, account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(testModelID), testModelID)
+		applyCodexAnalyticsPolicy(req.Header, s.cfg)
 		applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 		payloadBytes, err = syncCodexOAuthMimicRequestBody(req, payloadBytes, false)
 		if err != nil {
@@ -3157,6 +3161,7 @@ func (s *AccountTestService) testOpenAIImageAPIKey(c *gin.Context, ctx context.C
 
 // OAuth 图片测试与正式转发共用 Codex Images / Responses 分流规则。
 func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Context, account *Account, modelID, prompt string) error {
+	account = s.openaiGatewayService.prepareCodexEgressAccount(ctx, account)
 	credentialAccount := account
 	if account.IsShadow() {
 		resolved, err := resolveCredentialAccount(ctx, s.accountRepo, account)
@@ -3229,6 +3234,7 @@ func (s *AccountTestService) testOpenAIImageOAuth(c *gin.Context, ctx context.Co
 			req.Header.Set("Authorization", "Bearer "+authToken)
 		}
 		applyCodexOAuthMimicHeadersForAccount(req, account, 0, parsed.StickySessionSeed(), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, false, isCodexResponsesLiteModel(parsed.Model), parsed.Model)
+		applyCodexAnalyticsPolicy(req.Header, s.cfg)
 		applyCodexDesktopOptionalCookie(req.Header, credentialAccount)
 		if !direct {
 			body, err = syncCodexOAuthMimicRequestBody(req, body, false)

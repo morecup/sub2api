@@ -240,6 +240,8 @@ func (s *adminServiceImpl) TestProxy(ctx context.Context, id int64) (*ProxyTestR
 		IPAddress:   exitInfo.IP,
 		Country:     exitInfo.Country,
 		CountryCode: exitInfo.CountryCode,
+		Timezone:    exitInfo.Timezone,
+		EgressKey:   proxyEgressKey(proxy.URL()),
 		Region:      exitInfo.Region,
 		City:        exitInfo.City,
 		UpdatedAt:   time.Now(),
@@ -279,7 +281,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, nil)
+		s.saveProxyQualitySnapshot(ctx, id, result, nil, proxyURL)
 		return result, nil
 	}
 
@@ -293,7 +295,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, nil)
+		s.saveProxyQualitySnapshot(ctx, id, result, nil, proxyURL)
 		return result, nil
 	}
 
@@ -322,7 +324,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 		})
 		result.FailedCount++
 		finalizeProxyQualityResult(result)
-		s.saveProxyQualitySnapshot(ctx, id, result, exitInfo)
+		s.saveProxyQualitySnapshot(ctx, id, result, exitInfo, proxyURL)
 		return result, nil
 	}
 
@@ -342,7 +344,7 @@ func (s *adminServiceImpl) CheckProxyQuality(ctx context.Context, id int64) (*Pr
 	}
 
 	finalizeProxyQualityResult(result)
-	s.saveProxyQualitySnapshot(ctx, id, result, exitInfo)
+	s.saveProxyQualitySnapshot(ctx, id, result, exitInfo, proxyURL)
 	return result, nil
 }
 
@@ -490,7 +492,7 @@ func proxyQualityBaseConnectivityPass(result *ProxyQualityCheckResult) bool {
 	return false
 }
 
-func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxyID int64, result *ProxyQualityCheckResult, exitInfo *ProxyExitInfo) {
+func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxyID int64, result *ProxyQualityCheckResult, exitInfo *ProxyExitInfo, proxyURLs ...string) {
 	if result == nil {
 		return
 	}
@@ -515,6 +517,10 @@ func (s *adminServiceImpl) saveProxyQualitySnapshot(ctx context.Context, proxyID
 		info.IPAddress = exitInfo.IP
 		info.Country = exitInfo.Country
 		info.CountryCode = exitInfo.CountryCode
+		info.Timezone = exitInfo.Timezone
+		if len(proxyURLs) > 0 {
+			info.EgressKey = proxyEgressKey(proxyURLs[0])
+		}
 		info.Region = exitInfo.Region
 		info.City = exitInfo.City
 	}
@@ -543,6 +549,8 @@ func (s *adminServiceImpl) probeProxyLatency(ctx context.Context, proxy *Proxy) 
 		IPAddress:   exitInfo.IP,
 		Country:     exitInfo.Country,
 		CountryCode: exitInfo.CountryCode,
+		Timezone:    exitInfo.Timezone,
+		EgressKey:   proxyEgressKey(proxy.URL()),
 		Region:      exitInfo.Region,
 		City:        exitInfo.City,
 		UpdatedAt:   time.Now(),

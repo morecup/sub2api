@@ -3107,7 +3107,7 @@
         </div>
       </div>
 
-      <!-- OpenAI OAuth 稳定任务会话 -->
+      <!-- OpenAI OAuth 固定账号会话 -->
       <div
         v-if="form.platform === 'openai' && form.type === 'oauth'"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
@@ -4605,7 +4605,7 @@ const openAIFixedSessionIDEnabled = ref(true)
 const openAIFixedSessionIDTouched = ref(false)
 // OpenAI Codex namespace 工具摊平兼容开关（仅 OAuth），缺省关闭即原样保留
 const openaiFlattenNamespacesEnabled = ref(false)
-const openAILongContextBillingEnabled = ref(false)
+const openAILongContextBillingEnabled = ref(true)
 const openAILongContextBillingTouched = ref(false)
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
@@ -5547,7 +5547,7 @@ const resetForm = () => {
   openAIFixedSessionIDEnabled.value = true
   openAIFixedSessionIDTouched.value = false
   openaiFlattenNamespacesEnabled.value = false
-  openAILongContextBillingEnabled.value = false
+  openAILongContextBillingEnabled.value = true
   openAILongContextBillingTouched.value = false
   openAICompactMode.value = 'auto'
   openAIResponsesMode.value = 'auto'

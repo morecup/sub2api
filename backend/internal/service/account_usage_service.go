@@ -830,6 +830,7 @@ func (s *AccountUsageService) shouldProbeOpenAICodexSnapshot(accountID int64, no
 }
 
 func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, account *Account) (map[string]any, error) {
+	account = s.openAIQuotaService.codexEgressAccount(ctx, account)
 	if account == nil || !account.IsOAuth() {
 		return nil, nil
 	}

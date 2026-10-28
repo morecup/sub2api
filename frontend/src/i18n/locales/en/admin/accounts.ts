@@ -680,15 +680,15 @@ export default {
         oauthPassthrough: 'Auto passthrough (auth only)',
         oauthPassthroughDesc:
           'When enabled, this OpenAI account uses automatic passthrough: the gateway forwards request/response as-is and only swaps auth, while keeping billing/concurrency/audit and necessary safety filtering.',
-        fixedSessionId: 'Stable task sessions',
+        fixedSessionId: 'Fixed account session',
         fixedSessionIdDesc:
-          'OpenAI OAuth only. Responses requests use a stable account seed while keeping tasks and API keys isolated. Different tasks do not share an upstream session. Turning this off restores default session generation.',
+          'OpenAI OAuth only. When enabled, Responses requests always use this account\'s saved fixed session ID and do not derive one from task, API key, or other request identifiers. Requests on the same account share one upstream session. Turning this off restores default session generation.',
         flattenNamespaces: 'Flatten Codex namespace tools (compatibility)',
         flattenNamespacesDesc:
           'Disabled by default: Codex namespace tool declarations are forwarded as-is on /responses, which is what the ChatGPT Codex backend expects. Enable only when this OAuth account is routed to a relay that rejects namespace tools — flattening renames them to namespace__tool, which breaks models that address collaboration tools as functions.<namespace>.<tool>. Compaction requests always flatten regardless of this switch.',
         longContextBilling: 'API long-context pricing',
         longContextBillingDesc:
-          'Disabled by default. Enable only when this account\'s upstream charges OpenAI API long-context rates above the model threshold.',
+          'Enabled by default for new accounts. Applies OpenAI API long-context rates above the model threshold; disable if the upstream does not charge these rates.',
         responsesWebsocketsV2: 'Responses WebSocket v2',
         responsesWebsocketsV2Desc:
           'Disabled by default. Enable to allow responses_websockets_v2 capability (still gated by global and account-type switches).',

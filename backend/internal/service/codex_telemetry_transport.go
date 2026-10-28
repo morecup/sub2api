@@ -36,6 +36,7 @@ func codexTelemetryEventKind(kind string) bool {
 
 func codexTelemetryHTTPModelRequest(req *http.Request, account *Account) bool {
 	return req != nil && req.URL != nil && account != nil && account.IsOpenAIOAuth() &&
+		gjson.Get(req.Header.Get(openAIWSTurnMetadataHeader), "analytics_enabled").Type != gjson.False &&
 		req.Method == http.MethodPost && req.URL.Scheme == "https" && req.URL.Hostname() == "chatgpt.com" &&
 		(req.URL.Path == "/backend-api/codex/responses" || req.URL.Path == "/backend-api/codex/responses/compact")
 }
@@ -92,6 +93,7 @@ func (t *codexTelemetryExporter) recordServerTiming(route codexTelemetryRoute, m
 
 func (s *OpenAIGatewayService) observeCodexHTTPResponse(req *http.Request, resp *http.Response, account *Account, proxyURL string, profile *tlsfingerprint.Profile) {
 	if req == nil || req.URL == nil || resp == nil || resp.Body == nil || account == nil ||
+		gjson.Get(req.Header.Get(openAIWSTurnMetadataHeader), "analytics_enabled").Type == gjson.False ||
 		account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth ||
 		req.URL.Hostname() != "chatgpt.com" || req.URL.Path != "/backend-api/codex/responses" ||
 		resp.StatusCode < 200 || resp.StatusCode >= 300 || !strings.Contains(req.Header.Get("accept"), "text/event-stream") {
@@ -201,6 +203,7 @@ func (b *codexTelemetrySSEBody) Read(dst []byte) (int, error) {
 
 type codexTelemetryWS struct {
 	exporter        *codexTelemetryExporter
+	disabled        bool // immutable handshake analytics opt-out
 	route           codexTelemetryRoute
 	model           atomic.Value // string; writes and reads may run concurrently
 	mu              sync.Mutex
@@ -212,6 +215,8 @@ type codexTelemetryWS struct {
 type codexTelemetryWSRequest struct {
 	model, eventModel, responseID string
 	compacted, terminal           bool
+	mode, phase, reason           string
+	disabled                      bool
 }
 
 // Register before writing, since the read goroutine may receive response.created
@@ -238,8 +243,18 @@ func (o *codexTelemetryWS) prepareWrite(value any) *codexTelemetryWSRequest {
 	}
 	model = strings.Clone(model)
 	o.model.Store(model)
-	r := &codexTelemetryWSRequest{model: model, eventModel: model}
+	r := &codexTelemetryWSRequest{model: model, eventModel: model, mode: "full", phase: "generation", reason: "other"}
+	r.disabled = o.disabled || gjson.Get(gjson.GetBytes(payload, "client_metadata."+openAIWSTurnMetadataHeader).String(), "analytics_enabled").Type == gjson.False
+	if gjson.GetBytes(payload, "generate").Type == gjson.False {
+		r.phase = "warmup"
+	}
 	o.mu.Lock()
+	if len(o.requests) == 0 {
+		r.reason = "no_previous_request"
+	}
+	if strings.TrimSpace(gjson.GetBytes(payload, "previous_response_id").String()) != "" {
+		r.mode, r.reason = "incremental", "incremental"
+	}
 	if len(o.requests) >= 32 {
 		copy(o.requests, o.requests[1:])
 		o.requests = o.requests[:31]
@@ -253,7 +268,12 @@ func (o *codexTelemetryWS) written(request *codexTelemetryWSRequest, duration ti
 	if o == nil || request == nil {
 		return
 	}
-	o.exporter.record(o.route, "codex.websocket.request", request.model, "", err == nil, duration)
+	if !request.disabled {
+		o.exporter.record(o.route, "codex.websocket.request", request.model, "", err == nil, duration)
+		if err == nil {
+			o.exporter.recordWSContinuation(o.route, request.model, request.mode, request.phase, request.reason)
+		}
+	}
 	if err != nil {
 		o.mu.Lock()
 		request.terminal = true
@@ -348,7 +368,11 @@ func (o *codexTelemetryWS) received(payload []byte, duration time.Duration, err 
 	} else if responseID != "" || invalidResponseID {
 		model = "other" // An evicted/unknown response must not inherit another model.
 	}
+	disabled := o.disabled || (request != nil && request.disabled)
 	o.mu.Unlock()
+	if disabled {
+		return
+	}
 	o.exporter.record(o.route, "codex.websocket.event", model, kind, err == nil, duration)
 	if compaction {
 		o.exporter.recordCompaction(o.route, model)

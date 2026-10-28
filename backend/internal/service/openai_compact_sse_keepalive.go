@@ -64,6 +64,19 @@ func startOpenAISSEKeepalive(c *gin.Context, interval time.Duration) func() {
 		writer: originalWriter,
 		stop:   make(chan struct{}),
 	}
+	// A retry replaces the heartbeat worker, but reuses the client connection.
+	// Stop and inherit the previous worker's accounting before replacing it;
+	// otherwise its comments look like model output in the next attempt, and
+	// fast failures can lose the fact that the SSE headers were committed.
+	if value, ok := c.Get(openAICompactSSEKeepaliveKey); ok {
+		if previous, valid := value.(*openAICompactSSEKeepalive); valid && previous != nil {
+			previous.mu.Lock()
+			previous.markStoppedLocked()
+			k.bytes = previous.bytes
+			k.started = previous.started
+			previous.mu.Unlock()
+		}
+	}
 	c.Set(openAICompactSSEKeepaliveKey, k)
 	wrappedWriter := &openAICompactKeepaliveWriter{ResponseWriter: originalWriter, k: k}
 	c.Writer = wrappedWriter
@@ -164,7 +177,7 @@ func StopOpenAICompactSSEKeepaliveCommitted(c *gin.Context) bool {
 	return committed
 }
 
-// OpenAICompactKeepaliveAdjustedWrittenSize 返回排除 compact 心跳注释字节后
+// OpenAICompactKeepaliveAdjustedWrittenSize 返回排除排队和各次尝试的心跳字节后
 // 的响应已写字节数；无心跳的请求等价于 c.Writer.Size()。心跳字节不构成语义
 // 响应——handler 以"Forward 前后 Size 是否变化"判定是否已向客户端写出响应
 // （变化则放弃 failover 换号），该判定不得被心跳污染，否则 compact 请求

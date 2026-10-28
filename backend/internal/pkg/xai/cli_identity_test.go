@@ -75,12 +75,15 @@ func TestResolveCLIVersionDefaultsToPinnedClientVersion(t *testing.T) {
 }
 
 func TestResolveCLIVersionAcceptsValidOverride(t *testing.T) {
-	t.Setenv(CLIVersionEnv, "0.2.113-alpha.1")
-	require.Equal(t, "0.2.113-alpha.1", ResolveCLIVersion())
+	t.Setenv(CLIVersionEnv, "1.0.47-alpha.1")
+	require.Equal(t, "1.0.47-alpha.1", ResolveCLIVersion())
 }
 
 func TestResolveCLIVersionRejectsUnsafeOrTooOld(t *testing.T) {
 	for _, version := range []string{
+		"0.2.112", // Previously pinned version now rejected upstream with HTTP 426.
+		"1.0.12",  // Below the upstream minimum of 1.0.13.
+		CLIClientVersion + "-beta.1",
 		"0.2.92",
 		"0.2.93-beta.1",
 		"0.2.95\r\nX-Injected: true",

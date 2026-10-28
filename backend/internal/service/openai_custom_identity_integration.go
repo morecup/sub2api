@@ -46,7 +46,7 @@ func enforceCodexIdentityHeadersForAccount(headers http.Header, account *Account
 		if headers.Get("originator") != "" {
 			profile := codexClientProfileForAccount(account)
 			headers.Set("User-Agent", profile.UserAgent())
-			headers.Set("originator", codexDesktopOriginator)
+			headers.Set("originator", capturedCodexInferenceOriginator(headers.Get("originator")))
 			headers.Set("version", profile.CodexVersion)
 		}
 		return

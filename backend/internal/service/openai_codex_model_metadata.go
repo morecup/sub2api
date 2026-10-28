@@ -54,7 +54,8 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
 		// This bridge implements client-side tool discovery, even without a native manifest.
 		applyCodexToolCapabilities(capabilities, map[string]json.RawMessage{"supports_search_tool": json.RawMessage("true")}, false)
 	}
-	// Codex 0.153's bundled Astra catalog verifies these values. API-key routes
+	// Bundled Astra metadata and the September 23/30 Sol/Luna captures verify these fields.
+	// API-key routes
 	// use standard Responses, not the ChatGPT-only Responses Lite wire.
 	baseURL := strings.TrimSpace(account.GetCredential("base_url"))
 	if baseURL == "" {
@@ -63,7 +64,7 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
 	parsed, err := url.Parse(baseURL)
 	official := err == nil && (strings.EqualFold(parsed.Hostname(), "api.openai.com") ||
 		(account.IsOpenAIOAuth() && strings.EqualFold(parsed.Hostname(), "chatgpt.com")))
-	if account.IsOpenAI() && isOpenAIGPT6AstraModel(modelID) && official {
+	if account.IsOpenAI() && isOpenAIGPT6Model(modelID) && official {
 		defaults := map[string]json.RawMessage{
 			"supports_search_tool":  json.RawMessage("true"),
 			"apply_patch_tool_type": json.RawMessage(`"freeform"`),
@@ -74,13 +75,19 @@ func accountCodexToolCapabilities(account *Account, modelID string) map[string]j
 		if account.IsOpenAIOAuth() {
 			defaults["tool_mode"] = json.RawMessage(`"code_mode_only"`)
 			defaults["use_responses_lite"] = json.RawMessage("true")
+			if normalizeKnownOpenAICodexModel(modelID) != "gpt-6-astra" {
+				defaults["multi_agent_version"] = json.RawMessage(`"v2"`)
+				if normalizeKnownOpenAICodexModel(modelID) == "gpt-6.1-sol" || normalizeKnownOpenAICodexModel(modelID) == "gpt-6.1-terra" {
+					defaults["multi_agent_reasoning_effort"] = json.RawMessage(`"xhigh"`)
+				}
+			}
 		}
 		applyCodexToolCapabilities(capabilities, defaults, false)
 	}
 	if account.IsOpenAIApiKey() {
 		target := modelID
-		if isOpenAIGPT6AstraModel(target) {
-			target = "gpt-6-astra"
+		if isOpenAIGPT6Model(target) {
+			target = normalizeKnownOpenAICodexModel(target)
 		}
 		_, disabled := apiKeyCodexModelsWithoutResponsesLite[target]
 		if disabled && bytes.Equal(capabilities["use_responses_lite"], []byte("true")) {

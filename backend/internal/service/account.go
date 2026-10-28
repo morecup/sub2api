@@ -78,6 +78,8 @@ type Account struct {
 	GroupIDs      []int64
 	Groups        []*Group
 
+	codexEgressProfile *codexEgressProfile // request-local; never persisted or cached with accounts
+
 	// model_mapping 热路径缓存（非持久化字段）
 	modelMappingCache               map[string]string
 	modelMappingCacheReady          bool

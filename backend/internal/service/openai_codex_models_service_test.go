@@ -369,15 +369,15 @@ func TestNewConfiguredCodexModelDescriptorUsesProviderMetadataAndSafeFallback(t 
 	require.True(t, isOpenAICodexReasoningGPTModel("openai/gpt-6-astra"))
 	require.True(t, isOpenAIGPT6AstraModel("gpt-6-astra-2026-09-01"))
 	require.False(t, isOpenAIGPT6AstraModel("gpt-6-other"))
-	require.Equal(t, int64(1_050_000), gpt6Astra.ContextWindow)
-	require.Equal(t, int64(1_050_000), gpt6Astra.MaxContextWindow)
+	require.Equal(t, int64(272_000), gpt6Astra.ContextWindow)
+	require.Equal(t, int64(872_000), gpt6Astra.MaxContextWindow)
 	gpt6 := newConfiguredCodexModelDescriptor("gpt-6")
 	require.Equal(t, "GPT-6 (Astra)", gpt6.DisplayName)
 	require.True(t, strings.HasPrefix(strings.TrimSpace(gpt6.ModelMessages.InstructionsTemplate), "You are Codex, an agent based on GPT-6."))
 	require.Equal(t, []string{"low", "medium", "high", "xhigh", "max", "ultra"}, effortsFromConfiguredCodexLevels(gpt6.SupportedReasoningLevels))
 	require.NotNil(t, gpt6.MultiAgentReasoningEffort)
 	require.Equal(t, "xhigh", *gpt6.MultiAgentReasoningEffort)
-	require.Equal(t, int64(1_050_000), gpt6.ContextWindow)
+	require.Equal(t, int64(272_000), gpt6.ContextWindow)
 
 	gpt55 := newConfiguredCodexModelDescriptor("gpt-5.5")
 	require.Equal(t, "GPT-5.5", gpt55.DisplayName)
@@ -1753,7 +1753,7 @@ func TestFetchCodexModelsManifestPassthrough(t *testing.T) {
 	if gotVersion != codexDesktopVersion {
 		t.Errorf("version header: got %q", gotVersion)
 	}
-	if gotUserAgent != codexDesktopUserAgent {
+	if gotUserAgent != defaultCodexClientProfile().NativeUserAgent() {
 		t.Errorf("user-agent header: got %q", gotUserAgent)
 	}
 }

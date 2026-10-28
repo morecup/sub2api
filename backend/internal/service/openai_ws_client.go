@@ -20,6 +20,7 @@ import (
 	openaiwsv2 "github.com/Wei-Shaw/sub2api/internal/service/openai_ws_v2"
 	coderws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	"github.com/tidwall/gjson"
 )
 
 const openAIWSMessageReadLimitBytes int64 = 16 * 1024 * 1024
@@ -34,20 +35,21 @@ const (
 )
 
 // codexDesktopWSHeaderOrder is the HTTP/1.1 order emitted by Tungstenite in
-// the captured 0.151 Desktop handshake. The wire casing is intentional.
+// the captured 0.165 Desktop handshake (2026-10-28). Casing is intentional.
 var codexDesktopWSHeaderOrder = []string{
 	"Host",
 	"Connection",
 	"Upgrade",
 	"Sec-WebSocket-Version",
 	"Sec-WebSocket-Key",
+	"cookie",
 	"chatgpt-account-id",
 	"authorization",
 	"user-agent",
-	"originator",
 	"openai-beta",
 	"version",
 	"x-codex-beta-features",
+	"originator",
 	"x-client-request-id",
 	"session-id",
 	"thread-id",
@@ -228,6 +230,7 @@ func (d *coderOpenAIWSClientDialer) Dial(
 		if id > 0 {
 			clientConn.telemetry = &codexTelemetryWS{exporter: d.telemetry, route: codexTelemetryRoute{accountID: id, proxyURL: proxyURL, profile: profile, client: codexClientProfileFromContext(ctx, id)}}
 			clientConn.telemetry.model.Store(codexTelemetryModelFromRoutingHint(headers.Get("x-codex-routing-hint")))
+			clientConn.telemetry.disabled = gjson.Get(headers.Get(openAIWSTurnMetadataHeader), "analytics_enabled").Type == gjson.False
 		}
 	}
 	return clientConn, 0, respHeaders, nil

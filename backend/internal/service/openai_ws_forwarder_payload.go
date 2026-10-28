@@ -87,6 +87,7 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	promptCacheKey string,
 	routingArgs ...string,
 ) (http.Header, openAIWSSessionHeaderResolution, error) {
+	account = s.prepareCodexEgressAccount(ctx, account)
 	routingModel, routingServiceTier := "", ""
 	if len(routingArgs) > 0 {
 		routingModel = routingArgs[0]
@@ -185,8 +186,12 @@ func (s *OpenAIGatewayService) buildOpenAIWSHeaders(
 	if isOAuthAccount {
 		apiKeyID := getAPIKeyIDFromContext(c)
 		model := routingModel
+		if len(routingArgs) > 2 {
+			turnMetadata = codexMetadataRequestFields(turnMetadata, model, routingArgs[2])
+		}
 		fedRAMP := headers.Get("x-openai-fedramp")
-		applyCodexOAuthWSMimicHeadersForAccount(headers, account, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), codexDesktopOriginator, turnMetadata, model)
+		applyCodexOAuthWSMimicHeadersForAccount(headers, account, apiKeyID, strings.TrimSpace(promptCacheKey), account.GetOpenAIFixedSessionID(), resolveOpenAIUpstreamOriginator(c, false), turnMetadata, model)
+		applyCodexAnalyticsPolicy(headers, s.cfg)
 		if fedRAMP != "" {
 			headers.Set("x-openai-fedramp", fedRAMP)
 		}

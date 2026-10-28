@@ -25,6 +25,9 @@ func recordGatewayStreamHeartbeat(c *gin.Context, written int) {
 	total, _ := c.Get(gatewayStreamHeartbeatBytesKey)
 	bytes, _ := total.(int)
 	c.Set(gatewayStreamHeartbeatBytesKey, bytes+written)
+	// Forward uses the same downstream writer after queueing. Its service-side
+	// retry boundary must exclude these pings as well as its own keepalives.
+	service.RecordOpenAIStreamKeepaliveBytes(c, written)
 }
 
 func gatewayStreamHasOnlyHeartbeats(c *gin.Context) bool {

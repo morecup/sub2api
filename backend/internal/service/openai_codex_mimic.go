@@ -19,12 +19,13 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/google/uuid"
+	"github.com/tidwall/gjson"
 )
 
-// 真实 Codex Desktop App 固定头值（2026-09-17 Work 0.155 实抓）。
+// 真实 Codex Desktop App 固定头值（2026-09-23 Work 0.155 实抓）。
 const (
-	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（实抓：Desktop App 恒定发送该值）。
-	codexBetaFeaturesValue = "realtime_conversation,remote_compaction_v2"
+	// codexBetaFeaturesValue 对应 x-codex-beta-features 头（2026-09-23 本地 Work；本代理不提供 realtime conversation）。
+	codexBetaFeaturesValue = "remote_compaction_v2"
 	// codexTurnMetadataSandbox 对应 HTTP POST x-codex-turn-metadata.sandbox 字段（实抓：Desktop App HTTP POST 为 none）。
 	codexTurnMetadataSandbox = "none"
 	// codexDesktopThreadSource 对应普通用户 turn/prewarm metadata 的 thread_source。
@@ -34,6 +35,8 @@ const (
 	codexDesktopAgentName = "/root"
 	// codexDesktopTurnTrigger 是普通用户 turn 的触发来源。
 	codexDesktopTurnTrigger = "composer"
+	// Observed in a live 0.165 desktop continuation after an async user question.
+	codexDesktopAsyncQuestionTurnTrigger = "send_user_message_async_question"
 	// codexTurnMetadataSandboxMode 是本地无沙箱用户 turn 的新版 sandbox_mode。
 	codexTurnMetadataSandboxMode = "danger-full-access"
 	// codexResponsesLiteValue 对应 x-openai-internal-codex-responses-lite 头
@@ -41,6 +44,8 @@ const (
 	codexResponsesLiteValue = "true"
 	// codexDesktopOriginator 对应 originator 头（实抓：Desktop App 为 "Codex Desktop"）。
 	codexDesktopOriginator = "Codex Desktop"
+	// 2026-09-30 Work inference uses this originator; models/usage keep Desktop.
+	codexWorkDesktopOriginator = "codex_work_desktop"
 	// codexInstallationID 对应 x-codex-turn-metadata.installation_id 字段的兜底值（实抓固定值），
 	// 正常路径按账号确定性派生，仅在无法派生时使用。
 	codexInstallationID = "00e9ffcb-88d7-4ee8-aeca-1982d91a1330"
@@ -96,7 +101,15 @@ var codexResponsesLiteModels = map[string]bool{
 // 大小写/空白归一后，gpt-6-* 按前缀匹配，其他模型使用精确白名单。
 func isCodexResponsesLiteModel(model string) bool {
 	normalizedModel := strings.ToLower(strings.TrimSpace(model))
-	return strings.HasPrefix(normalizedModel, "gpt-6-") || codexResponsesLiteModels[normalizedModel]
+	canonicalModel := normalizeKnownOpenAICodexModel(normalizedModel)
+	return canonicalModel == "gpt-6.1-sol" || canonicalModel == "gpt-6.1-terra" || strings.HasPrefix(normalizedModel, "gpt-6-") || codexResponsesLiteModels[normalizedModel]
+}
+
+func capturedCodexInferenceOriginator(originator string) string {
+	if strings.TrimSpace(originator) == codexWorkDesktopOriginator {
+		return codexWorkDesktopOriginator
+	}
+	return codexDesktopOriginator
 }
 
 func appendCodexCBORHead(dst []byte, major byte, value uint64) []byte {
@@ -279,13 +292,6 @@ var defaultCodexSessionUUIDCache = &codexSessionUUIDCache{
 	maxEntries: codexSessionUUIDCacheMaxEntries,
 }
 
-// Fixed IDs are account namespaces. Entries still include the downstream task
-// and API key, so a stable account seed cannot merge unrelated task histories.
-var fixedCodexSessionUUIDCache = &codexSessionUUIDCache{
-	entries:    make(map[string]codexSessionUUIDCacheEntry),
-	maxEntries: codexSessionUUIDCacheMaxEntries,
-}
-
 var codexUUIDFallbackCounter atomic.Uint64
 
 func codexUUIDV7Timestamp(value uuid.UUID) int64 {
@@ -406,16 +412,11 @@ func generateCodexSessionUUID(accountID, apiKeyID int64, seed string) string {
 
 func resolveCodexSessionUUID(accountID, apiKeyID int64, sessionSeed, fixedSessionID string) string {
 	if fixed := strings.TrimSpace(fixedSessionID); fixed != "" {
-		// Without a task seed there is no evidence that two requests belong to
-		// the same task. Do not make the account-wide fixed ID a shared thread.
-		if strings.TrimSpace(sessionSeed) == "" {
-			return newCodexUUIDV7()
-		}
-		fixedKey := isolateOpenAISessionIDForAccount(accountID, apiKeyID, "fixed:"+fixed+":task:"+sessionSeed)
-		if source, ok := parsePlausibleCodexUUIDV7(sessionSeed, time.Now()); ok {
-			return isolatedCodexUUIDV7(source, fixedKey)
-		}
-		return fixedCodexSessionUUIDCache.getOrCreate(fixedKey, time.Now())
+		// Fixed-session mode is intentionally account-wide: the persisted account
+		// UUID is the upstream session/thread identity verbatim. Do not combine it
+		// with task, API-key, or account identifiers. Account.GetOpenAIFixedSessionID
+		// validates this value before it reaches request construction.
+		return fixed
 	}
 	if value := generateCodexSessionUUID(accountID, apiKeyID, sessionSeed); value != "" {
 		return value
@@ -449,6 +450,11 @@ type codexTurnMetadataProfile struct {
 	ContextWindowID            string
 	AgentName                  string
 	ThreadSource               string
+	HistoryInitialization      string
+	ForkedFromThreadID         string
+	PredictionSourceThreadID   string
+	PredictionSourceTurnID     string
+	PredictionTrigger          string
 	TurnTrigger                string
 	Sandbox                    string
 	SandboxMode                string
@@ -457,6 +463,9 @@ type codexTurnMetadataProfile struct {
 	AutoReviewEnabled          bool
 	NodeReplAutoReviewRequired bool
 	NodeReplDisabled           bool
+	AnalyticsEnabled           bool
+	Model                      string
+	ReasoningEffort            string
 }
 
 // codexTurnMetadataProfileFromInbound 保留会改变请求语义的少量官方 metadata，
@@ -464,11 +473,13 @@ type codexTurnMetadataProfile struct {
 // 避免入站客户端把任意字符串混入固定 Desktop 画像。
 func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataProfile {
 	profile := codexTurnMetadataProfile{
-		AgentName:    codexDesktopAgentName,
-		ThreadSource: codexDesktopThreadSource,
-		TurnTrigger:  codexDesktopTurnTrigger,
-		Sandbox:      codexTurnMetadataSandbox,
-		SandboxMode:  codexTurnMetadataSandboxMode,
+		AnalyticsEnabled:      true,
+		AgentName:             codexDesktopAgentName,
+		ThreadSource:          codexDesktopThreadSource,
+		HistoryInitialization: "new",
+		TurnTrigger:           codexDesktopTurnTrigger,
+		Sandbox:               codexTurnMetadataSandbox,
+		SandboxMode:           codexTurnMetadataSandboxMode,
 	}
 	if strings.TrimSpace(turnMetadata) == "" {
 		return profile
@@ -481,6 +492,11 @@ func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataP
 		ContextWindowID            string `json:"context_window_id"`
 		AgentName                  string `json:"agent_name"`
 		ThreadSource               string `json:"thread_source"`
+		HistoryInitialization      string `json:"history_initialization"`
+		ForkedFromThreadID         string `json:"forked_from_thread_id"`
+		PredictionSourceThreadID   string `json:"prediction_source_thread_id"`
+		PredictionSourceTurnID     string `json:"prediction_source_turn_id"`
+		PredictionTrigger          string `json:"prediction_trigger"`
 		TurnTrigger                string `json:"turn_trigger"`
 		Sandbox                    string `json:"sandbox"`
 		SandboxMode                string `json:"sandbox_mode"`
@@ -489,6 +505,9 @@ func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataP
 		AutoReviewEnabled          bool   `json:"auto_review_enabled"`
 		NodeReplAutoReviewRequired bool   `json:"node_repl_auto_review_required"`
 		NodeReplDisabled           bool   `json:"node_repl_disabled"`
+		AnalyticsEnabled           *bool  `json:"analytics_enabled"`
+		Model                      string `json:"model"`
+		ReasoningEffort            string `json:"reasoning_effort"`
 	}
 	if err := json.Unmarshal([]byte(turnMetadata), &inbound); err != nil {
 		return profile
@@ -520,6 +539,25 @@ func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataP
 	if inbound.TurnTrigger == codexDesktopTurnTrigger && !isThreadTitle {
 		profile.TurnTrigger = codexDesktopTurnTrigger
 	}
+	if !isThreadTitle && (inbound.ThreadSource == "" || inbound.ThreadSource == codexDesktopThreadSource) &&
+		inbound.TurnTrigger == codexDesktopAsyncQuestionTurnTrigger {
+		profile.TurnTrigger = codexDesktopAsyncQuestionTurnTrigger
+	}
+	// 0.165 uses a separate warm fork for background reply suggestions. Only
+	// preserve the captured enum and valid references on that request source.
+	if inbound.ThreadSource == "thread_sample" && !isThreadTitle {
+		profile.ThreadSource = "thread_sample"
+		profile.TurnTrigger = "composer_predictions"
+		if inbound.HistoryInitialization == "warm_fork" {
+			profile.HistoryInitialization = "warm_fork"
+			profile.ForkedFromThreadID = validCodexMetadataUUID(inbound.ForkedFromThreadID)
+		}
+		profile.PredictionSourceThreadID = validCodexMetadataUUID(inbound.PredictionSourceThreadID)
+		profile.PredictionSourceTurnID = validCodexMetadataUUID(inbound.PredictionSourceTurnID)
+		if inbound.PredictionTrigger == "live" {
+			profile.PredictionTrigger = "live"
+		}
+	}
 	if !isThreadTitle {
 		switch inbound.Sandbox {
 		case "none", "windows_elevated":
@@ -535,6 +573,13 @@ func codexTurnMetadataProfileFromInbound(turnMetadata string) codexTurnMetadataP
 			profile.RootTurnID = rootTurnID
 		}
 	}
+	if inbound.AnalyticsEnabled != nil {
+		profile.AnalyticsEnabled = *inbound.AnalyticsEnabled
+	}
+	if len(inbound.Model) <= 200 {
+		profile.Model = strings.TrimSpace(inbound.Model)
+	}
+	profile.ReasoningEffort = codexMetadataReasoningEffort(inbound.ReasoningEffort)
 	profile.AutoReviewEnabled = inbound.AutoReviewEnabled
 	switch inbound.WorkspaceKind {
 	case "project", "projectless":
@@ -561,12 +606,12 @@ func generateCodexContextWindowUUID(sessionUUID string) string {
 	return contextWindowID.String()
 }
 
-// buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合与顺序严格对齐真实 Codex
-// Desktop App 0.155.0-alpha.2.6 实抓报文（普通一轮 request_kind=turn）：
+// buildCodexTurnMetadata 生成 x-codex-turn-metadata 头的 JSON 值，字段集合对齐真实 Codex
+// Desktop App 0.165.0-alpha.1.2 实抓报文（普通一轮 request_kind=turn）：
 // installation_id, session_id, thread_id, agent_name, turn_id, window_id, window_number,
-// context_window_id, request_kind, root_turn_id, thread_source, turn_trigger, sandbox,
+// context_window_id, request_kind, history_initialization, root_turn_id, thread_source, turn_trigger, sandbox,
 // sandbox_mode, auto_review_enabled, node_repl_auto_review_required, node_repl_disabled,
-// workspaces, turn_started_at_unix_ms, workspace_kind。
+// workspaces, turn_started_at_unix_ms, analytics_enabled, model, reasoning_effort, workspace_kind。
 // 同一 turn 的工具续接保留客户端 turn_id 与开始时间；缺失时才生成。
 // 0.155 实抓：workspace_kind=project 的普通请求也可省略 workspaces。
 // 项目类型保留入站值；目录详情未知时不合成路径或 Git 状态。
@@ -596,6 +641,8 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		WindowNumber               int            `json:"window_number"`
 		ContextWindowID            string         `json:"context_window_id"`
 		RequestKind                string         `json:"request_kind"`
+		HistoryInitialization      string         `json:"history_initialization"`
+		ForkedFromThreadID         string         `json:"forked_from_thread_id,omitempty"`
 		RootTurnID                 string         `json:"root_turn_id"`
 		ThreadSource               string         `json:"thread_source"`
 		TurnTrigger                string         `json:"turn_trigger"`
@@ -607,7 +654,18 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		Workspaces                 map[string]any `json:"workspaces,omitempty"`
 		TurnStartedAtUnixMs        int64          `json:"turn_started_at_unix_ms"`
 		WorkspaceKind              string         `json:"workspace_kind,omitempty"`
+		AnalyticsEnabled           bool           `json:"analytics_enabled"`
+		ClientType                 string         `json:"client_type,omitempty"`
+		Model                      string         `json:"model,omitempty"`
+		PredictionSourceThreadID   string         `json:"prediction_source_thread_id,omitempty"`
+		PredictionSourceTurnID     string         `json:"prediction_source_turn_id,omitempty"`
+		PredictionTrigger          string         `json:"prediction_trigger,omitempty"`
+		ReasoningEffort            string         `json:"reasoning_effort,omitempty"`
+		Source                     string         `json:"source,omitempty"`
 	}{
+		AnalyticsEnabled:           profile.AnalyticsEnabled,
+		Model:                      profile.Model,
+		ReasoningEffort:            profile.ReasoningEffort,
 		InstallationID:             installationID,
 		SessionID:                  sessionUUID,
 		ThreadID:                   sessionUUID,
@@ -617,6 +675,11 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 		WindowNumber:               windowNumber,
 		ContextWindowID:            contextWindowID,
 		RequestKind:                "turn",
+		HistoryInitialization:      profile.HistoryInitialization,
+		ForkedFromThreadID:         profile.ForkedFromThreadID,
+		PredictionSourceThreadID:   profile.PredictionSourceThreadID,
+		PredictionSourceTurnID:     profile.PredictionSourceTurnID,
+		PredictionTrigger:          profile.PredictionTrigger,
 		RootTurnID:                 rootTurnID,
 		ThreadSource:               profile.ThreadSource,
 		TurnTrigger:                profile.TurnTrigger,
@@ -630,7 +693,10 @@ func buildCodexTurnMetadata(sessionUUID, windowID string, workspaces map[string]
 	}
 	// Non-empty local directories establish a project even if an older client
 	// supplied a contradictory projectless hint. Titles have no workspace kind.
-	if profile.ThreadSource == codexDesktopThreadSource && profile.TurnTrigger == codexDesktopTurnTrigger {
+	if profile.ThreadSource == codexDesktopThreadSource &&
+		(profile.TurnTrigger == codexDesktopTurnTrigger || profile.TurnTrigger == codexDesktopAsyncQuestionTurnTrigger) {
+		// Captured only on ordinary desktop user turns, not title/prewarm/compaction.
+		meta.ClientType, meta.Source = "desktop_app", "codex"
 		meta.WorkspaceKind = profile.WorkspaceKind
 		if len(workspaces) > 0 {
 			meta.WorkspaceKind = "project"
@@ -662,13 +728,21 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID, installationID, inboundM
 		WindowNumber               int    `json:"window_number"`
 		ContextWindowID            string `json:"context_window_id"`
 		RequestKind                string `json:"request_kind"`
+		HistoryInitialization      string `json:"history_initialization"`
+		ForkedFromThreadID         string `json:"forked_from_thread_id,omitempty"`
 		ThreadSource               string `json:"thread_source"`
 		Sandbox                    string `json:"sandbox"`
 		SandboxMode                string `json:"sandbox_mode"`
 		AutoReviewEnabled          bool   `json:"auto_review_enabled"`
 		NodeReplAutoReviewRequired bool   `json:"node_repl_auto_review_required"`
 		NodeReplDisabled           bool   `json:"node_repl_disabled"`
+		AnalyticsEnabled           bool   `json:"analytics_enabled"`
+		Model                      string `json:"model,omitempty"`
+		ReasoningEffort            string `json:"reasoning_effort,omitempty"`
 	}{
+		AnalyticsEnabled:           profile.AnalyticsEnabled,
+		Model:                      profile.Model,
+		ReasoningEffort:            profile.ReasoningEffort,
 		InstallationID:             installationID,
 		SessionID:                  sessionUUID,
 		ThreadID:                   sessionUUID,
@@ -678,6 +752,8 @@ func buildCodexWSPrewarmMetadata(sessionUUID, windowID, installationID, inboundM
 		WindowNumber:               windowNumber,
 		ContextWindowID:            contextWindowID,
 		RequestKind:                "prewarm",
+		HistoryInitialization:      profile.HistoryInitialization,
+		ForkedFromThreadID:         profile.ForkedFromThreadID,
 		ThreadSource:               profile.ThreadSource,
 		Sandbox:                    profile.Sandbox,
 		SandboxMode:                profile.SandboxMode,
@@ -751,6 +827,7 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 		WindowNumber               int             `json:"window_number"`
 		ContextWindowID            string          `json:"context_window_id"`
 		RequestKind                string          `json:"request_kind"`
+		HistoryInitialization      string          `json:"history_initialization"`
 		RootTurnID                 string          `json:"root_turn_id"`
 		ThreadSource               string          `json:"thread_source"`
 		TurnTrigger                string          `json:"turn_trigger,omitempty"`
@@ -762,7 +839,9 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 		NodeReplDisabled           bool            `json:"node_repl_disabled"`
 		TurnStartedAtUnixMs        int64           `json:"turn_started_at_unix_ms"`
 		Compaction                 json.RawMessage `json:"compaction"`
+		AnalyticsEnabled           bool            `json:"analytics_enabled"`
 	}{
+		AnalyticsEnabled:           profile.AnalyticsEnabled,
 		InstallationID:             installationID,
 		SessionID:                  sessionUUID,
 		ThreadID:                   sessionUUID,
@@ -772,6 +851,7 @@ func buildCodexCompactionMetadata(sessionUUID, windowID, installationID string, 
 		WindowNumber:               windowNumber,
 		ContextWindowID:            contextWindowID,
 		RequestKind:                "compaction",
+		HistoryInitialization:      profile.HistoryInitialization,
 		RootTurnID:                 rootTurnID,
 		ThreadSource:               profile.ThreadSource,
 		Sandbox:                    profile.Sandbox,
@@ -840,12 +920,13 @@ func applyCodexOAuthMimicHeadersWithProfile(req *http.Request, accountID, apiKey
 	if chatgptAccountID != "" {
 		req.Header.Set("chatgpt-account-id", chatgptAccountID)
 	}
-	_ = originator
+	originator = capturedCodexInferenceOriginator(originator)
 	actualModel := ""
 	if len(model) > 0 {
 		actualModel = strings.TrimSpace(model[0])
 	}
 
+	inboundTurnMetadata = codexMetadataRequestFields(inboundTurnMetadata, actualModel, "")
 	// User-Agent 无条件强制为 Codex Desktop 画像（忽略入站 UA），后续调用方不得覆盖。
 	req.Header.Set("user-agent", clientProfile.UserAgent())
 	// 实抓基准：HTTP POST 恒定携带 version 与 x-codex-beta-features。
@@ -861,7 +942,7 @@ func applyCodexOAuthMimicHeadersWithProfile(req *http.Request, accountID, apiKey
 	}
 	// content-type 钉死为 application/json（实抓基准为裸值，不带 charset）。
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("originator", codexDesktopOriginator)
+	req.Header.Set("originator", originator)
 	// 0.151 实抓：普通 turn、手动 compaction 与 WS prewarm 均恢复完整
 	// s=0 CBOR token（app_session_id 按账号派生）。
 	req.Header.Set("x-oai-attestation", deviceProfile.Attestation)
@@ -896,7 +977,12 @@ func applyCodexOAuthMimicHeadersWithProfile(req *http.Request, accountID, apiKey
 // 与 applyCodexOAuthMimicHeaders 生成的 Desktop turn metadata 对齐。调用方必须在
 // header 重建后、请求体压缩前调用；compact 请求保持原有专用 body 形态不变。
 func syncCodexOAuthMimicRequestBody(req *http.Request, body []byte, isCompact bool) ([]byte, error) {
-	if req == nil || isCompact {
+	if req == nil {
+		return body, nil
+	}
+	req.Header.Set(openAIWSTurnMetadataHeader, codexMetadataRequestFields(req.Header.Get(openAIWSTurnMetadataHeader),
+		gjson.GetBytes(body, "model").String(), gjson.GetBytes(body, "reasoning.effort").String()))
+	if isCompact {
 		return body, nil
 	}
 
@@ -948,12 +1034,12 @@ func applyCodexOAuthWSMimicHeadersWithProfile(headers http.Header, accountID, ap
 	if chatgptAccountID != "" {
 		headers.Set("chatgpt-account-id", chatgptAccountID)
 	}
-	_ = originator
+	originator = capturedCodexInferenceOriginator(originator)
 
 	headers.Set("user-agent", clientProfile.UserAgent())
 	headers.Set("version", clientProfile.CodexVersion)
 	headers.Set("openai-beta", openAIWSBetaV2Value)
-	headers.Set("originator", codexDesktopOriginator)
+	headers.Set("originator", originator)
 	headers.Set("x-codex-beta-features", codexBetaFeaturesValue)
 	if len(model) > 0 {
 		if actualModel := strings.TrimSpace(model[0]); actualModel != "" {
@@ -973,6 +1059,9 @@ func applyCodexOAuthWSMimicHeadersWithProfile(headers http.Header, accountID, ap
 	headers.Set("x-client-request-id", sessUUID)
 	headers.Set("x-codex-window-id", windowID)
 
+	if len(model) > 0 {
+		turnMetadata = codexMetadataRequestFields(turnMetadata, model[0], "")
+	}
 	metadata := buildCodexWSPrewarmMetadata(sessUUID, windowID, installationID, turnMetadata)
 	if metadata != "" {
 		headers.Set("x-codex-turn-metadata", metadata)

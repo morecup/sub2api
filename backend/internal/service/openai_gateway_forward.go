@@ -19,6 +19,8 @@ import (
 
 // Forward forwards request to OpenAI API
 func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, account *Account, body []byte) (*OpenAIForwardResult, error) {
+	ctx = withCodexRequestAudit(ctx, c)
+	account = s.prepareCodexEgressAccount(ctx, account)
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)
 	if shouldForwardOpenAIResponsesViaRawChatCompletions(account) {
@@ -814,6 +816,15 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// 命中 WS 时仅走 WebSocket Mode；不再自动回退 HTTP。
 	if wsDecision.Transport == OpenAIUpstreamTransportResponsesWebsocketV2 {
 		// WS 分支需要结构化 payload 与重连恢复，命中后再触发 full-map decode。
+		regionalBody, err := rewriteCodexEgressTimezone(body, account, time.Now())
+		if err != nil {
+			return nil, fmt.Errorf("apply codex websocket egress timezone: %w", err)
+		}
+		if !bytes.Equal(regionalBody, body) {
+			body = regionalBody
+			requestView = newOpenAIRequestView(body)
+			reqBody = nil
+		}
 		wsReqBody, err := ensureReqBody()
 		if err != nil {
 			return nil, err
@@ -1422,6 +1433,11 @@ func shouldForwardOpenAIResponsesViaRawChatCompletions(account *Account) bool {
 }
 
 func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.Context, account *Account, body []byte, token string, isStream bool, promptCacheKey string, isCodexCLI bool) (*http.Request, error) {
+	account = s.prepareCodexEgressAccount(ctx, account)
+	body, err := rewriteCodexEgressTimezone(body, account, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("apply codex egress timezone: %w", err)
+	}
 	// Determine target URL based on account type
 	var targetURL string
 	switch account.Type {
@@ -1542,7 +1558,8 @@ func (s *OpenAIGatewayService) buildUpstreamRequest(ctx context.Context, c *gin.
 			actualModel := strings.TrimSpace(gjson.GetBytes(body, "model").String())
 			req.Header.Set(openAIWSTurnMetadataHeader, openAIWSFrameTurnMetadata(body, req.Header.Get(openAIWSTurnMetadataHeader)))
 			fedRAMP := req.Header.Get("x-openai-fedramp")
-			applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, fixedSessionID, codexDesktopOriginator, isCompact, responsesLite, actualModel)
+			applyCodexOAuthMimicHeadersForAccount(req, account, apiKeyID, seed, fixedSessionID, resolveOpenAIUpstreamOriginator(c, false), isCompact, responsesLite, actualModel)
+			applyCodexAnalyticsPolicy(req.Header, s.cfg)
 			if fedRAMP != "" {
 				req.Header.Set("x-openai-fedramp", fedRAMP)
 			}

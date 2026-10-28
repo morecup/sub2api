@@ -121,6 +121,11 @@ func syncCodexWSFrameMetadata(raw []byte, headers http.Header, fallback string) 
 			return nil, err
 		}
 	}
+	metadata = codexMetadataRequestFields(metadata, gjson.GetBytes(raw, "model").String(), gjson.GetBytes(raw, "reasoning.effort").String())
+	// The connection's disabled analytics policy also applies to subsequent frames.
+	if gjson.Get(headers.Get(openAIWSTurnMetadataHeader), "analytics_enabled").Type == gjson.False {
+		metadata, _ = sjson.Set(metadata, "analytics_enabled", false)
+	}
 	payload := map[string]any{"client_metadata": clientMetadata}
 	applyCodexClientMetadata(payload, "", metadata)
 	applyCodexWSRequestClientMetadata(payload, gjson.GetBytes(raw, "model").String())

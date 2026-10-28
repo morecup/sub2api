@@ -8,11 +8,11 @@ import (
 )
 
 const (
-	// Stable wire values captured on 2026-09-17 from Codex Desktop's Owl
-	// WebView (Chrome 153). Session cookies are intentionally not synthesized.
+	// Stable wire values captured on 2026-10-28 from Codex Desktop's Owl
+	// WebView (Chrome 156). Session cookies are intentionally not synthesized.
 	// Sentry values are static per release on every webview request (trace ids
 	// are zeroed, no session correlation), so they are part of the wire profile.
-	codexDesktopWebviewUserAgent      = "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
+	codexDesktopWebviewUserAgent      = "CodexBrowser Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
 	codexDesktopWebviewAcceptEncoding = "gzip, deflate, br, zstd"
 	// Captured WebView locale; keep in lockstep with oai-language / attestation.
 	codexDesktopWebviewAcceptLanguage = "zh-CN,zh;q=0.9"
@@ -90,6 +90,25 @@ func applyCodexDesktopSessionHeaders(headers map[string]string, account *Account
 	}
 }
 
+// The 0.165 usage UI includes browser hints and window identity. Keep this
+// endpoint-specific: reset-credit captures do not establish these fields.
+func applyCodexDesktopUsageHeaders(headers map[string]string, account *Account) {
+	client := codexClientProfileForAccount(account)
+	headers["accept-encoding"] = codexDesktopWebviewAcceptEncoding
+	headers["sentry-trace"] = codexDesktopWebviewSentryTrace
+	headers["baggage"] = strings.Replace(codexDesktopWebviewBaggage, "codex%40"+codexDesktopAppVersion, "codex%40"+client.AppVersion, 1)
+	headers["oai-app-brand"] = "chatgpt"
+	if client.DeviceID != "" {
+		headers["oai-did"] = client.DeviceID
+	}
+	headers["sec-ch-ua"] = client.BrowserClientHints()
+	headers["sec-ch-ua-mobile"] = "?0"
+	headers["sec-ch-ua-platform"] = `"Windows"`
+	headers["x-openai-codex-pricing-chooser"] = "1"
+	headers["x-openai-codex-window-type"] = "electron"
+	headers["x-openai-web-frontend"] = "codex_webview"
+}
+
 // withCodexDesktopWebviewProfile preserves the factory-provided proxy and TLS
 // transport while replacing req/v3's generic macOS Chrome defaults. The order
 // is the stable subset visible on the wire; omitted dynamic headers retain
@@ -116,14 +135,22 @@ func withCodexDesktopWebviewProfile(client *req.Client) *req.Client {
 		"Priority":        {codexDesktopWebviewPriority},
 	}
 	profiled.SetCommonHeaderOrder(
-		"sentry-trace",
-		"baggage",
 		"content-length",
 		"authorization",
+		"baggage",
 		"chatgpt-account-id",
 		"content-type",
+		"oai-app-brand",
+		"oai-did",
 		"oai-language",
 		"originator",
+		"sec-ch-ua",
+		"sec-ch-ua-mobile",
+		"sec-ch-ua-platform",
+		"sentry-trace",
+		"x-openai-codex-pricing-chooser",
+		"x-openai-codex-window-type",
+		"x-openai-web-frontend",
 		"sec-fetch-site",
 		"sec-fetch-mode",
 		"sec-fetch-dest",

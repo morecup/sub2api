@@ -8,10 +8,15 @@ import (
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/tidwall/sjson"
 )
 
 var codexModelMap = map[string]string{
-	"gpt-6-astra": "gpt-6-astra",
+	"gpt-6.1-terra": "gpt-6.1-terra",
+	"gpt-6.1-sol":   "gpt-6.1-sol",
+	"gpt-6-astra":   "gpt-6-astra",
+	"gpt-6-sol":     "gpt-6-sol",
+	"gpt-6-luna":    "gpt-6-luna",
 	// gpt-5.6-sol-wm is a server-gated ChatGPT/Codex route rather than a
 	// public API model. Preserve the exact slug for OAuth accounts so the
 	// upstream can make the entitlement decision instead of silently routing
@@ -1517,6 +1522,14 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 	metadataParsed := false
 	if len(turnMetadata) > 0 {
 		metadata := strings.TrimSpace(turnMetadata[0])
+		model, _ := reqBody["model"].(string)
+		effort := ""
+		if reasoning, ok := reqBody["reasoning"].(map[string]any); ok {
+			effort, _ = reasoning["effort"].(string)
+		}
+		if metadata != "" {
+			metadata = codexMetadataRequestFields(metadata, model, effort)
+		}
 		if metadata != "" {
 			var parsed struct {
 				InstallationID string `json:"installation_id"`
@@ -1592,16 +1605,54 @@ func applyCodexClientMetadata(reqBody map[string]any, installationID string, tur
 }
 
 func applyCodexClientMetadataBytes(body []byte, turnMetadata string) ([]byte, bool, error) {
-	var reqBody map[string]any
-	if err := json.Unmarshal(body, &reqBody); err != nil {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
 		return body, false, err
 	}
-	if !applyCodexClientMetadata(reqBody, "", turnMetadata) {
+	if fields == nil {
 		return body, false, nil
 	}
-	updated, err := json.Marshal(reqBody)
+	// Only parse fields needed for metadata. Tool arguments, encrypted history
+	// and large numeric input values must not be re-encoded as float64.
+	reqBody := make(map[string]any, 4)
+	for _, key := range []string{"model", "reasoning", "prompt_cache_key", "client_metadata"} {
+		if raw, ok := fields[key]; ok {
+			var value any
+			decoder := json.NewDecoder(strings.NewReader(string(raw)))
+			decoder.UseNumber()
+			if err := decoder.Decode(&value); err != nil {
+				return body, false, err
+			}
+			reqBody[key] = value
+		}
+	}
+	modified := applyCodexClientMetadata(reqBody, "", turnMetadata)
+	// HTTP fallback can originate from a WS frame. These markers belong only
+	// to response.create; HTTP carries Lite in its request header instead.
+	if metadata, ok := reqBody["client_metadata"].(map[string]any); ok {
+		for _, key := range []string{"x-codex-ws-stream-request-start-ms", responsesLiteWSMetadataKey} {
+			if _, exists := metadata[key]; exists {
+				delete(metadata, key)
+				modified = true
+			}
+		}
+	}
+	if !modified {
+		return body, false, nil
+	}
+	metadata, err := json.Marshal(reqBody["client_metadata"])
 	if err != nil {
 		return body, false, err
+	}
+	updated, err := sjson.SetRawBytes(body, "client_metadata", metadata)
+	if err != nil {
+		return body, false, err
+	}
+	if key, ok := reqBody["prompt_cache_key"].(string); ok {
+		updated, err = sjson.SetBytes(updated, "prompt_cache_key", key)
+		if err != nil {
+			return body, false, err
+		}
 	}
 	return updated, true, nil
 }

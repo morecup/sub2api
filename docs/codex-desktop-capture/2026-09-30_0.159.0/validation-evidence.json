@@ -1,0 +1,174 @@
+{
+  "generated_at": "2026-09-30T04:59:32.397250+00:00",
+  "host_isolation": {
+    "main_processes_unchanged": true,
+    "installed_asar_unchanged": true,
+    "system_proxy_unchanged": true,
+    "capture_ports_released": true
+  },
+  "production": {
+    "before_pid": 878970,
+    "after_pid": 880834,
+    "restart_counter_before": 0,
+    "restart_counter_after": 0,
+    "observed_starts": 1,
+    "binary_sha256": "2c19079a789e294b8d6f40c67ca02193e618b63f5ad5e096d67810b03a623a5f",
+    "pricing_sha256": "a8f7369fee51e6455cc2af687dadae9b00c924d073d11e1f0ad3bdff105affc4",
+    "build_tags": [
+      "build\t-tags=embed,http2legacy",
+      "build\t-tags=embed,http2legacy"
+    ],
+    "checks": {
+      "online": true,
+      "new_pid": true,
+      "single_restart": true,
+      "binary_match": true,
+      "tags": true,
+      "config_unchanged": true,
+      "health": true,
+      "assets": true,
+      "profiles_preserved": true,
+      "pricing_policy_preserved": true,
+      "other_processes_unchanged": true,
+      "clean_fatal_logs": true
+    },
+    "external_checks": [
+      {
+        "path": "/health",
+        "http": 200
+      },
+      {
+        "path": "/admin/accounts",
+        "http": 200
+      }
+    ],
+    "profile_versions": [
+      {
+        "app": "26.928.20755",
+        "cli": "0.159.0",
+        "count": 1913,
+        "browser": "154.0.0.0"
+      }
+    ],
+    "appended_model_mapping_count": 3,
+    "model_mapping_other_fields_preserved": true,
+    "log_diagnostics": [
+      {
+        "log": "pm2-app.out.log",
+        "bytes": 456367,
+        "counts": {},
+        "telemetry": [
+          {
+            "result": "acknowledged",
+            "status": 202,
+            "proxy": true,
+            "batches": 12
+          }
+        ]
+      },
+      {
+        "log": "pm2-app.err.log",
+        "bytes": 3146,
+        "counts": {},
+        "telemetry": []
+      }
+    ],
+    "smoke_requests": [
+      {
+        "requested_tier": "standard",
+        "originator": "Codex Desktop",
+        "http": 200,
+        "completed": true,
+        "reply_ok": true,
+        "response_model": "gpt-6.1-sol",
+        "response_service_tier": "default",
+        "billed_tier": null,
+        "noncached_input_tokens": 4397,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 5,
+        "input_cost": "0.008794",
+        "cache_read_cost": "0E-7",
+        "output_cost": "0.00005",
+        "total_cost": "0.0088440",
+        "actual_cost": "0.008844",
+        "cost_recalculation_passed": true
+      },
+      {
+        "requested_tier": "priority",
+        "originator": "codex_work_desktop",
+        "http": 200,
+        "completed": true,
+        "reply_ok": true,
+        "response_model": "gpt-6.1-sol",
+        "response_service_tier": "default",
+        "billed_tier": "priority",
+        "noncached_input_tokens": 557,
+        "cache_read_tokens": 3840,
+        "cache_write_tokens": 0,
+        "output_tokens": 5,
+        "input_cost": "0.002228",
+        "cache_read_cost": "0.0007680",
+        "output_cost": "0.00010",
+        "total_cost": "0.0030960",
+        "actual_cost": "0.003096",
+        "cost_recalculation_passed": true
+      }
+    ]
+  },
+  "local_checks": [
+    {
+      "command": "bash deploy/tests/grok-http2-build-tags-test.sh",
+      "result": "passed"
+    },
+    {
+      "command": "go test ./internal/pkg/grokhttp2/... -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=http2legacy ./internal/pkg/grokhttp2/... -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=unit ./internal/repository -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=\"unit http2legacy\" ./internal/repository -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=\"unit http2legacy\" ./internal/service -run \"Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)\" -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=\"unit http2legacy\" ./internal/pkg/openai/... ./internal/handler/admin -run \"Codex|OpenAI|AvailableModels\" -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm exec vitest run src/composables/__tests__/useModelWhitelist.spec.ts src/components/account/__tests__/CreateAccountModal.spec.ts",
+      "result": "60 passed"
+    },
+    {
+      "command": "pnpm typecheck",
+      "result": "passed"
+    },
+    {
+      "command": "deploy/tests/codex-client-profile-upgrade-20260930-test.sql on PostgreSQL 18",
+      "result": "17 upgrades, 8 exclusions, environment preservation and idempotency passed"
+    },
+    {
+      "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags=\"embed http2legacy\" -trimpath ./cmd/server",
+      "result": "passed"
+    },
+    {
+      "command": "python tools/deploy_vps.py --build-only",
+      "result": "passed"
+    }
+  ],
+  "limitations": [
+    "The selected service regression suite passed; the previously reproduced baseline managed Responses Lite test panic prevents claiming a clean full service suite.",
+    "Codex OAuth Fast replies echoed default in both the official UI capture and the gateway smoke; billing follows the existing final outbound tier contract, not a latency guarantee.",
+    "Flex and long-context prices were tested locally, not by large production requests."
+  ]
+}

@@ -1,15 +1,15 @@
 package tlsfingerprint
 
 // CodexDesktopProfileName identifies the TLS profile used by Codex Desktop
-// 26.911.7940.0 / codex-rs 0.155.0-alpha.2.6.
+// 26.1023.6123.0 / codex-rs 0.165.0-alpha.1.2.
 //
 // Provenance: direct loopback TLS/H2 capture of the isolated bundled binary on
-// 2026-09-18. The provider used dummy auth and an offline fixture. Desktop-only
-// HTTP header order is from the 2026-09-17 application capture.
-const CodexDesktopProfileName = "Codex Desktop 26.911.7940.0 (rustls / reqwest)"
+// 2026-10-28. The provider used dummy auth and an offline fixture. Desktop-only
+// HTTP header order is refreshed from the 2026-10-28 application capture.
+const CodexDesktopProfileName = "Codex Desktop 26.1023.6123.0 (rustls / reqwest)"
 
 // CodexDesktopHTTP2ProfileName identifies the HTTP/2 half of that profile.
-const CodexDesktopHTTP2ProfileName = "Codex Desktop 26.911.7940.0 (hyper / h2)"
+const CodexDesktopHTTP2ProfileName = "Codex Desktop 26.1023.6123.0 (hyper / h2)"
 
 // codexDesktopCipherSuites is rustls' aws-lc-rs DEFAULT_CIPHER_SUITES in
 // provider order, followed by the secure-renegotiation SCSV rustls appends
@@ -41,8 +41,8 @@ var codexDesktopKeyShareGroups = []uint16{
 	0x001d, // x25519
 }
 
-// aws-lc-rs additionally supports P-521 certificates; that entry is the only
-// signature-scheme difference from the ring-backed Grok rustls profile.
+// The 0.165 HTTP and WS ClientHello captures both append 0x0904..0x0906.
+// Keep the full advertised order, independently of the Grok rustls profile.
 var codexDesktopSignatureAlgorithms = []uint16{
 	0x0503, // ecdsa_secp384r1_sha384
 	0x0403, // ecdsa_secp256r1_sha256
@@ -54,6 +54,9 @@ var codexDesktopSignatureAlgorithms = []uint16{
 	0x0601, // rsa_pkcs1_sha512
 	0x0501, // rsa_pkcs1_sha384
 	0x0401, // rsa_pkcs1_sha256
+	0x0904,
+	0x0905,
+	0x0906,
 }
 
 // Fresh rustls 0.23 connections use this extension set. rustls permutes these
@@ -90,6 +93,8 @@ var codexDesktopHTTP2PseudoHeaderOrder = []string{
 var codexDesktopHTTP2RegularHeaderOrder = []string{
 	"version",
 	"x-codex-beta-features",
+	"x-codex-turn-state",
+	"originator",
 	"x-codex-window-id",
 	"x-codex-turn-metadata",
 	"x-oai-attestation",
@@ -103,7 +108,6 @@ var codexDesktopHTTP2RegularHeaderOrder = []string{
 	"content-type",
 	"authorization",
 	"chatgpt-account-id",
-	"originator",
 	"user-agent",
 	"cookie",
 	"content-length",
@@ -129,6 +133,17 @@ func CodexDesktopProfile() *Profile {
 		ResumeSessions:              true,
 		DisableAutomaticCompression: true,
 	}
+}
+
+// The native catalog request does not use the Work inference wrapper.
+// Its header order is independently captured; do not reuse the POST order.
+func CodexDesktopModelsProfile() *Profile {
+	profile := CodexDesktopProfile()
+	profile.Name += " models"
+	profile.HTTP2.RegularHeaderOrder = []string{
+		"version", "authorization", "chatgpt-account-id", "originator", "user-agent", "accept", "if-none-match",
+	}
+	return profile
 }
 
 // CodexDesktopHTTP2Profile returns the hyper/h2 connection preamble and the

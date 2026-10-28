@@ -53,6 +53,7 @@ func (s *OpenAIGatewayService) doUpstreamRequest(req *http.Request, proxyURL str
 	cookies := s.codexCookies.prepare(req, account, proxyURL)
 	started := time.Now()
 	resp, err := s.httpUpstream.DoWithTLS(req, proxyURL, accountID, concurrency, profile)
+	observeCodexRequestAudit(req, resp, account, proxyURL, profile, err)
 	s.observeCodexHTTPRequest(req, resp, account, proxyURL, profile, time.Since(started), err)
 	if cookies != nil && resp != nil {
 		cookieURL := req.URL

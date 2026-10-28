@@ -796,7 +796,7 @@ func TestOpenAIGatewayService_Forward_WSv2_OAuthStoreFalseByDefault(t *testing.T
 	require.True(t, gjson.Get(requestJSON, "stream").Bool(), "OAuth Codex 规范化后应强制 stream=true")
 	require.Equal(t, "native-wsv2", gjson.Get(requestJSON, "input.0.namespace").String(), "OAuth WSv2 应保留原生 namespace")
 	require.Equal(t, openAIWSBetaV2Value, captureDialer.lastHeaders.Get("OpenAI-Beta"))
-	require.Equal(t, "realtime_conversation,remote_compaction_v2", captureDialer.lastHeaders.Get("x-codex-beta-features"))
+	require.Equal(t, "remote_compaction_v2", captureDialer.lastHeaders.Get("x-codex-beta-features"))
 	// OAuth 账号的 session_id/conversation_id 应同时按 API key 和上游账号隔离，
 	// 测试中未设置 api_key 到 context，apiKeyID=0。
 	require.Equal(t, resolveCodexSessionUUID(account.ID, 0, "sess-oauth-1", ""), captureDialer.lastHeaders.Get("session-id"))

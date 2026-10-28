@@ -185,6 +185,7 @@ func ProvideOpenAIQuotaService(
 	openAIGatewayService *OpenAIGatewayService,
 ) *OpenAIQuotaService {
 	service := NewOpenAIQuotaService(accountRepo, proxyRepo, tokenProvider, privacyClientFactory)
+	service.codexEgressProfiles = openAIGatewayService.codexEgressProfiles
 	service.agentIdentityWS = openAIGatewayService
 	return service
 }
@@ -843,7 +844,9 @@ var ProviderSet = wire.NewSet(
 	NewAnnouncementService,
 	NewAdminService,
 	NewGatewayService,
-	NewOpenAIGatewayService,
+	ProvideOpenAIGatewayService,
+	NewCodexEgressProfileService,
+	ProvideCodexDesktopAPIService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
 	ProvideBatchImageModelPricingResolver,

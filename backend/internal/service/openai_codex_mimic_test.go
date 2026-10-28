@@ -131,26 +131,19 @@ func TestApplyCodexWSRequestClientMetadataLiteInPayloadOnly(t *testing.T) {
 	require.NotEmpty(t, nonLiteMetadata["x-codex-ws-stream-request-start-ms"])
 }
 
-func TestApplyCodexOAuthMimicHeadersFixedSessionNamespace(t *testing.T) {
+func TestApplyCodexOAuthMimicHeadersFixedSessionUsesSavedID(t *testing.T) {
 	fixedSessionID := "019ff4d1-0567-7630-ba3d-e564a4a519ac"
-	sessions := make(map[string]string)
 	for _, seed := range []string{"client-session-a", "client-session-b", "client-session-a"} {
 		req := httptest.NewRequest(http.MethodPost, "https://chatgpt.com/backend-api/codex/responses", strings.NewReader(`{"model":"gpt-5.6-sol"}`))
 		applyCodexOAuthMimicHeaders(req, 7, 42, seed, fixedSessionID, codexDesktopOriginator, false, true)
 
 		sessionID := req.Header.Get("session-id")
-		require.NotEmpty(t, sessionID)
-		require.NotEqual(t, fixedSessionID, sessionID)
-		if previous := sessions[seed]; previous != "" {
-			require.Equal(t, previous, sessionID)
-		}
-		sessions[seed] = sessionID
+		require.Equal(t, fixedSessionID, sessionID)
 		require.Equal(t, sessionID, req.Header.Get("thread-id"))
 		require.Equal(t, sessionID, req.Header.Get("x-client-request-id"))
 		require.Equal(t, sessionID+":0", req.Header.Get("x-codex-window-id"))
 		require.Equal(t, sessionID, gjson.Get(req.Header.Get("x-codex-turn-metadata"), "session_id").String())
 	}
-	require.NotEqual(t, sessions["client-session-a"], sessions["client-session-b"])
 }
 
 // 入站 compaction metadata 缺省 compaction 对象时回退实抓默认画像。

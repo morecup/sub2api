@@ -16,8 +16,9 @@ import (
 // CodexDesktopAPIService handles Codex Desktop App management API calls
 // (invite friends, rate-limit reset credits) to chatgpt.com/backend-api.
 type CodexDesktopAPIService struct {
-	clientFactory PrivacyClientFactory
-	proxyRepo     ProxyRepository
+	clientFactory       PrivacyClientFactory
+	proxyRepo           ProxyRepository
+	codexEgressProfiles *CodexEgressProfileService
 }
 
 // NewCodexDesktopAPIService creates a new CodexDesktopAPIService.
@@ -123,6 +124,7 @@ func (s *CodexDesktopAPIService) GetInviteEligibility(ctx context.Context, accou
 		return nil, err
 	}
 
+	account = s.codexEgressProfiles.forAccount(ctx, account, proxyURL)
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
@@ -167,6 +169,7 @@ func (s *CodexDesktopAPIService) InviteFriends(ctx context.Context, account *Acc
 		return nil, err
 	}
 
+	account = s.codexEgressProfiles.forAccount(ctx, account, proxyURL)
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
@@ -213,6 +216,7 @@ func (s *CodexDesktopAPIService) GetRateLimitResetCredits(ctx context.Context, a
 		return nil, err
 	}
 
+	account = s.codexEgressProfiles.forAccount(ctx, account, proxyURL)
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)
@@ -261,6 +265,7 @@ func (s *CodexDesktopAPIService) ConsumeRateLimitResetCredit(ctx context.Context
 		return nil, err
 	}
 
+	account = s.codexEgressProfiles.forAccount(ctx, account, proxyURL)
 	client, err := s.webviewClient(proxyURL)
 	if err != nil {
 		return nil, infraerrors.Newf(http.StatusBadGateway, "CODEX_DESKTOP_CLIENT_ERROR", "failed to create HTTP client: %v", err)

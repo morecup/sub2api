@@ -1,0 +1,26 @@
+-- Upgrade the September 30 default profile to the captured October 28 release.
+-- Preserve identities, OS/display/locale settings, custom profiles and other data.
+WITH updated AS (
+    UPDATE accounts
+    SET extra = jsonb_set(extra, '{openai_codex_client_profile}',
+        (extra->'openai_codex_client_profile') || jsonb_build_object(
+            'codex_version', '0.165.0-alpha.1.2',
+            'app_version', '26.1023.50603',
+            'browser_version', '156.0.0.0',
+            'template_id', CASE
+                WHEN extra #>> '{openai_codex_client_profile,template_id}' = 'capture-20260930'
+                    THEN 'capture-20261028'
+                ELSE replace(extra #>> '{openai_codex_client_profile,template_id}', 'windows-v3-', 'windows-v4-')
+            END))
+    WHERE platform = 'openai' AND type = 'oauth'
+      AND extra #>> '{openai_codex_client_profile,schema_version}' = '1'
+      AND extra #>> '{openai_codex_client_profile,codex_version}' = '0.159.0'
+      AND extra #>> '{openai_codex_client_profile,app_version}' = '26.928.20755'
+      AND extra #>> '{openai_codex_client_profile,browser_version}' = '154.0.0.0'
+      AND extra #>> '{openai_codex_client_profile,otel_sdk_version}' = '0.31.0'
+      AND (extra #>> '{openai_codex_client_profile,template_id}' = 'capture-20260930'
+           OR extra #>> '{openai_codex_client_profile,template_id}' ~ '^windows-v3-(0[0-9]|1[0-5])$')
+    RETURNING id
+)
+INSERT INTO scheduler_outbox (event_type, account_id)
+SELECT 'account_changed', id FROM updated;

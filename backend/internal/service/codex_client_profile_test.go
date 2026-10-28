@@ -212,9 +212,10 @@ func TestCodexClientProfileModelsRequest(t *testing.T) {
 	s := &OpenAIGatewayService{}
 	_, err := s.FetchCodexModelsManifest(context.Background(), account, "incoming-untrusted-version", "")
 	require.NoError(t, err)
-	require.Equal(t, p.UserAgent(), got.Get("user-agent"))
+	require.Equal(t, p.NativeUserAgent(), got.Get("user-agent"))
+	require.Equal(t, "*/*", got.Get("accept"))
 	require.Equal(t, p.CodexVersion, got.Get("version"))
-	require.Equal(t, "0.155.0", clientVersion)
+	require.Equal(t, "0.165.0", clientVersion)
 }
 
 type codexProfileProbeDialer struct {

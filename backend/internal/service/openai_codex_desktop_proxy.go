@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -37,6 +38,7 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 	if account.Type != AccountTypeOAuth || account.Platform != PlatformOpenAI {
 		return nil, fmt.Errorf("codex desktop endpoint requires an OpenAI OAuth account")
 	}
+	account = s.prepareCodexEgressAccount(ctx, account)
 	path = strings.TrimSpace(path)
 	if !strings.HasPrefix(path, "/backend-api/") {
 		return nil, fmt.Errorf("invalid codex desktop endpoint path")
@@ -54,6 +56,10 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 	if err != nil {
 		return nil, fmt.Errorf("get codex desktop account token: %w", err)
 	}
+	body, err = rewriteCodexEgressTimezone(body, account, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("apply codex desktop egress timezone: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, targetURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -67,7 +73,7 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 			lower := strings.ToLower(strings.TrimSpace(key))
 			switch {
 			case lower == "accept", lower == "accept-language", lower == "content-type",
-				lower == "oai-language", lower == "oai-product-sku", lower == "mcp-protocol-version",
+				lower == "oai-language", lower == "oai-app-brand", lower == "oai-product-sku", lower == "mcp-protocol-version",
 				lower == "originator", lower == "version", lower == "x-codex-beta-features",
 				lower == "x-codex-installation-id", lower == "x-codex-window-id",
 				lower == "x-codex-turn-state", lower == "x-codex-turn-metadata",
@@ -75,12 +81,16 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 				lower == "sec-ch-ua", lower == "sec-ch-ua-mobile", lower == "sec-ch-ua-platform",
 				lower == "sec-fetch-site", lower == "sec-fetch-mode", lower == "sec-fetch-dest",
 				lower == "priority",
+				lower == "x-openai-codex-pricing-chooser", lower == "x-openai-codex-window-type", lower == "x-openai-web-frontend",
 				strings.HasPrefix(lower, "sentry-"), lower == "baggage":
 				for _, value := range values {
 					req.Header.Add(key, value)
 				}
 			}
 		}
+	}
+	if path == "/backend-api/wham/usage" && req.Header.Get("oai-app-brand") == "" {
+		req.Header.Set("oai-app-brand", "chatgpt")
 	}
 	req.Header.Del("authorization")
 	req.Header.Del("x-api-key")
@@ -115,7 +125,7 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 	} else {
 		req.Header.Set("originator", codexDesktopOriginator)
 	}
-	if req.Header.Get("accept") == "" {
+	if req.Header.Get("accept") == "" && path != "/backend-api/wham/usage" {
 		req.Header.Set("accept", "application/json")
 	}
 	if len(body) > 0 && req.Header.Get("content-type") == "" {
@@ -124,7 +134,19 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 	account.ApplyHeaderOverrides(req.Header)
 	if account.IsOpenAIOAuth() {
 		client := codexClientProfileForAccount(account)
-		if strings.Contains(req.Header.Get("user-agent"), "Mozilla/") {
+		if path == "/backend-api/wham/usage" {
+			webview := buildCodexDesktopWebviewHeaders(token, account.GetChatGPTAccountID(), client.Locale, false)
+			applyCodexDesktopSessionHeaders(webview, account)
+			applyCodexDesktopUsageHeaders(webview, account)
+			for name, value := range webview {
+				// Authentication is already resolved, including shadow accounts.
+				if name != "authorization" && name != "chatgpt-account-id" {
+					req.Header.Set(name, value)
+				}
+			}
+		} else if strings.Contains(incomingUA, "Mozilla/") && strings.Contains(incomingUA, "(Codex Desktop;") {
+			req.Header.Set("user-agent", client.ElectronUserAgent())
+		} else if strings.Contains(incomingUA, "Mozilla/") {
 			req.Header.Set("user-agent", client.WebviewUserAgent())
 		} else {
 			req.Header.Set("user-agent", client.UserAgent())
@@ -133,6 +155,8 @@ func (s *OpenAIGatewayService) ProxyCodexDesktopEndpoint(
 		for key, value := range map[string]string{
 			"version": client.CodexVersion, "x-codex-installation-id": client.InstallationID,
 			"oai-did": client.DeviceID, "oai-language": client.Locale, "accept-language": client.AcceptLanguage(),
+			"sec-ch-ua": client.BrowserClientHints(), "sec-ch-ua-mobile": "?0", "sec-ch-ua-platform": `"Windows"`,
+			"baggage": strings.Replace(codexDesktopWebviewBaggage, "codex%40"+codexDesktopAppVersion, "codex%40"+client.AppVersion, 1),
 		} {
 			if req.Header.Get(key) != "" {
 				req.Header.Set(key, value)

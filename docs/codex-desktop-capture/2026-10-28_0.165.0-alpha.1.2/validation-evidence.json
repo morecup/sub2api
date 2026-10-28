@@ -1,0 +1,279 @@
+{
+  "generated_at": "2026-10-28T06:17:50.434889+00:00",
+  "host_isolation": {
+    "main_processes_unchanged": true,
+    "installed_asar_unchanged": true,
+    "system_proxy_unchanged": true,
+    "capture_ports_released": true
+  },
+  "build": {
+    "binary": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\sub2api-deploy\\sub2api-linux-amd64-ef18307b6-dirty",
+    "sha256": "531502269d266c6a8f6a3fb38d4e909895b00bf9820e1a9e11c567bf99925882",
+    "go": "1.27.0",
+    "tags": [
+      "embed",
+      "http2legacy"
+    ],
+    "GOOS": "linux",
+    "GOARCH": "amd64",
+    "CGO_ENABLED": "0",
+    "trimpath": true,
+    "canonical_build_exit_code": 0,
+    "frontend": "rebuilt and embedded by canonical production deployment",
+    "production_deployed": true,
+    "canonical_deploy_exit_code": 0
+  },
+  "production": {
+    "deployed": true,
+    "production_smoke_tested": true,
+    "all_8_models_completed_first_and_second_turn": true,
+    "attempts": 17,
+    "completed": 16,
+    "initial_6_1_sol_capacity_failure_preserved": true,
+    "transport": "HTTP",
+    "websocket_production_tested": false,
+    "headers_and_egress_timezone_verified": true,
+    "evidence": "production-validation.json",
+    "binary_sha256": "531502269d266c6a8f6a3fb38d4e909895b00bf9820e1a9e11c567bf99925882"
+  },
+  "local_checks": [
+    {
+      "command": "bash deploy/tests/grok-http2-build-tags-test.sh",
+      "result": "passed"
+    },
+    {
+      "command": "go test ./internal/pkg/grokhttp2/... -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=http2legacy ./internal/pkg/grokhttp2/... -count=1",
+      "result": "passed on repeat after one Windows loopback connection-abort failure"
+    },
+    {
+      "command": "go test -tags=unit ./internal/repository -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=\"unit http2legacy\" ./internal/repository -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=unit ./internal/service -run \"Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)\" -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=\"unit http2legacy\" ./internal/service -run \"Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)\" -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "go test -tags=unit ./internal/pkg/openai ./internal/handler/admin -run \"Test.*(Model|Codex|GPT6)\" -count=1",
+      "result": "passed"
+    },
+    {
+      "command": "pnpm exec vitest run src/composables/__tests__/useModelWhitelist.spec.ts src/components/account/__tests__/CreateAccountModal.spec.ts",
+      "result": "60 passed"
+    },
+    {
+      "command": "pnpm exec vue-tsc --noEmit",
+      "result": "passed"
+    },
+    {
+      "command": "deploy/tests/codex-client-profile-upgrade-20261028-test.sql on isolated local PostgreSQL",
+      "result": "17 upgrades, 8 exclusions; identity/environment preservation and idempotency passed; transaction rolled back"
+    },
+    {
+      "command": "CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags=\"embed http2legacy\" -trimpath ./cmd/server",
+      "result": "passed"
+    },
+    {
+      "command": "python tools/deploy_vps.py --build-only",
+      "result": "frontend and Linux binary built; no deployment"
+    },
+    {
+      "command": "python tools/deploy_vps.py --build-only --skip-frontend-build",
+      "result": "confirmed exit 0 using the already built frontend; binary build tags and Go version inspected"
+    }
+  ],
+  "limitations": [
+    "Selected service regressions passed; no claim of a clean full service package suite.",
+    "A captured priority request may receive response_service_tier=default; this does not establish priority entitlement or latency.",
+    "Hidden models and all reasoning-effort/context-length/tier combinations were not exhaustively invoked.",
+    "Official desktop captures and production forwarding probes are distinct evidence. Production probes cover HTTP text first-turn/continuation, not WS or every tool/effort/tier combination."
+  ],
+  "previous_build": {
+    "exit_code": 0,
+    "go": "go1.27.0",
+    "build_tags": "embed,http2legacy",
+    "os": "linux",
+    "arch": "amd64",
+    "sha256": "e7c0401d683dd020a825f22a797b9579098eaa45d7eea68adb303f3530795bc2",
+    "pricing_sha256": "13b3611a05e4cc0a6f9085cab257e64c3ff072a3df5a7b94ea8cbdf3e60a9105",
+    "production_deployed": false
+  },
+  "alignment_followup": {
+    "checks": [
+      {
+        "log": "service-default",
+        "result": "passed",
+        "log_sha256": "f6dd030c7a1689e84729f94d637347962f90e48cf4f0c00c6ef0efd558855d04",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/service\t51.968s"
+        ]
+      },
+      {
+        "log": "service-legacy",
+        "result": "passed",
+        "log_sha256": "3e00cf597e488a1a607a5faa55d8f26c2f34a8510205f0c673f6fc26db2f5ba0",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/service\t51.496s"
+        ]
+      },
+      {
+        "log": "transport-default",
+        "result": "passed",
+        "log_sha256": "807df001453eb6c4a0912f19ffbb0af82a146837274cb539df7a304db315c4e7",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2\t1.265s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2\t0.169s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2/hpack\t0.168s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/internal/httpcommon\t0.165s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint\t0.641s"
+        ]
+      },
+      {
+        "log": "transport-legacy",
+        "result": "passed",
+        "log_sha256": "eb0d0a2ccee73aa43bfeecddd893f9baff12a9aadc2f1e328fbc483ebd753cdb",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2\t1.272s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2\t0.087s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/http2/hpack\t0.049s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/grokhttp2/internal/httpcommon\t0.087s",
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/pkg/tlsfingerprint\t0.669s"
+        ]
+      },
+      {
+        "log": "repository-default",
+        "result": "passed",
+        "log_sha256": "6b67cd64e0e53bd87fbac7f025dd8831e6c993992d5104999040b860b5cbe0a7",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/repository\t3.565s"
+        ]
+      },
+      {
+        "log": "repository-legacy",
+        "result": "passed",
+        "log_sha256": "8f36eaafb83322d540f114a128c6ec12bc681dc2e57ed480e76be44c9d9610a1",
+        "packages": [
+          "ok  \tgithub.com/Wei-Shaw/sub2api/internal/repository\t3.528s"
+        ]
+      }
+    ],
+    "build_tag_script": "passed",
+    "git_diff_check": "passed",
+    "initial_regression_failures": "Two old test assumptions updated: models Native UA and mixed-account upstream stub; both complete selected suites rerun successfully.",
+    "native_tls_h2_capture": "HTTP fixture exit 0; WS TLS observed before fixture rejects upgrade with HTTP 400. External proxy forwarding denied.",
+    "new_contract": "request-contract.json",
+    "transport_capture": "transport-evidence.json",
+    "service_selection": "Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)|QueryUsage",
+    "production_deployed": false
+  },
+  "previous_alignment_build": {
+    "binary": "C:\\Users\\ADMINI~1\\AppData\\Local\\Temp\\sub2api-deploy\\sub2api-linux-amd64-ef18307b6-dirty",
+    "sha256": "96f71f6488d630a6bc1af9ea45daccae1aff34ae30e22448dee0af29627464a7",
+    "go": "1.27.0",
+    "tags": [
+      "embed",
+      "http2legacy"
+    ],
+    "GOOS": "linux",
+    "GOARCH": "amd64",
+    "CGO_ENABLED": "0",
+    "trimpath": true,
+    "canonical_build_exit_code": 0,
+    "frontend": "previously verified embedded frontend reused; no frontend changes in alignment follow-up",
+    "production_deployed": false
+  },
+  "production_preflight": [
+    {
+      "name": "repository-default",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/repository",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "repository-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit http2legacy",
+        "./internal/repository",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "service-default",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit",
+        "./internal/service",
+        "-run",
+        "Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)|QueryUsage|Heartbeat|Failover",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "service-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=unit http2legacy",
+        "./internal/service",
+        "-run",
+        "Codex|GPT6|OpenAI.*(Pricing|Model|Metadata|TurnState|WS|Telemetry)|QueryUsage|Heartbeat|Failover",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "build-tags",
+      "command": [
+        "bash",
+        "deploy/tests/grok-http2-build-tags-test.sh"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "transport-default",
+      "command": [
+        "go",
+        "test",
+        "./internal/pkg/grokhttp2/...",
+        "./internal/pkg/tlsfingerprint",
+        "-count=1"
+      ],
+      "exit_code": 0
+    },
+    {
+      "name": "transport-legacy",
+      "command": [
+        "go",
+        "test",
+        "-tags=http2legacy",
+        "./internal/pkg/grokhttp2/...",
+        "./internal/pkg/tlsfingerprint",
+        "-count=1"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "production_updated_at": "2026-10-28T09:05:52.622559+00:00"
+}

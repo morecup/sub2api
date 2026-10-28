@@ -49,6 +49,7 @@ type codexTelemetryKey struct {
 	route                            codexTelemetryRouteKey
 	name, model, kind, success       string
 	status, compactType, fromWireAPI string
+	mode, phase, reason              string
 }
 
 type codexTelemetryRouteKey struct {
@@ -177,6 +178,21 @@ func (t *codexTelemetryExporter) recordHTTPFallback(route codexTelemetryRoute, m
 	t.recordSampleLocked(route, codexTelemetryKey{name: "codex.transport.fallback_to_http", model: model, fromWireAPI: "responses_websocket"}, false, 1)
 }
 
+// Count only continuation decisions that produced an actual outgoing WS frame.
+// Labels are bounded and describe the observed wire payload, never IDs or text.
+func (t *codexTelemetryExporter) recordWSContinuation(route codexTelemetryRoute, model, mode, phase, reason string) {
+	if t == nil || (phase != "warmup" && phase != "generation") {
+		return
+	}
+	if !((mode == "incremental" && reason == "incremental") ||
+		(mode == "full" && (reason == "other" || reason == "no_previous_request"))) {
+		return
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.recordSampleLocked(route, codexTelemetryKey{name: "codex.websocket.continuation", model: model, mode: mode, phase: phase, reason: reason}, false, 1)
+}
+
 // Caller holds mu; names and labels have already passed the typed entry points.
 func (t *codexTelemetryExporter) recordSampleLocked(route codexTelemetryRoute, key codexTelemetryKey, histogram bool, value float64) {
 	if t.closed {
@@ -219,7 +235,7 @@ func (t *codexTelemetryExporter) recordSampleLocked(route codexTelemetryRoute, k
 
 func isCodexTelemetryModel(model string) bool {
 	switch model {
-	case "gpt-5.6-sol", "gpt-6-astra", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2", "gpt-5.2-codex":
+	case "gpt-5.6-sol", "gpt-6-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark", "gpt-5.2", "gpt-5.2-codex":
 		return true
 	}
 	return false
@@ -245,7 +261,7 @@ func codexTelemetryPayload(series map[codexTelemetryKey]*codexTelemetryAggregate
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		a, b := keys[i], keys[j]
-		return a.name+"\x00"+a.model+"\x00"+a.kind+"\x00"+a.success+"\x00"+a.status+"\x00"+a.compactType+"\x00"+a.fromWireAPI < b.name+"\x00"+b.model+"\x00"+b.kind+"\x00"+b.success+"\x00"+b.status+"\x00"+b.compactType+"\x00"+b.fromWireAPI
+		return a.name+"\x00"+a.model+"\x00"+a.kind+"\x00"+a.success+"\x00"+a.status+"\x00"+a.compactType+"\x00"+a.fromWireAPI+"\x00"+a.mode+"\x00"+a.phase+"\x00"+a.reason < b.name+"\x00"+b.model+"\x00"+b.kind+"\x00"+b.success+"\x00"+b.status+"\x00"+b.compactType+"\x00"+b.fromWireAPI+"\x00"+b.mode+"\x00"+b.phase+"\x00"+b.reason
 	})
 	metrics := make([]any, 0, len(keys))
 	byName := make(map[string]map[string]any)
@@ -266,6 +282,9 @@ func codexTelemetryPayload(series map[codexTelemetryKey]*codexTelemetryAggregate
 		}
 		if k.fromWireAPI != "" {
 			attrs = append(attrs, codexTelemetryAttr("from_wire_api", k.fromWireAPI))
+		}
+		if k.mode != "" {
+			attrs = append(attrs, codexTelemetryAttr("mode", k.mode), codexTelemetryAttr("phase", k.phase), codexTelemetryAttr("reason", k.reason))
 		}
 		dp := map[string]any{"attributes": attrs, "startTimeUnixNano": strconv.FormatInt(a.start.UnixNano(), 10), "timeUnixNano": strconv.FormatInt(now.UnixNano(), 10), "exemplars": []any{}, "flags": 0}
 		m := map[string]any{"name": k.name, "description": "", "unit": ""}

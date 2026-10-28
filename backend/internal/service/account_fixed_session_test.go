@@ -64,7 +64,7 @@ func TestNormalizeOpenAIFixedSessionExtra(t *testing.T) {
 }
 
 func TestNormalizeOpenAIFixedSessionCreateExtra(t *testing.T) {
-	t.Run("new OpenAI OAuth accounts enable stable sessions by default", func(t *testing.T) {
+	t.Run("new OpenAI OAuth accounts enable the fixed account session by default", func(t *testing.T) {
 		extra, err := normalizeOpenAIFixedSessionCreateExtra(PlatformOpenAI, AccountTypeOAuth, nil)
 
 		require.NoError(t, err)
@@ -84,7 +84,7 @@ func TestNormalizeOpenAIFixedSessionCreateExtra(t *testing.T) {
 		require.NotContains(t, extra, openAISessionIDKey)
 	})
 
-	t.Run("non OAuth accounts do not receive stable session settings", func(t *testing.T) {
+	t.Run("non OAuth accounts do not receive fixed account session settings", func(t *testing.T) {
 		extra, err := normalizeOpenAIFixedSessionCreateExtra(PlatformOpenAI, AccountTypeAPIKey, nil)
 
 		require.NoError(t, err)
