@@ -81,6 +81,20 @@
         />
       </div>
 
+      <div v-if="supportsTextPreset" class="space-y-1.5">
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+          {{ t('admin.accounts.textTestPreset') }}
+        </label>
+        <Select
+          v-model="textTestPreset"
+          :options="textTestPresetOptions"
+          :disabled="status === 'connecting'"
+        />
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.accounts.textTestPresetHint') }}
+        </p>
+      </div>
+
       <div v-if="supportsPromptInput" class="space-y-1.5">
         <TextArea
           v-model="testPrompt"
@@ -414,6 +428,13 @@ const generatedAudios = ref<PreviewMedia[]>([])
 const generatedVideos = ref<PreviewMedia[]>([])
 const previewImageUrl = ref('')
 const testMode = ref<'default' | 'compact'>('default')
+// Text tests default to the "hi" probe; the candy puzzle checks reasoning quality.
+const CANDY_PUZZLE_TEST_PROMPT = `不使用任何外部工具回答以下问题：
+在一个黑色的袋子里放有三种口味的糖果，每种糖果有两种不同的形状（圆形和五角星形，不同的形状靠手感可以分辨）。现已知不同口味的糖和不同形状的数量统计如下表。参赛者需要在活动前决定摸出的糖果数目，那么，最少取出多少个糖果才能保证手中同时拥有不同形状的苹果味和桃子味的糖？（同时手中有圆形苹果味匹配五角星桃子味糖果，或者有圆形桃子味匹配五角星苹果味糖果都满足要求）
+    苹果味  桃子味  西瓜味
+圆形       7      9      8
+五角星形   7      6      4`
+const textTestPreset = ref<'quick' | 'candy_puzzle'>('quick')
 const grokTestMode = ref<'text' | 'image' | 'video' | 'search' | 'tts' | 'stt' | 'realtime'>('text')
 const uploadImageDataURL = ref('')
 const uploadImagePreview = ref('')
@@ -507,6 +528,20 @@ const supportsPromptInput = computed(() => {
     grokTestMode.value === 'tts'
   )
 })
+
+// Text-only probes (not media, not the OpenAI compact probe) accept a preset prompt.
+const supportsTextPreset = computed(() => {
+  if (isGrokAccount.value) return grokTestMode.value === 'text'
+  if (supportsImageTest.value) return false
+  return !(isOpenAIAccount.value && testMode.value === 'compact')
+})
+const textTestPresetOptions = computed(() => [
+  { value: 'quick', label: t('admin.accounts.textTestPresetQuick') },
+  { value: 'candy_puzzle', label: t('admin.accounts.textTestPresetCandyPuzzle') }
+])
+const textTestPrompt = computed(() =>
+  supportsTextPreset.value && textTestPreset.value === 'candy_puzzle' ? CANDY_PUZZLE_TEST_PROMPT : ''
+)
 
 const supportsImageUpload = computed(
   () => isGrokAccount.value && (grokTestMode.value === 'image' || grokTestMode.value === 'video')
@@ -666,10 +701,13 @@ const testModeSummary = computed(() => {
       case 'realtime':
         return t('admin.accounts.grok.realtimeTestMode')
       default:
-        return t('admin.accounts.grok.textTestMode')
+        return textTestPrompt.value
+          ? t('admin.accounts.testPromptCandyPuzzle')
+          : t('admin.accounts.grok.textTestMode')
     }
   }
   if (supportsImageTest.value) return t('admin.accounts.imageTestMode')
+  if (textTestPrompt.value) return t('admin.accounts.testPromptCandyPuzzle')
   return t('admin.accounts.testPrompt')
 })
 
@@ -739,6 +777,7 @@ watch(
     if (newVal && props.account) {
       testPrompt.value = ''
       testMode.value = 'default'
+      textTestPreset.value = 'quick'
       grokTestMode.value = 'text'
       resetState()
       await loadAvailableModels()
@@ -852,7 +891,7 @@ const startTest = async () => {
       audio_data_url?: string
     } = {
       model_id: showModelSelect.value ? selectedModelId.value : '',
-      prompt: supportsPromptInput.value ? testPrompt.value.trim() : ''
+      prompt: supportsPromptInput.value ? testPrompt.value.trim() : textTestPrompt.value
     }
     if (isOpenAIAccount.value) {
       requestBody.mode = testMode.value
