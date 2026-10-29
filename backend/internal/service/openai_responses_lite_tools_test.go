@@ -581,6 +581,32 @@ func TestOpenAIGatewayServiceForward_ResponsesLiteNormalizationIsLiteOnly(t *tes
 			require.True(t, gjson.GetBytes(upstream.lastBody, "parallel_tool_calls").Exists())
 			require.False(t, gjson.GetBytes(upstream.lastBody, "parallel_tool_calls").Bool())
 
+			if !passthrough {
+				// 合成路径不做入站 lite 校验（由 transform 的 sink 全权处理）：
+				// 非布尔的 parallel_tool_calls 被 sink 钉死为 false 后正常转发。
+				pinnedRec := httptest.NewRecorder()
+				pinnedCtx, _ := gin.CreateTestContext(pinnedRec)
+				pinnedCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
+				pinnedCtx.Request.Header.Set(responsesLiteHeader, "true")
+				pinnedUpstream := &httpUpstreamRecorder{resp: &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
+					Body: io.NopCloser(strings.NewReader(
+						"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_lite_pinned\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n" +
+							"data: [DONE]\n\n",
+					)),
+				}}
+				svc.httpUpstream = pinnedUpstream
+
+				result, err = svc.Forward(context.Background(), pinnedCtx, account, []byte(`{"model":"gpt-5.6-terra","stream":true,"tools":[{"type":"function","name":"shell"}],"parallel_tool_calls":"false","input":[{"type":"message","role":"user","content":"hello"}]}`))
+
+				require.NoError(t, err)
+				require.NotNil(t, result)
+				require.Equal(t, gjson.False, gjson.GetBytes(pinnedUpstream.lastBody, "parallel_tool_calls").Type)
+				require.Equal(t, "additional_tools", gjson.GetBytes(pinnedUpstream.lastBody, "input.0.type").String())
+				return
+			}
+
 			badRec := httptest.NewRecorder()
 			badCtx, _ := gin.CreateTestContext(badRec)
 			badCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewReader(nil))
