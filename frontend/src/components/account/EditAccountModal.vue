@@ -1700,6 +1700,14 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <div class="flex items-center justify-between gap-4 border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div>
+          <label class="input-label mb-0">{{ t('admin.accounts.upstreamGatewayCooldown') }}</label>
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamGatewayCooldownHint') }}</p>
+        </div>
+        <Toggle v-model="upstreamGatewayCooldownEnabled" data-testid="upstream-gateway-cooldown-toggle" :aria-label="t('admin.accounts.upstreamGatewayCooldown')" />
+      </div>
+
       <UpstreamRequestIdHeaderField
         v-model="upstreamRequestIdHeader"
         :platform="account.platform"
@@ -3825,6 +3833,7 @@ const upstreamBillingRateSyncEnabled = ref(false)
 const mixedScheduling = ref(false) // For antigravity accounts: enable mixed scheduling
 // 上游ID：直接上游声明请求标识的响应头名，留空不记录。
 const upstreamRequestIdHeader = ref('')
+const upstreamGatewayCooldownEnabled = ref(false)
 const readUpstreamRequestIdHeader = (extra: unknown): string => {
   const value = (extra as Record<string, unknown> | undefined)?.upstream_request_id_header
   return typeof value === 'string' ? value : ''
@@ -4451,6 +4460,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
+  upstreamGatewayCooldownEnabled.value = extra?.upstream_502_503_cooldown_enabled === true
 	openAIImagesUrlToB64JsonEnabled.value = extra?.images_url_to_b64_json === true
 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
@@ -6253,6 +6263,13 @@ const handleSubmit = async () => {
       // Quota notify config
       writeQuotaNotifyToExtra(newExtra, 'update')
       updatePayload.extra = newExtra
+    }
+
+    if (upstreamGatewayCooldownEnabled.value !== (props.account.extra?.upstream_502_503_cooldown_enabled === true)) {
+      updatePayload.extra = {
+        ...((updatePayload.extra || props.account.extra || {}) as Record<string, unknown>),
+        upstream_502_503_cooldown_enabled: upstreamGatewayCooldownEnabled.value,
+      }
     }
 
     // 上游ID头名只在改动时写回 extra，避免用弹窗打开时的快照覆盖运行态键。

@@ -343,6 +343,24 @@ describe('EditAccountModal', () => {
     listAccountsMock.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 1000, pages: 0 })
   })
 
+
+  it.each([false, true])('loads and changes 502/503 cooldown from %s without losing other extra', async (enabled) => {
+    const account = buildAccount()
+    account.extra = { ...account.extra, upstream_502_503_cooldown_enabled: enabled, preserved_setting: 'keep' }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    const toggle = wrapper.get('[data-testid="upstream-gateway-cooldown-toggle"]')
+    expect(toggle.attributes('aria-checked')).toBe(String(enabled))
+    await toggle.trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      upstream_502_503_cooldown_enabled: !enabled, preserved_setting: 'keep',
+    })
+    wrapper.unmount()
+  })
+
   it('saves and restores the per-account ticket opt-out', async () => {
     const account = buildOpenAIOAuthParentAccount()
     account.extra = { codex_ticket_disabled: true }

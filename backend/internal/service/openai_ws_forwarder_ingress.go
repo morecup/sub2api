@@ -882,7 +882,9 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 				return nil, errOpenAIWSSessionPreempted
 			}
 			canonicalModel := canonicalOpenAIAccountSchedulingModel(account, ingressSessionOriginalModel)
-			s.handleOpenAIWSDialTransientFailure(ctx, account, canonicalModel, acquireErr)
+			if cooldownErr := s.handleOpenAIWSDialTransientFailure(ctx, account, canonicalModel, acquireErr); cooldownErr != nil {
+				return nil, cooldownErr
+			}
 			dialStatus, dialClass, dialCloseStatus, dialCloseReason, dialRespServer, dialRespVia, dialRespCFRay, dialRespReqID := summarizeOpenAIWSDialError(acquireErr)
 			logOpenAIWSModeInfo(
 				"ingress_ws_upstream_acquire_fail account_id=%d turn=%d reason=%s dial_status=%d dial_class=%s dial_close_status=%s dial_close_reason=%s dial_resp_server=%s dial_resp_via=%s dial_resp_cf_ray=%s dial_resp_x_request_id=%s cause=%s preferred_conn_id=%s force_preferred_conn=%v ws_host=%s ws_path=%s proxy_enabled=%v",

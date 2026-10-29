@@ -665,6 +665,8 @@ export default {
       apiKeyRequired: 'API Key *',
       apiKeyPlaceholder: 'sk-ant-api03-...',
       apiKeyHint: 'Your Claude Console API Key',
+      upstreamGatewayCooldown: '12-hour cooldown on 502/503',
+      upstreamGatewayCooldownHint: 'Off by default. The first upstream HTTP 502 or 503 immediately pauses the account for 12 hours and records the reason and recovery time. Takes precedence over retries and custom error rules. Disabling this setting does not clear an existing cooldown.',
       upstreamRequestIdHeader: 'Upstream ID',
       upstreamRequestIdHeaderPlaceholder: 'Leave empty to record nothing',
       upstreamRequestIdHeaderHelp: {

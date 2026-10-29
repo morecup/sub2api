@@ -855,6 +855,7 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 		requestIDHeader = idHeader
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		s.rateLimitService.observeUpstreamGatewayErrorCooldown(upstreamReq.Context(), account, resp)
 		if err != nil {
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -1407,6 +1408,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		requestIDHeader = idHeader
 
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+		s.rateLimitService.observeUpstreamGatewayErrorCooldown(upstreamReq.Context(), account, resp)
 		if err != nil {
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -1743,6 +1745,9 @@ func (s *GeminiMessagesCompatService) checkErrorPolicyInLoop(
 }
 
 func (s *GeminiMessagesCompatService) shouldRetryGeminiUpstreamError(account *Account, statusCode int) bool {
+	if account.ShouldCooldownUpstreamGatewayError(statusCode) {
+		return false
+	}
 	switch statusCode {
 	case 429, 500, 502, 503, 504, 529:
 		return true
@@ -2974,6 +2979,7 @@ func (s *GeminiMessagesCompatService) ForwardAIStudioGET(ctx context.Context, ac
 	}
 
 	resp, err := s.httpUpstream.Do(req, proxyURL, account.ID, account.Concurrency)
+	s.rateLimitService.observeUpstreamGatewayErrorCooldown(req.Context(), account, resp)
 	if err != nil {
 		return nil, err
 	}

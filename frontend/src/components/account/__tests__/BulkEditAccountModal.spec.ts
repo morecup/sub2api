@@ -98,6 +98,21 @@ describe('BulkEditAccountModal', () => {
     } as any)
   })
 
+
+  it.each([false, true])('can explicitly set 502/503 cooldown to %s across platforms', async (enabled) => {
+    const wrapper = mountModal({ selectedPlatforms: ['openai', 'anthropic'], selectedTypes: ['oauth', 'apikey'] })
+    const toggle = wrapper.get('[data-testid="upstream-gateway-cooldown-toggle"]')
+    expect(toggle.attributes('disabled')).toBeDefined()
+    await wrapper.get('#bulk-edit-upstream-gateway-cooldown-enabled').setValue(true)
+    if (enabled) await toggle.trigger('click')
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: { upstream_502_503_cooldown_enabled: enabled },
+    })
+    wrapper.unmount()
+  })
+
   it('批量修改倍率时提示自动同步账号需要先关闭同步', async () => {
     const wrapper = mountModal()
 

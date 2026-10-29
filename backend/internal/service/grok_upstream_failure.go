@@ -107,6 +107,12 @@ func newGrokUpstreamFailoverError(
 		ResponseHeaders:        headers.Clone(),
 		RetryableOnSameAccount: legacyRetryableOnSameAccount,
 	}
+	if account.ShouldCooldownUpstreamGatewayError(statusCode) {
+		failoverErr.RetryableOnSameAccount = false
+		failoverErr.Scope = GatewayFailureScopeAccount
+		failoverErr.NextAccountAction = NextAccountRetry
+		return failoverErr
+	}
 	if account == nil || account.Platform != PlatformGrok {
 		return failoverErr
 	}

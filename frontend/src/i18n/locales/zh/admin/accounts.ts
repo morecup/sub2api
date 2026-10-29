@@ -753,6 +753,8 @@ export default {
       apiKeyRequired: 'API Key *',
       apiKeyPlaceholder: 'sk-ant-api03-...',
       apiKeyHint: '您的 Claude Console API Key',
+      upstreamGatewayCooldown: '502/503 冷却 12 小时',
+      upstreamGatewayCooldownHint: '默认关闭。开启后，上游首次返回 HTTP 502 或 503 即停止使用该账号并冷却 12 小时，记录原因和恢复时间。优先于重试及自定义错误规则；关闭开关不会提前解除已有冷却。',
       upstreamRequestIdHeader: '上游ID',
       upstreamRequestIdHeaderPlaceholder: '留空不记录',
       upstreamRequestIdHeaderHelp: {

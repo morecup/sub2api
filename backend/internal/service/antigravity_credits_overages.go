@@ -164,6 +164,7 @@ func shouldMarkCreditsExhausted(resp *http.Response, respBody []byte, reqErr err
 }
 
 type creditsOveragesRetryResult struct {
+	err     error
 	handled bool
 	resp    *http.Response
 }
@@ -193,6 +194,12 @@ func (s *AntigravityGatewayService) attemptCreditsOveragesRetry(
 	}
 
 	creditsResp, err := p.httpUpstream.Do(creditsReq, p.proxyURL, p.account.ID, p.account.Concurrency)
+	if s.rateLimitService.observeUpstreamGatewayErrorCooldown(creditsReq.Context(), p.account, creditsResp) {
+		if creditsResp.Body != nil {
+			_ = creditsResp.Body.Close()
+		}
+		return &creditsOveragesRetryResult{handled: true, err: &AntigravityAccountSwitchError{OriginalAccountID: p.account.ID, RateLimitedModel: p.requestedModel, IsStickySession: p.isStickySession}}
+	}
 	if err == nil && creditsResp != nil && creditsResp.StatusCode < 400 {
 		s.clearCreditsExhausted(p.ctx, p.account)
 		logger.LegacyPrintf("service.antigravity_gateway", "%s status=%d credit_overages_success model=%s account=%d",

@@ -300,6 +300,9 @@ const (
 // CheckErrorPolicy 检查自定义错误码和临时不可调度规则。
 // 自定义错误码开启时覆盖后续所有逻辑（包括临时不可调度）。
 func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Account, statusCode int, responseBody []byte, requestedModel ...string) ErrorPolicyResult {
+	if account.ShouldCooldownUpstreamGatewayError(statusCode) {
+		return ErrorPolicyTempUnscheduled
+	}
 	ctx = withTempUnschedulableModel(ctx, requestedModel)
 	if account.IsCustomErrorCodesEnabled() {
 		if account.ShouldHandleErrorCode(statusCode) {
@@ -330,6 +333,11 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 // HandleUpstreamError 处理上游错误响应，标记账号状态
 // 返回是否应该停止该账号的调度
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
+	// The real HTTP response was observed before entering error classification.
+	// Do not overwrite its explicit account cooldown with model/custom policies.
+	if account.ShouldCooldownUpstreamGatewayError(statusCode) {
+		return true
+	}
 	ctx = withTempUnschedulableModel(ctx, requestedModel)
 	if statusCode == http.StatusTooManyRequests && shouldSuppressOpenAI429AccountCooldown(account) {
 		slog.Warn("rate_limit_429_account_cooldown_skipped",
@@ -2059,7 +2067,7 @@ func (s *RateLimitService) UpdateSessionWindow(ctx context.Context, account *Acc
 	s.samplePassiveUsageFromHeaders(ctx, account, headers)
 
 	// 如果状态为allowed且之前有限流，说明窗口已重置，清除限流状态
-	if status == "allowed" && account.IsRateLimited() {
+	if status == "allowed" && account.IsRateLimited() && !hasUpstreamGatewayCooldown(account) {
 		if err := s.ClearRateLimit(ctx, account.ID); err != nil {
 			slog.Warn("rate_limit_clear_failed", "account_id", account.ID, "error", err)
 		}
@@ -2168,7 +2176,7 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 		}
 	}
 
-	if hasRecoverableRuntimeState(account) {
+	if hasRecoverableRuntimeState(account) && !hasUpstreamGatewayCooldown(account) {
 		if err := s.ClearRateLimit(ctx, accountID); err != nil {
 			return nil, err
 		}
@@ -2176,7 +2184,7 @@ func (s *RateLimitService) RecoverAccountState(ctx context.Context, accountID in
 	}
 	if result.ClearedError || result.ClearedRateLimit {
 		s.ResetOpenAI403Counter(ctx, accountID)
-		if result.ClearedError && !result.ClearedRateLimit {
+		if result.ClearedError && !result.ClearedRateLimit && !hasUpstreamGatewayCooldown(account) {
 			s.notifyAccountSchedulingBlockCleared(accountID)
 		}
 	}

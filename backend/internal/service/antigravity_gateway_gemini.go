@@ -206,6 +206,12 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 					fallbackReq, err := antigravity.NewAPIRequest(ctx, upstreamAction, accessToken, fallbackWrapped)
 					if err == nil {
 						fallbackResp, err := s.httpUpstream.Do(fallbackReq, proxyURL, account.ID, account.Concurrency)
+						if s.rateLimitService.observeUpstreamGatewayErrorCooldown(fallbackReq.Context(), account, fallbackResp) {
+							if fallbackResp.Body != nil {
+								_ = fallbackResp.Body.Close()
+							}
+							return nil, &UpstreamFailoverError{StatusCode: fallbackResp.StatusCode, ResponseHeaders: fallbackResp.Header.Clone()}
+						}
 						if err == nil && fallbackResp.StatusCode < 400 {
 							_ = resp.Body.Close()
 							resp = fallbackResp

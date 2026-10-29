@@ -1251,6 +1251,9 @@ func (a *Account) GetPoolModeRetryStatusCodes() []int {
 // IsPoolModeRetryableStatus 在账号上下文中判断给定状态码是否应触发同账号重试。
 // 若账号未配置 pool_mode_retry_status_codes，则回退到默认列表。
 func (a *Account) IsPoolModeRetryableStatus(statusCode int) bool {
+	if a.ShouldCooldownUpstreamGatewayError(statusCode) {
+		return false
+	}
 	codes := a.GetPoolModeRetryStatusCodes()
 	if codes == nil {
 		return isPoolModeRetryableStatus(statusCode)

@@ -198,6 +198,26 @@ async function openCodexImportStep(toggleClicks = 0) {
 }
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
+
+  it('creates an account with opt-in 502/503 cooldown and resets the toggle on reopen', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    const selector = '[data-testid="upstream-gateway-cooldown-toggle"]'
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('false')
+    await wrapper.get(selector).trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('cooldown account')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('test-api-key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0]?.[0]?.extra?.upstream_502_503_cooldown_enabled).toBe(true)
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    expect(wrapper.get(selector).attributes('aria-checked')).toBe('false')
+    wrapper.unmount()
+  })
+
   it('defaults ticket egress to global and persists a selected proxy', async () => {
     const proxies = [{ id: 8, name: 'Ticket IP', status: 'active' }]
     const wrapper = mountModal([], proxies)

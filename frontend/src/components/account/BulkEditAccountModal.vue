@@ -1041,6 +1041,17 @@
         </div>
       </div>
 
+      <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <label class="mb-3 flex items-center gap-2">
+          <input v-model="enableUpstreamGatewayCooldown" id="bulk-edit-upstream-gateway-cooldown-enabled" type="checkbox" class="rounded border-gray-300 text-primary-600" />
+          {{ t('admin.accounts.upstreamGatewayCooldown') }}
+        </label>
+        <div class="flex items-center justify-between gap-4">
+          <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('admin.accounts.upstreamGatewayCooldownHint') }}</p>
+          <Toggle v-model="upstreamGatewayCooldownEnabled" data-testid="upstream-gateway-cooldown-toggle" :disabled="!enableUpstreamGatewayCooldown" :aria-label="t('admin.accounts.upstreamGatewayCooldown')" :class="!enableUpstreamGatewayCooldown && 'opacity-50'" />
+        </div>
+      </div>
+
       <!-- OpenAI OAuth 任何 429 都不冷却账号 -->
       <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <div class="mb-3 flex items-center justify-between">
@@ -1700,6 +1711,7 @@
 </template>
 
 <script setup lang="ts">
+import Toggle from '@/components/common/Toggle.vue'
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -1899,6 +1911,8 @@ const enableCodexCLIOnly = ref(false)
 const enableCodexCLIOnlyAppServer = ref(false)
 const enableCodexToolFrameOn5hExhausted = ref(false)
 const enableOpenAI429NoCooldown = ref(false)
+const enableUpstreamGatewayCooldown = ref(false)
+const upstreamGatewayCooldownEnabled = ref(false)
 const enableOpenAICompactMode = ref(false)
 const enableOpenAICompactModelMapping = ref(false)
 const enableRpmLimit = ref(false)
@@ -2338,6 +2352,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     }
   }
 
+  if (enableUpstreamGatewayCooldown.value) {
+    ensureExtra().upstream_502_503_cooldown_enabled = upstreamGatewayCooldownEnabled.value
+  }
+
   if (enableOpenAI429NoCooldown.value) {
     const extra = ensureExtra()
     extra.openai_429_no_cooldown = openAI429NoCooldownEnabled.value
@@ -2460,6 +2478,7 @@ const handleSubmit = async () => {
     enableCodexCLIOnly.value ||
     enableCodexCLIOnlyAppServer.value ||
     enableCodexToolFrameOn5hExhausted.value ||
+    enableUpstreamGatewayCooldown.value ||
     enableOpenAI429NoCooldown.value ||
     enableOpenAICompactMode.value ||
     enableOpenAICompactModelMapping.value ||
@@ -2614,6 +2633,8 @@ watch(
       enableCodexCLIOnly.value = false
       enableCodexCLIOnlyAppServer.value = false
       enableCodexToolFrameOn5hExhausted.value = false
+      enableUpstreamGatewayCooldown.value = false
+      upstreamGatewayCooldownEnabled.value = false
       enableOpenAI429NoCooldown.value = false
 
 
@@ -2654,6 +2675,8 @@ watch(
       codexToolFrame429NoCooldownEnabled.value = true
       codexToolFrameForceAfter5hEnabled.value = false
       codexToolFrameNever429Enabled.value = false
+      enableUpstreamGatewayCooldown.value = false
+      upstreamGatewayCooldownEnabled.value = false
       enableOpenAI429NoCooldown.value = false
       openAI429NoCooldownEnabled.value = false
       openAICompactMode.value = 'auto'

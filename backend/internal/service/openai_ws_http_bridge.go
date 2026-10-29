@@ -629,7 +629,7 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 			if _, fastTransient := classifyGrokFastTransientFailure(resp.StatusCode, respBody); fastTransient {
 				failoverErr := newGrokUpstreamFailoverError(account, resp.StatusCode, resp.Header, respBody, false)
 				_ = resp.Body.Close()
-				if attempt < maxAttempts {
+				if attempt < maxAttempts && !account.ShouldCooldownUpstreamGatewayError(resp.StatusCode) {
 					continue
 				}
 				if turn > 1 {

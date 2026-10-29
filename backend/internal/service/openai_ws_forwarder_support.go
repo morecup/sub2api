@@ -384,12 +384,16 @@ func (s *OpenAIGatewayService) handleOpenAIWSFailureAccountSideEffects(ctx conte
 	return true
 }
 
-func (s *OpenAIGatewayService) handleOpenAIWSDialTransientFailure(ctx context.Context, account *Account, canonicalModel string, err error) {
+func (s *OpenAIGatewayService) handleOpenAIWSDialTransientFailure(ctx context.Context, account *Account, canonicalModel string, err error) *UpstreamFailoverError {
 	var dialErr *openAIWSDialError
 	if !errors.As(err, &dialErr) || dialErr == nil || !shouldCooldownOpenAITransientUpstreamError(dialErr.StatusCode, dialErr.ResponseBody) {
-		return
+		return nil
+	}
+	if s.rateLimitService.observeUpstreamGatewayErrorCooldown(ctx, account, &http.Response{StatusCode: dialErr.StatusCode}) {
+		return s.newOpenAIAccountFailoverError(account, dialErr.StatusCode, dialErr.ResponseHeaders, dialErr.ResponseBody, http.StatusText(dialErr.StatusCode), true, false)
 	}
 	s.handleOpenAIAccountUpstreamError(ctx, account, dialErr.StatusCode, dialErr.ResponseHeaders, dialErr.ResponseBody, canonicalModel)
+	return nil
 }
 
 func isOpenAIWSTokenEvent(eventType string) bool {
